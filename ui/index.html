@@ -994,6 +994,214 @@
             box-shadow: 0 2px 10px var(--accent-glow);
         }
 
+        /* ===== MULTIGENERAZIONE / ASSET PACK ===== */
+        /* Sotto-navigazione Singolo/Pack: riusa .segmented ma a 2 colonne. */
+        #genModeSwitch { grid-template-columns: repeat(2, 1fr); margin-bottom: 12px; }
+
+        /* Lista degli oggetti da generare: riga input + bottone rimuovi. */
+        .pack-obj-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pack-obj-row .field { flex: 1; min-width: 0; }
+        .pack-row-btn {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            color: var(--text-secondary);
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .pack-row-btn:hover {
+            color: var(--text-primary);
+            background: var(--hover-bg);
+            border-color: var(--accent-primary);
+        }
+        .pack-row-btn.danger:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+        .pack-row-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        /* Riferimenti di stile caricati (chip rimovibili). */
+        .pack-ref-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .pack-ref-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            max-width: 100%;
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+        }
+        .pack-ref-chip span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pack-ref-chip button {
+            background: transparent;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 13px;
+            padding: 0;
+            line-height: 1;
+        }
+
+        /* Pannello risultati: vive NELLA VIEWPORT a lato della griglia (non nella
+           sidebar), cosi' l'utente vede gli asset caricare mentre lavora. */
+        #packResultsPanel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 210px;
+            max-height: calc(100% - 24px);
+            display: none;
+            flex-direction: column;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+            z-index: 60;
+            overflow: hidden;
+        }
+        #packResultsPanel.open { display: flex; }
+        .pack-panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+        .pack-panel-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .pack-panel-body {
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pack-group-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            padding: 4px 4px 0;
+        }
+
+        /* Un asset nella lista. Cliccabile SOLO quando e' pronto. */
+        .pack-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 7px 9px;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            background: var(--inset-bg);
+            color: var(--text-secondary);
+            font-size: 11.5px;
+            font-family: inherit;
+            text-align: left;
+            cursor: default;
+            transition: all 0.15s;
+        }
+        .pack-item.is-done {
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+        .pack-item.is-done:hover {
+            background: var(--hover-bg);
+            border-color: var(--accent-primary);
+            transform: translateX(-2px);
+        }
+        .pack-item.is-active {
+            border-color: var(--accent-primary);
+            background: var(--hover-bg);
+        }
+        .pack-item.is-error { color: var(--danger); cursor: pointer; }
+        .pack-item-label {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pack-item-meta {
+            flex-shrink: 0;
+            font-size: 9.5px;
+            opacity: 0.75;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Indicatore di stato per asset: puntino o spinner. */
+        .pack-dot {
+            flex-shrink: 0;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            opacity: 0.35;
+        }
+        .pack-item.is-done .pack-dot { background: #22c55e; opacity: 1; }
+        .pack-item.is-error .pack-dot { background: var(--danger); opacity: 1; }
+        .pack-item.is-cancelled .pack-dot { opacity: 0.2; }
+        .pack-spin {
+            flex-shrink: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-primary);
+            border-top-color: transparent;
+            animation: packSpin 0.7s linear infinite;
+        }
+        @keyframes packSpin { to { transform: rotate(360deg); } }
+
+        /* Barra di avanzamento complessiva del pack. */
+        .pack-progress {
+            height: 4px;
+            border-radius: 2px;
+            background: var(--inset-bg);
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .pack-progress-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-deep));
+            transition: width 0.4s ease;
+        }
+
         /* Rig tab */
         .hint-text {
             font-size: 11px;
@@ -1282,6 +1490,68 @@
             .sidebar { padding-top: 12px; padding-bottom: 12px; gap: 10px; }
         }
     </style>
+
+    <!-- ===== ANTI-FLASH ALL'AVVIO (F1) =====
+         Il bundle JS sta in fondo al <body>: senza questo blocco il browser
+         dipinge la pagina con i default di :root (accent grafite, 13px, tema
+         scuro) e SOLO DOPO il JS applica tema/accent/font salvati. Risultato:
+         per un istante l'app si vedeva "vecchia" e poi cambiava aspetto.
+
+         Questo script e' volutamente SINCRONO e inline nell'<head>: gira prima
+         del primo paint, quindi la pagina nasce gia' con l'aspetto giusto.
+         Legge solo localStorage: un fetch sarebbe asincrono e reintrodurrebbe
+         esattamente il flash che stiamo eliminando.
+
+         Le chiavi devono restare allineate a 17-theme.js e 26-settings-modal.js.
+         Se qualcosa va storto si prosegue con i default CSS: mai bloccare
+         l'avvio per una preferenza estetica. -->
+    <script>
+        (function preventStartupFlash() {
+            var d = document.documentElement;
+            function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+            // --- Tema (stessa chiave di THEME_KEY in 17-theme.js) ---
+            try {
+                var theme = ls('voxelai-theme');
+                if (!theme) {
+                    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+                        ? 'light' : 'dark';
+                }
+                d.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+            } catch (e) { }
+
+            // --- Accent: stessa derivazione di applyAccent() in 17-theme.js ---
+            try {
+                var hex = ls('voxelai-accent');
+                if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex.trim())) {
+                    var h = hex.trim().replace('#', '');
+                    var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+                    var cl = function (n) { return Math.max(0, Math.min(255, Math.round(n))); };
+                    var hx = function (n) { n = cl(n).toString(16); return n.length === 1 ? '0' + n : n; };
+                    var mix = function (c, t, f) { return hx(c + (t - c) * f); };
+                    d.style.setProperty('--accent-primary', '#' + hx(r) + hx(g) + hx(b));
+                    d.style.setProperty('--accent-secondary', '#' + mix(r, 255, 0.20) + mix(g, 255, 0.20) + mix(b, 255, 0.20));
+                    d.style.setProperty('--accent-deep', '#' + mix(r, 0, 0.22) + mix(g, 0, 0.22) + mix(b, 0, 0.22));
+                    d.style.setProperty('--accent-soft', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.25)');
+                    d.style.setProperty('--accent-glow', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.35)');
+                    d.style.setProperty('--glass-border-focus', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.45)');
+                }
+            } catch (e) { }
+
+            // --- Font e dimensione (blob prefs scritto da 19-prefs.js) ---
+            try {
+                var raw = ls('voxelai-prefs');
+                if (raw) {
+                    var p = JSON.parse(raw);
+                    if (p && typeof p === 'object') {
+                        if (p.uiFont) d.style.setProperty('--ui-font', p.uiFont);
+                        var n = parseInt(p.uiFontSize, 10);
+                        if (n >= 10 && n <= 24) d.style.setProperty('--ui-font-size', n + 'px');
+                    }
+                }
+            } catch (e) { }
+        })();
+    </script>
 </head>
 
 <body>
@@ -1396,6 +1666,19 @@
         <div class="tab-content">
             <!-- ===== TAB: GENERA ===== -->
             <div class="tab-panel active" data-panel="generate">
+                <!-- Sotto-navigazione: generazione singola vs Asset Pack.
+                     Riusa il componente .segmented gia' presente nel tema. -->
+                <div class="segmented" id="genModeSwitch">
+                    <button class="seg-btn active" data-genmode="single"
+                        title="Genera un singolo modello" data-i18n-title="genMode.singleTitle"
+                        data-i18n="genMode.single">Singolo</button>
+                    <button class="seg-btn" data-genmode="pack"
+                        title="Genera un pack di asset coerenti" data-i18n-title="genMode.packTitle"
+                        data-i18n="genMode.pack">Pack</button>
+                </div>
+
+                <!-- ===== MODALITA' SINGOLA (invariata) ===== -->
+                <div id="genModeSingle">
                 <div>
                     <div class="section-title" data-i18n="generate.sectionTitle">Generazione Voxel AI</div>
                     <div class="controls-group glass"
@@ -1443,8 +1726,33 @@
                                 <option value="48x48x48" data-i18n="generate.gridMedium">48x48x48 (Media)</option>
                                 <option value="64x64x64" data-i18n="generate.gridDetailed">64x64x64 (Dettagliato)</option>
                                 <option value="128x128x128" data-i18n="generate.gridSlow">128x128x128 (Lento)</option>
+                                <option value="192x192x192" data-i18n="generate.gridHuge">192x192x192 (Enorme)</option>
+                                <option value="256x256x256" data-i18n="generate.gridMassive">256x256x256 (Edifici)</option>
+                                <option value="384x384x384" data-i18n="generate.gridColossal">384x384x384 (Colossale)</option>
+                                <option value="512x512x512" data-i18n="generate.gridExtreme">512x512x512 (Estrema)</option>
                             </select>
                         </div>
+
+                        <!-- ===== MODALITA' STRUTTURA GRANDE =====
+                             Per case, edifici e scene servono griglie molto ampie e
+                             l'istruzione esplicita all'AI di sfruttarle: senza questa
+                             spunta il modello tende a produrre oggetti piccoli e centrati
+                             anche quando la griglia e' enorme. -->
+                        <div class="control-row">
+                            <label title="Per case, edifici e scene: griglia ampia e istruzioni per un modello ricco di dettagli"
+                                data-i18n-title="generate.bigStructureTitle"
+                                data-i18n="generate.bigStructure">Struttura grande / alto dettaglio</label>
+                            <label class="switch">
+                                <input type="checkbox" id="toggleBigStructure">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p class="hint-text" id="bigStructureHint" style="margin: 0; display: none;"
+                            data-i18n="generate.bigStructureHint">
+                            L'IA userà tutta la griglia con interni ed elementi architettonici.
+                            La generazione è più lenta e il modello più pesante da visualizzare.
+                        </p>
+
                         <button class="btn btn-primary" id="generateBtn"
                             style="width: 100%; font-size: 12px; padding: 10px;" data-i18n="generate.generateBtn">Genera Modello</button>
                     </div>
@@ -1523,6 +1831,114 @@
                             <button id="submitNewProjectBtn" class="btn btn-primary"
                                 style="padding: 4px 12px; font-size: 11px; font-weight: 600;" data-i18n="newProject.create">Crea</button>
                         </div>
+                    </div>
+                </div>
+                </div><!-- /#genModeSingle -->
+
+                <!-- ===== MODALITA' PACK (multigenerazione) ===== -->
+                <div id="genModePack" style="display: none;">
+                    <div class="section-title" data-i18n="pack.sectionTitle">Asset Pack (multigenerazione)</div>
+
+                    <div class="controls-group glass"
+                        style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+
+                        <p class="hint-text" style="margin: 0;" data-i18n="pack.intro">
+                            Genera più oggetti in una sola volta, tutti con lo stesso stile e la stessa
+                            palette. Ideale per creare set di asset pronti per un gioco.
+                        </p>
+
+                        <!-- 1. Riferimenti di stile (opzionali) -->
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;"
+                                data-i18n="pack.refsLabel">Riferimenti di stile (opzionali)</label>
+                            <button class="btn btn-secondary" id="packAddRefBtn"
+                                style="font-size: 11px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;"
+                                title="Carica modelli JSON esistenti per definire lo stile del pack"
+                                data-i18n-title="pack.refsBtnTitle">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                <span data-i18n="pack.refsBtn">Carica JSON di riferimento</span>
+                            </button>
+                            <input type="file" id="packRefInput" accept=".json,.voxelai" multiple style="display: none;">
+                            <div class="pack-ref-list" id="packRefList"></div>
+                            <p class="hint-text" id="packRefHint" style="margin: 0;" data-i18n="pack.refsHint">
+                                Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.
+                            </p>
+                        </div>
+
+                        <!-- 2. Oggetti da generare -->
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;"
+                                data-i18n="pack.objectsLabel">Oggetti da generare</label>
+                            <div id="packObjectList" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                            <button class="btn btn-secondary" id="packAddObjBtn"
+                                style="font-size: 11px; padding: 7px 12px;" title="Aggiungi un altro oggetto"
+                                data-i18n-title="pack.addObjTitle">
+                                <span data-i18n="pack.addObj">+ Aggiungi oggetto</span>
+                            </button>
+                            <p class="hint-text" style="margin: 0;" data-i18n="pack.sizeHintLabel">
+                                Suggerimento: aggiungi :piccolo, :medio, :grande o :enorme dopo il nome
+                                per definire la scala relativa
+                            </p>
+                        </div>
+
+                        <!-- 3. Varianti per oggetto -->
+                        <div class="control-row">
+                            <label data-i18n="pack.variants">Generazioni per oggetto</label>
+                            <select id="packVariants" class="field-strong"
+                                style="padding: 6px; font-size: 12px; width: 90px;">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="8">8</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+
+                        <!-- 4. Impostazioni comuni del pack -->
+                        <div class="control-row">
+                            <label data-i18n="generate.aiModel">Modello AI</label>
+                            <select id="packModelSelect" class="field-strong"
+                                style="padding: 6px; font-size: 12px; width: 160px;"></select>
+                        </div>
+                        <div class="control-row">
+                            <label data-i18n="pack.gridLabel">Griglia comune</label>
+                            <select id="packGridSelect" class="field-strong"
+                                style="padding: 6px; font-size: 12px; width: 160px;">
+                                <option value="auto" data-i18n="generate.gridAuto">Auto (Decide l'IA)</option>
+                                <option value="32x32x32" data-i18n="generate.gridFast">32x32x32 (Veloce)</option>
+                                <option value="48x48x48" selected data-i18n="generate.gridMedium">48x48x48 (Media)</option>
+                                <option value="64x64x64" data-i18n="generate.gridDetailed">64x64x64 (Dettagliato)</option>
+                                <option value="128x128x128" data-i18n="generate.gridSlow">128x128x128 (Lento)</option>
+                                <option value="192x192x192" data-i18n="generate.gridHuge">192x192x192 (Enorme)</option>
+                                <option value="256x256x256" data-i18n="generate.gridMassive">256x256x256 (Edifici)</option>
+                            </select>
+                        </div>
+                        <div class="control-row">
+                            <label title="Rimappa i colori di ogni asset sulla palette condivisa del pack"
+                                data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packEnforcePalette" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Stima del lavoro: evita la sorpresa di 40 minuti di coda -->
+                        <p class="hint-text" id="packEstimate" style="margin: 0;"></p>
+
+                        <button class="btn btn-primary" id="packStartBtn"
+                            style="width: 100%; font-size: 12px; padding: 10px;"
+                            data-i18n="pack.startBtn">Genera Pack</button>
+                        <button class="btn btn-secondary" id="packCancelBtn"
+                            style="width: 100%; font-size: 11px; padding: 8px; display: none;"
+                            data-i18n="pack.cancelBtn">Annulla pack</button>
                     </div>
                 </div>
 
@@ -1782,6 +2198,35 @@
     <!-- Main Canvas viewport -->
     <div class="canvas-container">
         <canvas id="canvas3d"></canvas>
+
+        <!-- ===== PANNELLO RISULTATI DEL PACK =====
+             Sta nella viewport (non nella sidebar) perche' e' un elenco vivo: gli
+             asset caricano uno a uno e cliccando su uno pronto lo si vede subito
+             nella griglia. Popolato da lib/27-pack.js. -->
+        <div id="packResultsPanel">
+            <div class="pack-panel-head">
+                <div style="min-width:0; flex:1;">
+                    <div class="pack-panel-title" data-i18n="pack.resultsTitle">Asset Pack</div>
+                    <div id="packProgressText" style="font-size:10.5px; color:var(--text-secondary); margin-top:3px;"></div>
+                    <div class="pack-progress"><div class="pack-progress-bar" id="packProgressBar"></div></div>
+                </div>
+                <button id="packPanelClose" class="pack-row-btn" title="Chiudi pannello"
+                    data-i18n-title="pack.closePanel" style="width:22px;height:22px;font-size:14px;">×</button>
+            </div>
+            <div class="pack-panel-body" id="packResultsList"></div>
+            <div style="padding:8px; border-top:1px solid var(--glass-border); display:flex; flex-direction:column; gap:6px;">
+                <button id="packLoadAllBtn" class="btn btn-secondary"
+                    style="font-size:10.5px; padding:6px;" title="Carica tutti gli asset pronti come oggetti separati nella scena"
+                    data-i18n-title="pack.loadAllTitle" data-i18n="pack.loadAll">Carica tutti nella scena</button>
+                <div id="packCoherence" style="display:none; font-size:10px; line-height:1.45;
+                    padding:6px 8px; border-radius:var(--radius-sm); background:var(--inset-bg);
+                    color:var(--text-secondary);"></div>
+                <button id="packExportAllBtn" class="btn btn-secondary"
+                    style="font-size:10.5px; padding:6px;" title="Scarica ogni asset pronto come file JSON"
+                    data-i18n-title="pack.exportZipTitle" data-i18n="pack.exportZip">Esporta pack (ZIP)</button>
+            </div>
+        </div>
+
         <!-- Gizmo mode switch: only shown while a rig is active on the rig tab. -->
         <div id="gizmoBar" class="canvas-hud"
             style="position:absolute; top:14px; left:14px; z-index:20; gap:6px; padding:6px;">
@@ -2553,44 +2998,107 @@
                 };
                 const grid = new Map();
                 const K = (x, y, z) => `${x},${y},${z}`;
+                // Tetto di sicurezza sulle celle: un op malformato dell'AI (es.
+                // `fill 0 0 0 299 299 299` = 27 milioni di celle) congelava il tab
+                // del browser senza messaggi. Superata la soglia il modello viene
+                // troncato: meglio parziale che con la UI bloccata.
+                //
+                // ADATTIVO alla griglia (come voxel_budget_for() in src/parser.py, che
+                // DEVE restare identico): con le griglie grandi per case ed edifici un
+                // tetto fisso a 4M troncava modelli legittimi.
+                // 8M celle ~= 0,8 GB di heap (misurato: ~98 byte per cella fra chiave
+                // stringa e valore). A 24M si arrivava a ~2,2 GB e il tab moriva.
+                const MAX_VOXELS = 4000000;
+                const MAX_VOXELS_ABSOLUTE = 8000000;
+                const budgetLimit = (function () {
+                    try {
+                        const g = (data.metadata && data.metadata.grid_size) || null;
+                        if (Array.isArray(g) && g.length === 3) {
+                            const w = parseInt(g[0], 10), h = parseInt(g[1], 10), d = parseInt(g[2], 10);
+                            if (w > 0 && h > 0 && d > 0) {
+                                const half = Math.floor((w * h * d) / 2);
+                                return Math.max(MAX_VOXELS, Math.min(half, MAX_VOXELS_ABSOLUTE));
+                            }
+                        }
+                    } catch (e) { /* metadata assente o malformato */ }
+                    return MAX_VOXELS;
+                })();
+                const budgetOk = () => grid.size < budgetLimit;
+                // ATTENZIONE — PARITA' CON PYTHON (src/parser.py::expand_ops).
+                // `int()` in Python TRONCA verso zero; Math.round() arrotonda al
+                // piu' vicino. Con coordinate frazionarie (che l'AI produce) le due
+                // implementazioni divergevano: un `fill 0.9 ... 3.9` dava x 0..3 in
+                // Python e x 1..4 in JS, cioe' il modello si spostava di un voxel
+                // fra viewer e file salvato. `trunc` replica esattamente `int()`.
+                const trunc = (v) => Math.trunc(Number(v) || 0);
+                // Python round() usa il "banker's rounding" (arrotonda .5 al PARI piu'
+                // vicino): round(0.5)=0, round(1.5)=2, round(2.5)=2. Math.round()
+                // arrotonda sempre verso +inf: 0.5->1, 2.5->3. La differenza si vede
+                // su `line`: una diagonale con steps pari cadeva su t=0.5 esatti e i
+                // due motori disegnavano scalini SFALSATI (anche con coordinate
+                // intere in input). pyRound replica la semantica di Python.
+                const pyRound = (v) => {
+                    const n = Number(v) || 0;
+                    const f = Math.floor(n);
+                    const diff = n - f;
+                    if (diff > 0.5) return f + 1;
+                    if (diff < 0.5) return f;
+                    return (f % 2 === 0) ? f : f + 1;   // esattamente .5 -> pari
+                };
                 const rng = (a, b) => {
-                    a = Math.round(a); b = Math.round(b);
+                    a = trunc(a); b = trunc(b);
                     if (a > b) { const t = a; a = b; b = t; }
                     const out = [];
                     for (let i = a; i <= b; i++) out.push(i);
                     return out;
                 };
                 const doFill = (x0, y0, z0, x1, y1, z1, c) => {
-                    for (const x of rng(x0, x1)) for (const y of rng(y0, y1)) for (const z of rng(z0, z1)) grid.set(K(x, y, z), c);
+                    for (const x of rng(x0, x1)) for (const y of rng(y0, y1)) for (const z of rng(z0, z1)) {
+                        if (!budgetOk()) return;
+                        grid.set(K(x, y, z), c);
+                    }
                 };
                 const doBox = (x0, y0, z0, x1, y1, z1, c) => {
-                    const xmin = Math.min(x0, x1), xmax = Math.max(x0, x1);
-                    const ymin = Math.min(y0, y1), ymax = Math.max(y0, y1);
-                    const zmin = Math.min(z0, z1), zmax = Math.max(z0, z1);
+                    // Gli estremi DEVONO essere troncati come i valori iterati da
+                    // rng(): confrontare un indice intero con un limite frazionario
+                    // (1 === 0.5) e' sempre falso, e il guscio non veniva mai
+                    // disegnato -> il box spariva completamente dal viewer.
+                    const xmin = Math.min(trunc(x0), trunc(x1)), xmax = Math.max(trunc(x0), trunc(x1));
+                    const ymin = Math.min(trunc(y0), trunc(y1)), ymax = Math.max(trunc(y0), trunc(y1));
+                    const zmin = Math.min(trunc(z0), trunc(z1)), zmax = Math.max(trunc(z0), trunc(z1));
                     for (const x of rng(x0, x1)) for (const y of rng(y0, y1)) for (const z of rng(z0, z1)) {
-                        if (x === xmin || x === xmax || y === ymin || y === ymax || z === zmin || z === zmax) grid.set(K(x, y, z), c);
+                        if (x === xmin || x === xmax || y === ymin || y === ymax || z === zmin || z === zmax) {
+                            if (!budgetOk()) return;
+                            grid.set(K(x, y, z), c);
+                        }
                     }
                 };
                 const doLine = (x0, y0, z0, x1, y1, z1, c) => {
-                    x0 = Math.round(x0); y0 = Math.round(y0); z0 = Math.round(z0);
-                    x1 = Math.round(x1); y1 = Math.round(y1); z1 = Math.round(z1);
+                    x0 = trunc(x0); y0 = trunc(y0); z0 = trunc(z0);
+                    x1 = trunc(x1); y1 = trunc(y1); z1 = trunc(z1);
                     const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0));
                     if (steps === 0) { grid.set(K(x0, y0, z0), c); return; }
                     for (let i = 0; i <= steps; i++) {
                         const t = i / steps;
-                        grid.set(K(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t), Math.round(z0 + (z1 - z0) * t)), c);
+                        if (!budgetOk()) return;
+                        grid.set(K(pyRound(x0 + (x1 - x0) * t), pyRound(y0 + (y1 - y0) * t), pyRound(z0 + (z1 - z0) * t)), c);
                     }
                 };
                 const doRect = (axis, level, a0, b0, a1, b1, c) => {
-                    level = Math.round(level); axis = String(axis).toLowerCase();
+                    level = trunc(level); axis = String(axis).toLowerCase();   // parita': Python usa int(level)
                     for (const a of rng(a0, a1)) for (const b of rng(b0, b1)) {
+                        if (!budgetOk()) return;
                         if (axis === 'y') grid.set(K(a, level, b), c);
                         else if (axis === 'x') grid.set(K(level, a, b), c);
                         else if (axis === 'z') grid.set(K(a, b, level), c);
                     }
                 };
                 const doSet = (c, coords) => {
-                    for (let i = 0; i + 2 < coords.length; i += 3) grid.set(K(Math.round(coords[i]), Math.round(coords[i + 1]), Math.round(coords[i + 2])), c);
+                    // parita': Python usa int() su ogni coordinata (troncamento).
+                    for (let i = 0; i + 2 < coords.length; i += 3) {
+                        if (!budgetOk()) return;
+                        grid.set(K(trunc(coords[i]), trunc(coords[i + 1]), trunc(coords[i + 2])), c);
+                    }
                 };
                 const doDel = (x0, y0, z0, x1, y1, z1) => {
                     for (const x of rng(x0, x1)) for (const y of rng(y0, y1)) for (const z of rng(z0, z1)) grid.delete(K(x, y, z));
@@ -2696,6 +3204,10 @@
                 if (!obj) return null;
                 activeObjectId = id;
                 currentModelData = obj.data;
+                // Il renderer incrementale indicizza l'oggetto ATTIVO: cambiando oggetto
+                // gli indici puntano ai voxel sbagliati. Invalidiamo, cosi' il prossimo
+                // edit passa dal rebuild completo che riallinea tutto.
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 // T1 Fase B: refresh outliner selection / bounding-box highlight here.
                 return obj;
             }
@@ -3102,6 +3614,7 @@
 
                 const meta = currentModelData.metadata || {};
                 const voxels = currentModelData.voxels || [];
+                const builtMeshByColor = new Map();
 
                 rebuildVoxelMap();
 
@@ -3113,16 +3626,11 @@
                 voxelCountEl.textContent = voxels.length;
                 visibleCountEl.textContent = visibleVoxels.length;
 
+                // Palette: usa la funzione condivisa con il renderer incrementale
+                // (28-incremental.js) invece di duplicarne il codice, cosi' le due
+                // strade non possono divergere e le swatch non lampeggiano.
                 const uniqueColors = [...new Set(voxels.map(v => v.color.toUpperCase()))];
-                paletteEl.innerHTML = '';
-                uniqueColors.forEach(c => {
-                    const s = document.createElement('div');
-                    s.className = 'swatch';
-                    s.style.backgroundColor = c;
-                    s.title = `${c} — clic per usarlo come colore attivo`;
-                    s.addEventListener('click', () => setActiveColor(c));
-                    paletteEl.appendChild(s);
-                });
+                renderPaletteSwatches(uniqueColors);
 
                 let minX, maxX, minY, maxY, minZ, maxZ;
                 if (voxels.length === 0) {
@@ -3188,6 +3696,7 @@
                         instMesh.userData.voxels = groupList;
                         modelPivot.add(instMesh);
                         meshes.push(instMesh);
+                        builtMeshByColor.set(colorHex, instMesh);
                     });
                 }
 
@@ -3221,6 +3730,12 @@
                     controls.target.copy(center);
                     camera.position.set(center.x + maxBoundingSize, center.y + maxBoundingSize, center.z + maxBoundingSize);
                     camera.lookAt(center);
+                }
+
+                // Da qui in poi gli edit possono usare il percorso incrementale:
+                // registriamo indici, visibilita' e mesh appena costruiti.
+                if (typeof primeIncrementalState === 'function') {
+                    primeIncrementalState(voxels, visibleVoxels, builtMeshByColor);
                 }
 
                 if (typeof updateMirrorPlane === 'function') updateMirrorPlane();
@@ -3333,9 +3848,12 @@
             }
 
             // Build the .mtl text for every color used in the model.
-            function buildMtlText() {
+            // `voxelsOverride` permette di esportare un modello DIVERSO da quello
+            // attivo (serve all'export del pack, che scrive N asset in uno ZIP).
+            // Omesso = comportamento originale sull'oggetto attivo.
+            function buildMtlText(voxelsOverride) {
                 let mtlText = `# Voxel Materials File\n# Exported from VoxelAIArtist\n\n`;
-                const allVoxels = currentModelData.voxels || [];
+                const allVoxels = voxelsOverride || currentModelData.voxels || [];
                 const uniqueColors = [...new Set(allVoxels.map(v => v.color.toUpperCase()))];
                 uniqueColors.forEach(color => {
                     const hex = color.replace('#', '');
@@ -3354,8 +3872,8 @@
             }
 
             // Build the greedy-meshed .obj text, referencing the given mtl file name.
-            function buildObjText(mtlFileName) {
-                const voxels = currentModelData.voxels || [];
+            function buildObjText(mtlFileName, voxelsOverride) {
+                const voxels = voxelsOverride || currentModelData.voxels || [];
                 const quads = greedyMesh(voxels);
 
                 let objText = `# Voxel 3D Model\n# Exported from VoxelAIArtist (greedy meshed)\n`;
@@ -3575,6 +4093,26 @@
                 }
             });
 
+            // ===== MODALITA' STRUTTURA GRANDE =====
+            // Alza la griglia a un valore adeguato (se l'utente e' su una piccola) e
+            // mostra l'avviso sul costo. Il flag viaggia poi nel POST: il backend lo
+            // traduce in istruzioni esplicite per l'AI (vedi main.py).
+            const toggleBigStructure = document.getElementById('toggleBigStructure');
+            const bigStructureHint = document.getElementById('bigStructureHint');
+            if (toggleBigStructure) {
+                toggleBigStructure.addEventListener('change', () => {
+                    const on = toggleBigStructure.checked;
+                    if (bigStructureHint) bigStructureHint.style.display = on ? '' : 'none';
+                    if (on) {
+                        // Sotto 128 una "struttura grande" non ha spazio per esistere.
+                        const cur = gridSelect.value;
+                        const small = (cur === 'auto' || cur === '32x32x32'
+                            || cur === '48x48x48' || cur === '64x64x64');
+                        if (small) gridSelect.value = '192x192x192';
+                    }
+                });
+            }
+
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
@@ -3601,6 +4139,7 @@
                         model: modelSelect.value,
                         gridSize: gridSelect.value,
                         mode: modeSelect.value,
+                        bigStructure: toggleBigStructure ? toggleBigStructure.checked : false,
                         currentModel: getSavePayload(),
                         image: selectedImageBase64
                     })
@@ -4290,6 +4829,11 @@
 
             function restoreSnapshot(snap) {
                 restoreSceneMeta(snap);
+                // Undo/redo rimpiazza l'intero array dei voxel: gli indici del renderer
+                // incrementale non valgono piu'. (Il buildModel() che segue lo
+                // rigenerera' comunque, ma invalidare qui evita ogni finestra di stato
+                // incoerente se in futuro qualcuno cambiasse quell'ordine.)
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 currentModelData.voxels = snap.voxels;
                 if (snap.rig) {
                     rig = {
@@ -4585,8 +5129,13 @@
                         .filter(c => inBounds(c) && !voxelMap.has(`${c.x},${c.y},${c.z}`));
                     if (cells.length === 0) return false;
                     cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
-                    syncVoxelsFromMap();
-                    buildModel(false, true); // edit oggetto attivo: non ricostruire gli inattivi
+                    // Percorso rapido (28-incremental.js): aggiorna solo le celle toccate
+                    // e i mesh dei colori coinvolti. Se non e' disponibile si ricade sul
+                    // rebuild completo, che resta la strada sicura.
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                        syncVoxelsFromMap();
+                        buildModel(false, true);
+                    }
                     return true;
                 } else if (currentTool === 'remove') {
                     const base = { x: pick.voxel.x, y: pick.voxel.y, z: pick.voxel.z };
@@ -4594,8 +5143,10 @@
                         .filter(c => voxelMap.has(`${c.x},${c.y},${c.z}`));
                     if (cells.length === 0) return false;
                     cells.forEach(c => voxelMap.delete(`${c.x},${c.y},${c.z}`));
-                    syncVoxelsFromMap();
-                    buildModel(false, true); // edit oggetto attivo: non ricostruire gli inattivi
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, removed: true })))) {
+                        syncVoxelsFromMap();
+                        buildModel(false, true);
+                    }
                     return true;
                 } else if (currentTool === 'draw') {
                     const base = { x: pick.voxel.x, y: pick.voxel.y, z: pick.voxel.z };
@@ -4607,8 +5158,10 @@
                         });
                     if (cells.length === 0) return false;
                     cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
-                    syncVoxelsFromMap();
-                    buildModel(false, true); // edit oggetto attivo: non ricostruire gli inattivi
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                        syncVoxelsFromMap();
+                        buildModel(false, true);
+                    }
                     return true;
                 } else if (currentTool === 'pick') {
                     setActiveColor(pick.voxel.color);
@@ -6254,14 +6807,26 @@
                 try { prefs = await loadPrefs(); } catch (e) { prefs = {}; }
                 if (!prefs || typeof prefs !== 'object') prefs = {};
 
-                // Tema: applica quello salvato (se diverso da quello già impostato da initTheme).
+                // ANTI-FLICKER (F2). Tema e accent sono GIA' stati applicati prima di
+                // arrivare qui: dallo script anti-flash nell'<head> e dagli
+                // inizializzatori sincroni initTheme()/initAccent(). Questo blocco gira
+                // DOPO il round-trip di rete, quindi riapplicarli a occhi chiusi
+                // produce un ulteriore cambio d'aspetto visibile.
+                // Regola: tocca il DOM solo se il backend dice qualcosa di DIVERSO da
+                // cio' che si vede gia'. Nel caso normale (prefs allineate) non accade
+                // nulla e l'utente non vede alcuno sfarfallio.
                 if (prefs.theme === 'light' || prefs.theme === 'dark') {
-                    if (typeof applyTheme === 'function') applyTheme(prefs.theme);
+                    const currentTheme = document.documentElement.getAttribute('data-theme');
+                    if (prefs.theme !== currentTheme && typeof applyTheme === 'function') {
+                        applyTheme(prefs.theme);
+                    }
                 }
-                // Accent color: applica quello salvato dal backend (initAccent ha già
-                // fatto il ripristino sincrono da localStorage; qui allineiamo al backend).
                 if (prefs.accent && typeof applyAccent === 'function') {
-                    applyAccent(prefs.accent, { persist: false });
+                    const currentAccent = (document.documentElement.style
+                        .getPropertyValue('--accent-primary') || '').trim().toLowerCase();
+                    if (String(prefs.accent).trim().toLowerCase() !== currentAccent) {
+                        applyAccent(prefs.accent, { persist: false });
+                    }
                     const ai = document.getElementById('accentColorInput');
                     if (ai) ai.value = prefs.accent;
                 }
@@ -7070,6 +7635,18 @@
             async function runAutosave() {
                 if (!projectDirty || !sceneHasVoxels() || autosaveInFlight) return;
                 autosaveInFlight = true;
+                // F8: getSceneSavePayload() comprime tutti i voxel della scena e su un
+                // modello grande costa parecchio. Girando dritto dentro il timer, quel
+                // costo cadeva su un frame qualsiasi: micro-blocco visibile ogni 90 s,
+                // magari nel mezzo di una pennellata. requestIdleCallback lo sposta in
+                // un momento in cui il browser non ha nulla da disegnare.
+                await new Promise(resolve => {
+                    if (typeof requestIdleCallback === 'function') {
+                        requestIdleCallback(() => resolve(), { timeout: 2000 });
+                    } else {
+                        setTimeout(resolve, 0);   // Safari e webview vecchie
+                    }
+                });
                 const data = getSceneSavePayload();
                 const projectId = deriveProjectId();
                 try {
@@ -7552,6 +8129,7 @@
 
             const I18N_FALLBACK = 'it';
             let i18nLang = I18N_FALLBACK;
+            let i18nApplied = false;           // true dopo la prima applicazione reale
             let i18nDict = {};                 // dizionario lingua attiva
             const i18nCache = { it: null };    // code -> dict (evita rifetch)
             let i18nLocales = [{ code: 'it', name: 'Italiano' }]; // popolato da index.json
@@ -7618,9 +8196,17 @@
                     // Assicura sempre il fallback it in cache (per t() e applyI18n).
                     if (!i18nCache.it) { try { i18nCache.it = await fetchDict('it'); } catch (e) {} }
                     const dict = (code === 'it' && i18nCache.it) ? i18nCache.it : await fetchDict(code);
+                    const sameAsDom = (code === I18N_FALLBACK && i18nLang === I18N_FALLBACK && !i18nApplied);
                     i18nDict = dict;
                     i18nLang = code;
-                    applyI18n(document);
+                    // ANTI-FLICKER (F3). I testi italiani sono GIA' nel DOM (it.json e' la
+                    // fonte da cui il template e' annotato). Alla prima applicazione in
+                    // italiano, applyI18n() riscriverebbe centinaia di nodi con stringhe
+                    // identiche: lavoro inutile subito dopo il primo paint. Lo saltiamo.
+                    // Per le altre lingue il testo deve davvero cambiare, quindi si
+                    // applica normalmente.
+                    if (!sameAsDom) applyI18n(document);
+                    i18nApplied = true;
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
                     if (sel && sel.value !== code) sel.value = code;
@@ -8308,7 +8894,1162 @@
                 });
             })();
 
+            // ===== RENDERING INCREMENTALE (idea #8) =====
+            // Frammento dello scope condiviso (vedi ui/build.mjs): nessun import/export.
+            //
+            // PROBLEMA. `buildModel()` e' una ricostruzione TOTALE: rifa' la voxelMap,
+            // ricalcola la visibilita' di tutti i voxel, ricrea l'array dei voxel,
+            // distrugge e ricrea OGNI InstancedMesh e rigenera il DOM della palette.
+            // Veniva chiamata a ogni singola pennellata. Misurato su computeVisibility:
+            // 24k voxel -> 0,04 s | 98k -> 0,18 s | 393k -> 0,80 s (Python; in JS ~3-5x
+            // meno, ma su 128^3 resta un blocco percepibile A OGNI TRATTO). Su una
+            // griglia 256^3 sarebbe inutilizzabile: per questo il rendering incrementale
+            // e' il prerequisito delle griglie grandi.
+            //
+            // SOLUZIONE. Durante un edit cambiano pochi voxel, quindi:
+            //   - la visibilita' si ricalcola SOLO sulle celle toccate e sui loro vicini
+            //     (una cella coperta puo' scoprirsi solo se un vicino sparisce);
+            //   - l'array `currentModelData.voxels` si aggiorna in O(1) per cella grazie
+            //     a un indice chiave -> posizione (`voxelIndex`), con rimozione
+            //     swap-with-last invece della ricostruzione integrale;
+            //   - si ricreano solo gli InstancedMesh dei COLORI toccati;
+            //   - la palette DOM si riscrive solo se l'insieme dei colori e' cambiato
+            //     (altrimenti le swatch lampeggiano a ogni tratto).
+            //
+            // SICUREZZA. `buildModel()` resta il percorso completo e autorevole per
+            // load/generate/import/undo/cambio oggetto. Se qualcosa non torna,
+            // `incrementalReady` va a false e tutto ricade su `buildModel()`.
+
+            // Stato del renderer incrementale (valido per l'OGGETTO ATTIVO).
+            //
+            // NOTA sulle strutture dati: `visibleByColor` mappa colore -> Map(chiave ->
+            // voxel), NON colore -> array. Con un array servirebbe un findIndex per
+            // togliere una cella, cioe' O(colori x lunghezza_lista) per ogni cella
+            // toccata: su un modello grande sarebbe piu' LENTO del rebuild completo che
+            // stiamo cercando di evitare. Con le Map ogni rimozione e' O(1).
+            // `visibleColorByKey` completa il quadro: dice a quale colore appartiene una
+            // cella visibile, senza doverlo cercare fra le liste.
+            let voxelIndex = null;         // "x,y,z" -> indice in currentModelData.voxels
+            let visibleColorByKey = null;  // "x,y,z" -> "#RRGGBB" (solo celle visibili)
+            let meshByColor = null;        // "#RRGGBB" -> InstancedMesh
+            let visibleByColor = null;     // "#RRGGBB" -> Map("x,y,z" -> voxel)
+            let paletteSignature = '';     // per non riscrivere il DOM della palette invano
+            let incrementalReady = false;  // false = usa sempre il percorso completo
+
+            const NEIGHBOR_OFFSETS = [
+                [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+            ];
+
+            function vkey(x, y, z) { return x + ',' + y + ',' + z; }
+
+            // Una cella e' visibile se ESISTE e almeno un vicino manca.
+            function isVisibleAt(x, y, z) {
+                if (!voxelMap.has(vkey(x, y, z))) return false;
+                for (let i = 0; i < 6; i++) {
+                    const o = NEIGHBOR_OFFSETS[i];
+                    if (!voxelMap.has(vkey(x + o[0], y + o[1], z + o[2]))) return true;
+                }
+                return false;
+            }
+
+            // Costruisce lo stato incrementale dopo un rebuild completo. Chiamata da
+            // buildModel(): da quel momento gli edit possono usare il percorso rapido.
+            function primeIncrementalState(voxels, visible, meshMap) {
+                try {
+                    voxelIndex = new Map();
+                    for (let i = 0; i < voxels.length; i++) {
+                        const v = voxels[i];
+                        voxelIndex.set(vkey(v.x, v.y, v.z), i);
+                    }
+                    visibleColorByKey = new Map();
+                    visibleByColor = new Map();
+                    for (let i = 0; i < visible.length; i++) {
+                        const v = visible[i];
+                        const k = vkey(v.x, v.y, v.z);
+                        const hex = (v.color || '').toUpperCase();
+                        visibleColorByKey.set(k, hex);
+                        let m = visibleByColor.get(hex);
+                        if (!m) { m = new Map(); visibleByColor.set(hex, m); }
+                        m.set(k, v);
+                    }
+                    meshByColor = meshMap || new Map();
+                    paletteSignature = computePaletteSignature();
+                    incrementalReady = true;
+                } catch (e) {
+                    incrementalReady = false;
+                }
+            }
+
+            function computePaletteSignature() {
+                // Firma dell'insieme dei colori presenti. Se non cambia, il DOM della
+                // palette non va toccato.
+                if (!visibleByColor) return '';
+                return Array.from(visibleByColor.keys()).sort().join('|');
+            }
+
+            // --- aggiornamento O(1) dell'array dei voxel -------------------------
+            function voxelArrayAdd(x, y, z, color) {
+                const arr = currentModelData.voxels;
+                const k = vkey(x, y, z);
+                const existing = voxelIndex.get(k);
+                if (existing !== undefined) {          // gia' presente: solo ricolora
+                    arr[existing].color = color;
+                    return;
+                }
+                arr.push({ x: x, y: y, z: z, color: color });
+                voxelIndex.set(k, arr.length - 1);
+            }
+
+            function voxelArrayRemove(x, y, z) {
+                const arr = currentModelData.voxels;
+                const k = vkey(x, y, z);
+                const idx = voxelIndex.get(k);
+                if (idx === undefined) return;
+                const last = arr.length - 1;
+                if (idx !== last) {
+                    // swap-with-last: evita lo shift O(n) di splice.
+                    const moved = arr[last];
+                    arr[idx] = moved;
+                    voxelIndex.set(vkey(moved.x, moved.y, moved.z), idx);
+                }
+                arr.pop();
+                voxelIndex.delete(k);
+            }
+
+            // --- (ri)costruzione del mesh di UN SOLO colore ----------------------
+            function rebuildColorMesh(colorHex) {
+                const cellMap = visibleByColor.get(colorHex);
+                const list = cellMap ? Array.from(cellMap.values()) : null;
+                const old = meshByColor.get(colorHex);
+                if (old) {
+                    modelPivot.remove(old);
+                    disposeMesh(old);
+                    meshByColor.delete(colorHex);
+                    const mi = meshes.indexOf(old);
+                    if (mi >= 0) meshes.splice(mi, 1);
+                }
+                if (!list || list.length === 0) {
+                    visibleByColor.delete(colorHex);
+                    return;
+                }
+                // userData.voxels serve al raycasting per l'editing: deve contenere gli
+                // stessi voxel, nello stesso ordine degli indici delle istanze.
+                const gap = parseFloat(voxelGap.value);
+                const boxSize = 1.0 - gap;
+                const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                const material = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(colorHex),
+                    roughness: 0.2,
+                    metalness: 0.1,
+                    wireframe: toggleWireframe.checked
+                });
+                const instMesh = new THREE.InstancedMesh(geometry, material, list.length);
+                const dummy = new THREE.Object3D();
+                for (let i = 0; i < list.length; i++) {
+                    dummy.position.set(list[i].x, list[i].y, list[i].z);
+                    dummy.updateMatrix();
+                    instMesh.setMatrixAt(i, dummy.matrix);
+                }
+                instMesh.instanceMatrix.needsUpdate = true;
+                // Stessa compensazione del percorso completo: i mesh vivono sotto il
+                // pivot centrato sul modello.
+                const c = modelPivotBaseCenter;
+                instMesh.position.set(-c.x, -c.y, -c.z);
+                instMesh.userData.voxels = list;
+                modelPivot.add(instMesh);
+                meshes.push(instMesh);
+                meshByColor.set(colorHex, instMesh);
+            }
+
+            /**
+             * Percorso rapido per gli edit. `cells` = celle toccate:
+             *   { x, y, z, color }  -> aggiunta o ricolorazione
+             *   { x, y, z, removed } -> rimozione
+             * PRECONDIZIONE: `voxelMap` e' GIA' aggiornata dal chiamante (come fa oggi
+             * performAction). Qui si allineano array, visibilita' e mesh.
+             *
+             * Ritorna true se l'aggiornamento rapido e' andato a buon fine; false se il
+             * chiamante deve ricadere su buildModel().
+             */
+            function applyVoxelEdits(cells) {
+                if (!incrementalReady || !voxelIndex || !visibleColorByKey || !meshByColor) return false;
+                if (!Array.isArray(cells) || cells.length === 0) return true;
+                // Oltre una certa massa il rebuild completo conviene: ogni cella toccata
+                // ne fa esaminare 7, e i mesh dei colori coinvolti vanno comunque rifatti.
+                if (cells.length > 4000) return false;
+
+                try {
+                    // 1. Array dei voxel: O(1) per cella (indice + swap-with-last).
+                    for (let i = 0; i < cells.length; i++) {
+                        const c = cells[i];
+                        if (c.removed) voxelArrayRemove(c.x, c.y, c.z);
+                        else voxelArrayAdd(c.x, c.y, c.z, (c.color || '').toUpperCase());
+                    }
+
+                    // 2. Visibilita': solo celle toccate + vicini. Una cella nascosta puo'
+                    //    scoprirsi solo se le sparisce accanto un vicino, quindi l'intorno
+                    //    di raggio 1 e' sufficiente e il costo non dipende dal modello.
+                    const toCheck = new Map();
+                    for (let i = 0; i < cells.length; i++) {
+                        const c = cells[i];
+                        toCheck.set(vkey(c.x, c.y, c.z), c);
+                        for (let n = 0; n < 6; n++) {
+                            const o = NEIGHBOR_OFFSETS[n];
+                            const nx = c.x + o[0], ny = c.y + o[1], nz = c.z + o[2];
+                            toCheck.set(vkey(nx, ny, nz), { x: nx, y: ny, z: nz });
+                        }
+                    }
+
+                    const dirtyColors = new Set();
+                    toCheck.forEach((pos, k) => {
+                        const x = pos.x, y = pos.y, z = pos.z;
+                        const prevColor = visibleColorByKey.get(k);   // undefined = non visibile
+                        const nowVisible = isVisibleAt(x, y, z);
+                        const nowColor = nowVisible ? (voxelMap.get(k) || '').toUpperCase() : undefined;
+
+                        if (prevColor === nowColor) return;           // nulla da fare
+
+                        if (prevColor !== undefined) {                // toglila dal vecchio colore
+                            const m = visibleByColor.get(prevColor);
+                            if (m) {
+                                m.delete(k);
+                                if (m.size === 0) visibleByColor.delete(prevColor);
+                            }
+                            dirtyColors.add(prevColor);
+                            visibleColorByKey.delete(k);
+                        }
+                        if (nowColor !== undefined) {                 // aggiungila al nuovo
+                            let m = visibleByColor.get(nowColor);
+                            if (!m) { m = new Map(); visibleByColor.set(nowColor, m); }
+                            m.set(k, { x: x, y: y, z: z, color: nowColor });
+                            dirtyColors.add(nowColor);
+                            visibleColorByKey.set(k, nowColor);
+                        }
+                    });
+
+                    // 3. Ricrea SOLO i mesh dei colori toccati (non tutti).
+                    dirtyColors.forEach(hex => rebuildColorMesh(hex));
+
+                    // 4. Contatori e palette. La palette si riscrive solo se l'insieme dei
+                    //    colori e' cambiato davvero: altrimenti le swatch lampeggiano a
+                    //    ogni pennellata.
+                    // IMPORTANTE: `visibleVoxels` e' letto da 16-export-glb.js. Se
+                    // restasse fermo allo stato dell'ultimo rebuild completo, un export
+                    // GLB dopo qualche pennellata esporterebbe il modello VECCHIO. Va
+                    // quindi rigenerato dalle liste per colore, che sono aggiornate.
+                    const freshVisible = [];
+                    visibleByColor.forEach(m => m.forEach(v => freshVisible.push(v)));
+                    visibleVoxels = freshVisible;
+
+                    voxelCountEl.textContent = currentModelData.voxels.length;
+                    visibleCountEl.textContent = visibleColorByKey.size;
+                    const sig = computePaletteSignature();
+                    if (sig !== paletteSignature) {
+                        paletteSignature = sig;
+                        renderPaletteSwatches();
+                    }
+
+                    if (typeof requestRender === 'function') requestRender();
+                    return true;
+                } catch (e) {
+                    // Qualunque imprevisto: si torna al percorso sicuro.
+                    incrementalReady = false;
+                    return false;
+                }
+            }
+
+            // Disegna le swatch della palette dai colori attualmente visibili.
+            // Estratta da buildModel() cosi' il percorso incrementale puo' riusarla.
+            function renderPaletteSwatches(colorsOverride) {
+                const colors = colorsOverride
+                    || (visibleByColor ? Array.from(visibleByColor.keys()) : []);
+                paletteEl.innerHTML = '';
+                colors.forEach(c => {
+                    const s = document.createElement('div');
+                    s.className = 'swatch';
+                    s.style.backgroundColor = c;
+                    s.title = c + ' — clic per usarlo come colore attivo';
+                    s.addEventListener('click', () => setActiveColor(c));
+                    paletteEl.appendChild(s);
+                });
+            }
+
+            // Invalida lo stato incrementale: il prossimo edit passera' dal percorso
+            // completo. Da chiamare quando la scena cambia fuori dal percorso di edit.
+            function invalidateIncremental() {
+                incrementalReady = false;
+                voxelIndex = null;
+                visibleColorByKey = null;
+                visibleByColor = null;
+                meshByColor = null;
+                paletteSignature = '';
+            }
+
+            // ===== SCRITTORE ZIP MINIMALE (idea #5) =====
+            // Frammento dello scope condiviso: nessun import/export, nessuna dipendenza
+            // esterna (niente JSZip da CDN: l'app deve funzionare anche offline, e in
+            // ambiente desktop non vogliamo aggiungere script remoti).
+            //
+            // Scrive ZIP in modalita' STORE (nessuna compressione). Perche' STORE:
+            //   - la compressione DEFLATE andrebbe implementata a mano (centinaia di
+            //     righe) o presa da una libreria esterna;
+            //   - i contenuti sono .vox/.glb (gia' binari compatti) e testo OBJ/JSON;
+            //     l'utente scompatta subito il pacchetto, quindi la dimensione sul
+            //     disco conta poco rispetto all'affidabilita' del formato.
+            // Uno ZIP STORE e' apribile da Windows, macOS, Linux e da qualunque tool.
+            //
+            // Riferimento: APPNOTE.TXT di PKWARE, sezioni 4.3.7 (local file header),
+            // 4.3.12 (central directory) e 4.3.16 (end of central directory).
+
+            // CRC-32 (polinomio standard 0xEDB88320). Tabella calcolata una volta sola.
+            const CRC32_TABLE = (function () {
+                const t = new Uint32Array(256);
+                for (let n = 0; n < 256; n++) {
+                    let c = n;
+                    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+                    t[n] = c >>> 0;
+                }
+                return t;
+            })();
+
+            function crc32(bytes) {
+                let c = 0xFFFFFFFF;
+                for (let i = 0; i < bytes.length; i++) {
+                    c = CRC32_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+                }
+                return (c ^ 0xFFFFFFFF) >>> 0;
+            }
+
+            function utf8Bytes(str) {
+                // TextEncoder e' presente in ogni browser moderno e nella webview Qt.
+                if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str);
+                // Fallback difensivo per ambienti molto vecchi.
+                const s = unescape(encodeURIComponent(str));
+                const out = new Uint8Array(s.length);
+                for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xFF;
+                return out;
+            }
+
+            // Converte una data JS nel formato MS-DOS usato dallo ZIP (2 x 16 bit).
+            function dosDateTime(d) {
+                const year = Math.max(1980, d.getFullYear());
+                return {
+                    time: ((d.getHours() & 0x1F) << 11) | ((d.getMinutes() & 0x3F) << 5)
+                        | ((Math.floor(d.getSeconds() / 2)) & 0x1F),
+                    date: (((year - 1980) & 0x7F) << 9) | (((d.getMonth() + 1) & 0x0F) << 5)
+                        | (d.getDate() & 0x1F)
+                };
+            }
+
+            /**
+             * Crea un Blob ZIP da una lista di file.
+             * `files` = [{ name: "cartella/file.txt", data: string | Uint8Array }]
+             * I nomi possono contenere '/' per creare cartelle.
+             */
+            function createZipBlob(files) {
+                const entries = [];
+                const chunks = [];
+                let offset = 0;
+                const now = dosDateTime(new Date());
+
+                // --- 1. Local file header + dati, per ogni file ---
+                for (const f of files) {
+                    const nameBytes = utf8Bytes(f.name);
+                    const data = (f.data instanceof Uint8Array) ? f.data : utf8Bytes(String(f.data));
+                    const crc = crc32(data);
+
+                    const header = new Uint8Array(30 + nameBytes.length);
+                    const hv = new DataView(header.buffer);
+                    hv.setUint32(0, 0x04034b50, true);   // firma local file header
+                    hv.setUint16(4, 20, true);           // versione minima (2.0)
+                    hv.setUint16(6, 0x0800, true);       // flag: nomi in UTF-8
+                    hv.setUint16(8, 0, true);            // metodo 0 = STORE
+                    hv.setUint16(10, now.time, true);
+                    hv.setUint16(12, now.date, true);
+                    hv.setUint32(14, crc, true);
+                    hv.setUint32(18, data.length, true); // dimensione compressa
+                    hv.setUint32(22, data.length, true); // dimensione reale
+                    hv.setUint16(26, nameBytes.length, true);
+                    hv.setUint16(28, 0, true);           // extra field: assente
+                    header.set(nameBytes, 30);
+
+                    entries.push({ nameBytes: nameBytes, crc: crc, size: data.length, offset: offset });
+                    chunks.push(header, data);
+                    offset += header.length + data.length;
+                }
+
+                // --- 2. Central directory ---
+                const centralStart = offset;
+                for (const e of entries) {
+                    const rec = new Uint8Array(46 + e.nameBytes.length);
+                    const rv = new DataView(rec.buffer);
+                    rv.setUint32(0, 0x02014b50, true);   // firma central directory
+                    rv.setUint16(4, 20, true);           // versione di creazione
+                    rv.setUint16(6, 20, true);           // versione minima
+                    rv.setUint16(8, 0x0800, true);       // flag UTF-8
+                    rv.setUint16(10, 0, true);           // STORE
+                    rv.setUint16(12, now.time, true);
+                    rv.setUint16(14, now.date, true);
+                    rv.setUint32(16, e.crc, true);
+                    rv.setUint32(20, e.size, true);
+                    rv.setUint32(24, e.size, true);
+                    rv.setUint16(28, e.nameBytes.length, true);
+                    rv.setUint32(42, e.offset, true);    // offset del local header
+                    rec.set(e.nameBytes, 46);
+                    chunks.push(rec);
+                    offset += rec.length;
+                }
+
+                // --- 3. End of central directory ---
+                const end = new Uint8Array(22);
+                const ev = new DataView(end.buffer);
+                ev.setUint32(0, 0x06054b50, true);
+                ev.setUint16(8, entries.length, true);        // voci su questo disco
+                ev.setUint16(10, entries.length, true);       // voci totali
+                ev.setUint32(12, offset - centralStart, true); // dimensione directory
+                ev.setUint32(16, centralStart, true);          // offset directory
+                chunks.push(end);
+
+                return new Blob(chunks, { type: 'application/zip' });
+            }
+
+            // Scarica un Blob con un nome file, riusando il meccanismo del resto
+            // dell'app (link temporaneo + revoca dell'URL).
+            function downloadBlob(blob, filename) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                // Ritardo prima della revoca: alcuni browser annullano il download se
+                // l'URL sparisce troppo presto.
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+            }
+
+            // ===== MULTIGENERAZIONE / ASSET PACK (frontend) =====
+            // Frammento dello scope condiviso (vedi ui/build.mjs): nessun import/export.
+            //
+            // Ruolo: pilotare la coda server-side (/api/pack/*) e mostrare la lista
+            // degli asset a lato della griglia. La coda vive nel processo Python, non
+            // qui: cosi' un reload della webview NON perde un pack da 40 minuti. Al
+            // reload questo modulo si ricollega al pack in corso (vedi packResume()).
+
+            const packRefInput = document.getElementById('packRefInput');
+            const packAddRefBtn = document.getElementById('packAddRefBtn');
+            const packRefList = document.getElementById('packRefList');
+            const packRefHint = document.getElementById('packRefHint');
+            const packObjectList = document.getElementById('packObjectList');
+            const packAddObjBtn = document.getElementById('packAddObjBtn');
+            const packVariants = document.getElementById('packVariants');
+            const packModelSelect = document.getElementById('packModelSelect');
+            const packGridSelect = document.getElementById('packGridSelect');
+            const packEnforcePalette = document.getElementById('packEnforcePalette');
+            const packEstimate = document.getElementById('packEstimate');
+            const packStartBtn = document.getElementById('packStartBtn');
+            const packCancelBtn = document.getElementById('packCancelBtn');
+            const packResultsPanel = document.getElementById('packResultsPanel');
+            const packResultsList = document.getElementById('packResultsList');
+            const packProgressText = document.getElementById('packProgressText');
+            const packProgressBar = document.getElementById('packProgressBar');
+            const packPanelClose = document.getElementById('packPanelClose');
+            const packCoherence = document.getElementById('packCoherence');
+            const packLoadAllBtn = document.getElementById('packLoadAllBtn');
+            const packExportAllBtn = document.getElementById('packExportAllBtn');
+            const genModeSwitch = document.getElementById('genModeSwitch');
+            const genModeSingle = document.getElementById('genModeSingle');
+            const genModePack = document.getElementById('genModePack');
+
+            // Stato locale del modulo.
+            let packReferences = [];      // [{name, data}] JSON di riferimento
+            let packRunId = null;         // pack attualmente monitorato
+            let packPollTimer = null;
+            let packActiveJobId = null;   // asset mostrato ora nella griglia
+            let packLastJobs = [];        // ultimo stato noto (per il click)
+            const packModelCache = {};    // jobId -> modello, evita rifetch
+            const packItemState = {};     // jobId -> firma dello stato gia' disegnato
+            let packStructureKey = '';    // insieme dei job attualmente in lista
+
+            // Firma di cio' che si VEDE di un job: se non cambia, il suo elemento
+            // nella lista non va ridisegnato (vedi F5 in packRenderStatus).
+            function packJobStateKey(job) {
+                return [job.status, job.duration || '', job.error || '',
+                        job.id === packActiveJobId ? 'A' : ''].join('~');
+            }
+
+            function packApi(route) {
+                return (window.__API_BASE__ ? window.__API_BASE__ : '') + route;
+            }
+
+            // --- Sotto-navigazione Singolo / Pack --------------------------------
+            if (genModeSwitch) {
+                genModeSwitch.querySelectorAll('.seg-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const mode = btn.dataset.genmode;
+                        genModeSwitch.querySelectorAll('.seg-btn')
+                            .forEach(b => b.classList.toggle('active', b === btn));
+                        if (genModeSingle) genModeSingle.style.display = (mode === 'pack') ? 'none' : '';
+                        if (genModePack) genModePack.style.display = (mode === 'pack') ? '' : 'none';
+                        // Se ci sono risultati, il pannello riappare tornando su Pack.
+                        if (mode === 'pack' && packLastJobs.length) packOpenPanel();
+                    });
+                });
+            }
+
+            // --- Righe oggetto (input + / -) -------------------------------------
+            // Il primo campo non ha il bottone rimuovi: serve almeno un oggetto.
+            function packAddObjectRow(value) {
+                if (!packObjectList) return;
+                const row = document.createElement('div');
+                row.className = 'pack-obj-row';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'field';
+                input.style.cssText = 'padding: 8px; font-size: 12px;';
+                input.placeholder = (typeof t === 'function')
+                    ? t('pack.objPlaceholder') : 'Es. Vaso fiori';
+                if (value) input.value = value;
+                input.addEventListener('input', packUpdateEstimate);
+                // Invio = aggiungi un'altra riga: si compila la lista senza mouse.
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const rows = packObjectList.querySelectorAll('.pack-obj-row');
+                        const isLast = rows[rows.length - 1] === row;
+                        if (isLast && input.value.trim()) packAddObjectRow();
+                        else {
+                            const next = row.nextElementSibling;
+                            if (next) { const n = next.querySelector('input'); if (n) n.focus(); }
+                        }
+                    }
+                });
+
+                const del = document.createElement('button');
+                del.className = 'pack-row-btn danger';
+                del.type = 'button';
+                del.textContent = '−';
+                del.title = (typeof t === 'function') ? t('pack.removeObjTitle') : 'Rimuovi questo oggetto';
+                del.addEventListener('click', () => {
+                    row.remove();
+                    packSyncRemoveButtons();
+                    packUpdateEstimate();
+                });
+
+                row.appendChild(input);
+                row.appendChild(del);
+                packObjectList.appendChild(row);
+                packSyncRemoveButtons();
+                packUpdateEstimate();
+                input.focus();
+            }
+
+            // Il bottone rimuovi si disabilita quando resta una sola riga.
+            function packSyncRemoveButtons() {
+                if (!packObjectList) return;
+                const rows = packObjectList.querySelectorAll('.pack-obj-row');
+                rows.forEach(r => {
+                    const b = r.querySelector('.pack-row-btn');
+                    if (b) b.disabled = (rows.length <= 1);
+                });
+            }
+
+            function packGetObjects() {
+                if (!packObjectList) return [];
+                return Array.from(packObjectList.querySelectorAll('input'))
+                    .map(i => i.value.trim())
+                    .filter(Boolean);
+            }
+
+            if (packAddObjBtn) packAddObjBtn.addEventListener('click', () => packAddObjectRow());
+
+            // --- Riferimenti di stile -------------------------------------------
+            if (packAddRefBtn && packRefInput) {
+                packAddRefBtn.addEventListener('click', () => packRefInput.click());
+                packRefInput.addEventListener('change', (e) => {
+                    const files = Array.from(e.target.files || []);
+                    files.forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                            try {
+                                let raw = String(evt.target.result || '');
+                                // I .voxelai sono JSON offuscati in base64 (vedi 07-save-payload).
+                                if (file.name.toLowerCase().endsWith('.voxelai')) {
+                                    try { raw = decodeURIComponent(escape(atob(raw))); } catch (_) { /* forse e' JSON puro */ }
+                                }
+                                const data = JSON.parse(raw);
+                                packReferences.push({ name: file.name, data: data });
+                                packRenderRefs();
+                            } catch (err) {
+                                alert(((typeof t === 'function') ? t('pack.refError') : 'Riferimento non valido: ') + file.name);
+                            }
+                        };
+                        reader.readAsText(file);
+                    });
+                    packRefInput.value = '';
+                });
+            }
+
+            function packRenderRefs() {
+                if (!packRefList) return;
+                packRefList.innerHTML = '';
+                packReferences.forEach((ref, idx) => {
+                    const chip = document.createElement('div');
+                    chip.className = 'pack-ref-chip';
+                    const label = document.createElement('span');
+                    label.textContent = ref.name;
+                    label.title = ref.name;
+                    const rm = document.createElement('button');
+                    rm.type = 'button';
+                    rm.textContent = '×';
+                    rm.addEventListener('click', () => {
+                        packReferences.splice(idx, 1);
+                        packRenderRefs();
+                    });
+                    chip.appendChild(label);
+                    chip.appendChild(rm);
+                    packRefList.appendChild(chip);
+                });
+                if (packRefHint) {
+                    packRefHint.textContent = packReferences.length
+                        ? ((typeof t === 'function') ? t('pack.refsHintLoaded', { n: packReferences.length })
+                            : `${packReferences.length} riferimento(i): palette e stile verranno estratti da questi file.`)
+                        : ((typeof t === 'function') ? t('pack.refsHint')
+                            : 'Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.');
+                }
+            }
+
+            // --- Stima del lavoro ------------------------------------------------
+            // Un pack e' lungo: dirlo PRIMA evita che l'utente lanci 60 job per sbaglio.
+            function packUpdateEstimate() {
+                if (!packEstimate) return;
+                const n = packGetObjects().length;
+                const v = parseInt(packVariants ? packVariants.value : '1', 10) || 1;
+                const total = n * v;
+                if (!total) { packEstimate.textContent = ''; return; }
+                // ~45 s per asset e' l'ordine di grandezza osservato con Gemini.
+                const mins = Math.max(1, Math.round(total * 45 / 60));
+                packEstimate.textContent = (typeof t === 'function')
+                    ? t('pack.estimate', { total: total, mins: mins })
+                    : `${total} asset da generare — circa ${mins} minuti (uno alla volta, per non farsi limitare dall'API).`;
+            }
+            if (packVariants) packVariants.addEventListener('change', packUpdateEstimate);
+
+            // I modelli AI disponibili sono gli stessi della generazione singola:
+            // riuso la lista di 08-generate-ai.js invece di duplicarla.
+            function packFillModels() {
+                if (!packModelSelect || typeof geminiModels === 'undefined') return;
+                packModelSelect.innerHTML = '';
+                geminiModels.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.val;
+                    opt.textContent = m.label;
+                    packModelSelect.appendChild(opt);
+                });
+            }
+
+            // --- Avvio del pack ---------------------------------------------------
+            if (packStartBtn) {
+                packStartBtn.addEventListener('click', async () => {
+                    const objects = packGetObjects();
+                    if (!objects.length) {
+                        alert((typeof t === 'function') ? t('pack.noObjects')
+                            : 'Scrivi almeno un oggetto da generare!');
+                        return;
+                    }
+                    const variants = parseInt(packVariants.value, 10) || 1;
+                    const total = objects.length * variants;
+                    // Conferma sopra i 12 job: e' oltre i ~10 minuti di attesa.
+                    if (total > 12) {
+                        const msg = (typeof t === 'function')
+                            ? t('pack.confirmBig', { total: total })
+                            : `Stai per generare ${total} asset. Può richiedere molto tempo. Procedere?`;
+                        if (!confirm(msg)) return;
+                    }
+
+                    packStartBtn.disabled = true;
+                    packStartBtn.innerHTML = '<span class="spinner"></span> ' +
+                        ((typeof t === 'function') ? t('pack.starting') : 'Avvio...');
+
+                    try {
+                        const res = await fetch(packApi('/api/pack/start'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                objects: objects,
+                                variants: variants,
+                                references: packReferences.map(r => r.data),
+                                model: packModelSelect ? packModelSelect.value : null,
+                                gridSize: packGridSelect ? packGridSelect.value : 'auto',
+                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true
+                            })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Errore sconosciuto');
+                        packRunId = data.id;
+                        packActiveJobId = null;
+                        Object.keys(packModelCache).forEach(k => delete packModelCache[k]);
+                        packRenderStatus(data);
+                        packOpenPanel();
+                        packStartPolling();
+                        if (packCancelBtn) packCancelBtn.style.display = '';
+                    } catch (err) {
+                        alert(((typeof t === 'function') ? t('pack.startError') : 'Errore avvio pack: ') + err.message);
+                    } finally {
+                        packStartBtn.disabled = false;
+                        packStartBtn.textContent = (typeof t === 'function') ? t('pack.startBtn') : 'Genera Pack';
+                    }
+                });
+            }
+
+            if (packCancelBtn) {
+                packCancelBtn.addEventListener('click', async () => {
+                    if (!packRunId) return;
+                    if (!confirm((typeof t === 'function') ? t('pack.confirmCancel')
+                        : 'Annullare il pack? Gli asset già pronti restano disponibili.')) return;
+                    try {
+                        const res = await fetch(packApi('/api/pack/cancel'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ runId: packRunId })
+                        });
+                        const data = await res.json();
+                        if (res.ok) packRenderStatus(data);
+                    } catch (err) { /* il polling riallineera' lo stato */ }
+                });
+            }
+
+            // --- Polling dello stato ----------------------------------------------
+            function packStartPolling() {
+                packStopPolling();
+                // 2,5 s: abbastanza reattivo, e lo status e' una risposta leggera
+                // (i modelli non viaggiano mai nel payload di stato).
+                packPollTimer = setInterval(packPoll, 2500);
+                packPoll();
+            }
+
+            function packStopPolling() {
+                if (packPollTimer) { clearInterval(packPollTimer); packPollTimer = null; }
+            }
+
+            async function packPoll() {
+                try {
+                    const url = packApi('/api/pack/status' + (packRunId ? ('?runId=' + encodeURIComponent(packRunId)) : ''));
+                    const res = await fetch(url);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.empty) { packStopPolling(); return; }
+                    packRunId = data.id;
+                    packRenderStatus(data);
+                    if (data.status === 'done' || data.status === 'cancelled') {
+                        packStopPolling();
+                        if (packCancelBtn) packCancelBtn.style.display = 'none';
+                        packShowCoherence();   // #4: segnala gli asset fuori scala
+                    }
+                } catch (err) { /* rete momentaneamente giu': si ritenta al tick dopo */ }
+            }
+
+            // --- Report di coerenza dimensionale (#4) ------------------------------
+            // Un pack serve a mettere gli asset NELLA STESSA scena: se uno e' 5 volte
+            // piu' grande degli altri va saputo prima di importarlo in Unity, non dopo.
+            async function packShowCoherence() {
+                if (!packCoherence || !packRunId) return;
+                try {
+                    const res = await fetch(packApi('/api/pack/report?runId=' + encodeURIComponent(packRunId)));
+                    if (!res.ok) return;
+                    const rep = await res.json();
+                    if (!rep || !rep.assets || rep.assets.length < 2) {
+                        packCoherence.style.display = 'none';
+                        return;
+                    }
+                    const clean = !rep.outliers || !rep.outliers.length;
+                    packCoherence.innerHTML = '';
+                    const head = document.createElement('div');
+                    head.style.cssText = 'font-weight:700; margin-bottom:2px;'
+                        + (clean ? '' : ' color:var(--danger);');
+                    head.textContent = (typeof t === 'function') ? t('pack.coherenceTitle') : 'Coerenza del pack';
+                    packCoherence.appendChild(head);
+                    const body = document.createElement('div');
+                    body.textContent = clean
+                        ? ((typeof t === 'function') ? t('pack.coherenceOk')
+                            : 'Tutti gli asset hanno dimensioni coerenti.')
+                        : ((typeof t === 'function') ? t('pack.coherenceOutliers')
+                            : 'Alcuni asset sono fuori scala rispetto al resto del pack.');
+                    packCoherence.appendChild(body);
+                    if (!clean) {
+                        rep.outliers.slice(0, 5).forEach(o => {
+                            const li = document.createElement('div');
+                            li.style.cssText = 'margin-top:2px; opacity:0.9;';
+                            li.textContent = '- ' + o.label + ' (' + o.ratio + 'x)';
+                            packCoherence.appendChild(li);
+                        });
+                    }
+                    packCoherence.style.display = '';
+                } catch (e) { /* il report e' un extra: mai bloccare il pack */ }
+            }
+
+            // --- Rendering della lista --------------------------------------------
+            function packRenderStatus(run) {
+                packLastJobs = run.jobs || [];
+                const c = run.counts || {};
+                const done = c.done || 0;
+                const total = run.total || packLastJobs.length || 0;
+                const errs = c.error || 0;
+
+                if (packProgressBar) {
+                    packProgressBar.style.width = total ? ((done / total) * 100).toFixed(1) + '%' : '0%';
+                }
+                if (packProgressText) {
+                    let txt = `${done}/${total}`;
+                    if (c.running) txt += ' · ' + ((typeof t === 'function') ? t('pack.inProgress') : 'in corso');
+                    if (errs) txt += ` · ${errs} ` + ((typeof t === 'function') ? t('pack.errors') : 'errori');
+                    if (run.etaSeconds != null && run.etaSeconds > 0 && run.status === 'running') {
+                        const m = Math.ceil(run.etaSeconds / 60);
+                        txt += ' · ~' + m + ((typeof t === 'function') ? t('pack.minShort') : ' min');
+                    }
+                    if (run.status === 'cancelled') {
+                        txt += ' · ' + ((typeof t === 'function') ? t('pack.cancelled') : 'annullato');
+                    }
+                    packProgressText.textContent = txt;
+                }
+
+                if (!packResultsList) return;
+
+                // ANTI-FLICKER (F5). Prima si faceva `innerHTML = ''` e si ricostruiva
+                // l'intera lista a OGNI poll (ogni 2,5 s): gli spinner ripartivano da
+                // zero, l'hover si perdeva e la lista sfarfallava di continuo. Ora
+                // l'aggiornamento e' DIFFERENZIALE: la struttura si crea una volta sola
+                // e ai poll successivi cambiano solo gli elementi davvero cambiati.
+                const groups = [];
+                const byName = {};
+                packLastJobs.forEach(j => {
+                    if (!byName[j.objectName]) { byName[j.objectName] = []; groups.push(j.objectName); }
+                    byName[j.objectName].push(j);
+                });
+
+                const structureKey = packLastJobs.map(j => j.id).join('|');
+                if (structureKey !== packStructureKey) {
+                    packStructureKey = structureKey;
+                    packResultsList.innerHTML = '';
+                    Object.keys(packItemEls).forEach(k => delete packItemEls[k]);
+                    Object.keys(packItemState).forEach(k => delete packItemState[k]);
+                    groups.forEach(name => {
+                        if (groups.length > 1) {
+                            const lbl = document.createElement('div');
+                            lbl.className = 'pack-group-label';
+                            lbl.textContent = name;
+                            packResultsList.appendChild(lbl);
+                        }
+                        byName[name].forEach(job => {
+                            const el = packBuildItem(job);
+                            packItemEls[job.id] = el;
+                            packItemState[job.id] = packJobStateKey(job);
+                            packResultsList.appendChild(el);
+                        });
+                    });
+                } else {
+                    packLastJobs.forEach(job => {
+                        const key = packJobStateKey(job);
+                        if (packItemState[job.id] === key) return;   // invariato
+                        packItemState[job.id] = key;
+                        const oldEl = packItemEls[job.id];
+                        const newEl = packBuildItem(job);
+                        packItemEls[job.id] = newEl;
+                        if (oldEl && oldEl.parentNode) oldEl.parentNode.replaceChild(newEl, oldEl);
+                        else packResultsList.appendChild(newEl);
+                    });
+                }
+            }
+
+            function packBuildItem(job) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'pack-item';
+                btn.dataset.jobId = job.id;
+
+                if (job.status === 'done') btn.classList.add('is-done');
+                else if (job.status === 'error') btn.classList.add('is-error');
+                else if (job.status === 'cancelled') btn.classList.add('is-cancelled');
+                if (job.id === packActiveJobId) btn.classList.add('is-active');
+
+                // Indicatore: spinner se in corso, puntino altrimenti.
+                if (job.status === 'running') {
+                    const sp = document.createElement('span');
+                    sp.className = 'pack-spin';
+                    btn.appendChild(sp);
+                } else {
+                    const dot = document.createElement('span');
+                    dot.className = 'pack-dot';
+                    btn.appendChild(dot);
+                }
+
+                const label = document.createElement('span');
+                label.className = 'pack-item-label';
+                label.textContent = job.label;
+                btn.appendChild(label);
+
+                const meta = document.createElement('span');
+                meta.className = 'pack-item-meta';
+                if (job.status === 'done') meta.textContent = job.duration ? Math.round(job.duration) + 's' : '✓';
+                else if (job.status === 'error') meta.textContent = '!';
+                else if (job.status === 'running') meta.textContent = '…';
+                else if (job.status === 'cancelled') meta.textContent = '–';
+                else meta.textContent = '·';
+                btn.appendChild(meta);
+
+                if (job.status === 'done') {
+                    btn.title = (typeof t === 'function') ? t('pack.clickToView')
+                        : 'Clicca per vedere questo modello nella griglia';
+                    btn.addEventListener('click', () => packLoadJob(job.id));
+                } else if (job.status === 'error') {
+                    btn.title = (job.error || '') + ' — ' + ((typeof t === 'function') ? t('pack.clickToRetry') : 'clicca per riprovare');
+                    btn.addEventListener('click', () => packRetryJob(job.id));
+                } else {
+                    btn.title = job.label + ' — ' + job.status;
+                }
+                return btn;
+            }
+
+            // Evidenzia l'asset attualmente mostrato nella griglia. Tenuta separata
+            // e basata sulla mappa jobId -> elemento costruita durante il rendering:
+            // non dipende da un riquery del DOM, quindi resta corretta anche se la
+            // lista viene ricostruita dal polling mentre l'utente clicca.
+            const packItemEls = {};
+            function packHighlightActive() {
+                Object.keys(packItemEls).forEach(id => {
+                    const el = packItemEls[id];
+                    if (el && el.classList) el.classList.toggle('is-active', id === packActiveJobId);
+                    // Allinea la firma: l'evidenziazione fa parte dello stato visibile,
+                    // altrimenti il poll successivo la considera "cambiata" e ridisegna
+                    // l'elemento perdendo la selezione.
+                    const job = packLastJobs.find(j => j.id === id);
+                    if (job) packItemState[id] = packJobStateKey(job);
+                });
+            }
+
+            function packOpenPanel() {
+                if (packResultsPanel) packResultsPanel.classList.add('open');
+            }
+            if (packPanelClose) {
+                packPanelClose.addEventListener('click', () => {
+                    if (packResultsPanel) packResultsPanel.classList.remove('open');
+                });
+            }
+
+            // --- Caricare un asset nella griglia ----------------------------------
+            // Requisito: cliccando un asset pronto la griglia viene PULITA e mostra
+            // solo quel modello.
+            async function packLoadJob(jobId) {
+                try {
+                    let model = packModelCache[jobId];
+                    if (!model) {
+                        const res = await fetch(packApi('/api/pack/result?runId=' +
+                            encodeURIComponent(packRunId) + '&jobId=' + encodeURIComponent(jobId)));
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Asset non disponibile');
+                        model = data.model;
+                        packModelCache[jobId] = model;
+                    }
+                    // loadSceneFromParsed azzera sceneObjects: la griglia resta con
+                    // il solo asset scelto, come richiesto.
+                    loadSceneFromParsed(JSON.parse(JSON.stringify(model)));
+                    buildModel();
+                    packActiveJobId = jobId;
+                    packHighlightActive();
+                } catch (err) {
+                    alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore caricamento asset: ') + err.message);
+                }
+            }
+
+            async function packRetryJob(jobId) {
+                if (!packRunId) return;
+                try {
+                    const res = await fetch(packApi('/api/pack/retry'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ runId: packRunId, jobId: jobId })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        packRenderStatus(data);
+                        packStartPolling();
+                        if (packCancelBtn) packCancelBtn.style.display = '';
+                    }
+                } catch (err) { /* il polling riallineera' */ }
+            }
+
+            // --- Carica tutti gli asset come oggetti separati ----------------------
+            // Utile per vedere il pack intero insieme e valutarne la coerenza.
+            if (packLoadAllBtn) {
+                packLoadAllBtn.addEventListener('click', async () => {
+                    try {
+                        const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!data.count) {
+                            alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
+                            return;
+                        }
+                        // Affianco gli asset sull'asse X per non sovrapporli: un pack
+                        // caricato "tutto in 0,0,0" sarebbe un grumo illeggibile.
+                        const objects = data.assets.map((a, i) => {
+                            const m = a.model || {};
+                            const g = (m.metadata && m.metadata.grid_size) || [32, 32, 32];
+                            const step = (g[0] || 32) + 4;
+                            return {
+                                name: a.label,
+                                metadata: m.metadata,
+                                palette: m.palette,
+                                ops: m.ops,
+                                voxels: m.voxels,
+                                transform: {
+                                    position: { x: i * step, y: 0, z: 0 },
+                                    rotationY: 0, scale: 1
+                                },
+                                visible: true
+                            };
+                        });
+                        loadSceneFromParsed({ objects: objects });
+                        buildModel();
+                        packActiveJobId = null;
+                    } catch (err) {
+                        alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore: ') + err.message);
+                    }
+                });
+            }
+
+            // --- Esporta tutto il pack in un unico ZIP (idea #5) -------------------
+            // Un pack da 15 asset come 15 download separati e' inutilizzabile: il
+            // browser li blocca, i nomi si mescolano e l'utente deve riordinarli a
+            // mano. Uno ZIP con una cartella per asset si trascina in Unity/Godot
+            // cosi' com'e'. I formati riusano gli encoder gia' presenti in
+            // 20-formats.js e 06-export-obj.js: nessuna logica di export duplicata.
+            if (packExportAllBtn) {
+                packExportAllBtn.addEventListener('click', async () => {
+                    const origLabel = packExportAllBtn.textContent;
+                    try {
+                        packExportAllBtn.disabled = true;
+                        packExportAllBtn.textContent = (typeof t === 'function')
+                            ? t('pack.exporting') : 'Preparazione ZIP...';
+
+                        const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!data.count) {
+                            alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
+                            return;
+                        }
+
+                        // Il report di coerenza finisce nel manifest: chi apre lo ZIP
+                        // sa subito se un asset e' fuori scala rispetto agli altri.
+                        let report = null;
+                        try {
+                            const rr = await fetch(packApi('/api/pack/report?runId=' + encodeURIComponent(packRunId || '')));
+                            if (rr.ok) report = await rr.json();
+                        } catch (e) { /* il report e' un extra */ }
+
+                        const files = [];
+                        const manifest = {
+                            format: 'voxelai-pack',
+                            version: 1,
+                            generatedAt: new Date().toISOString(),
+                            assetCount: data.count,
+                            assets: [],
+                            coherence: report || undefined
+                        };
+
+                        data.assets.forEach(a => {
+                            const model = a.model || {};
+                            const voxels = (typeof expandOps === 'function')
+                                ? (expandOps(JSON.parse(JSON.stringify(model))).voxels || [])
+                                : (model.voxels || []);
+                            const dir = a.label + '/';
+
+                            files.push({ name: dir + a.label + '.json', data: JSON.stringify(model, null, 2) });
+
+                            // .vox per MagicaVoxel: lo standard de-facto del mondo voxel
+                            try {
+                                if (typeof encodeVox === 'function' && voxels.length) {
+                                    files.push({ name: dir + a.label + '.vox', data: encodeVox(voxels) });
+                                }
+                            } catch (e) { /* un formato in meno, non un export fallito */ }
+
+                            // OBJ + MTL (Blender e qualunque altro DCC)
+                            try {
+                                if (typeof buildObjText === 'function' && voxels.length) {
+                                    files.push({ name: dir + a.label + '.obj', data: buildObjText(a.label + '.mtl', voxels) });
+                                    files.push({ name: dir + a.label + '.mtl', data: buildMtlText(voxels) });
+                                }
+                            } catch (e) { /* idem */ }
+
+                            manifest.assets.push({
+                                label: a.label, object: a.objectName, variant: a.variant,
+                                voxels: voxels.length,
+                                gridSize: (model.metadata && model.metadata.grid_size) || null
+                            });
+                        });
+
+                        files.push({ name: 'pack.json', data: JSON.stringify(manifest, null, 2) });
+
+                        const stamp = new Date().toISOString().slice(0, 10);
+                        downloadBlob(createZipBlob(files), 'VoxelAI_Pack_' + stamp + '.zip');
+                    } catch (err) {
+                        alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore: ') + err.message);
+                    } finally {
+                        packExportAllBtn.disabled = false;
+                        packExportAllBtn.textContent = origLabel;
+                    }
+                });
+            }
+
+            // --- Ripresa dopo un reload della webview ------------------------------
+            // La coda vive lato server: se c'e' un pack in corso lo si ritrova.
+            async function packResume() {
+                try {
+                    const res = await fetch(packApi('/api/pack/status'));
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.empty || !data.jobs || !data.jobs.length) return;
+                    packRunId = data.id;
+                    packRenderStatus(data);
+                    packOpenPanel();
+                    if (data.status === 'running') {
+                        packStartPolling();
+                        if (packCancelBtn) packCancelBtn.style.display = '';
+                    }
+                } catch (err) { /* nessun server (uso web): la modalita' pack resta inerte */ }
+            }
+
+            // Inizializzazione: una riga oggetto vuota, i modelli AI, la stima, e il
+            // tentativo di riagganciare un pack in corso.
+            packAddObjectRow();
+            packFillModels();
+            packUpdateEstimate();
+            packResume();
+
             const clock = new THREE.Clock();
+
+            // ===== RENDER ON-DEMAND (F7) =====
+            // Prima si rinderizzava a 60 fps anche con la scena ferma: GPU e batteria
+            // consumate per ridisegnare pixel identici. Ora il frame si disegna solo se
+            // qualcosa e' cambiato davvero. Chi modifica la scena chiama requestRender().
+            //
+            // Le sorgenti di movimento continuo (rotazione automatica, clip di
+            // animazione del rig, damping di OrbitControls) tengono vivo il loop da
+            // sole: la condizione `needsRender` sotto le riconosce, quindi la rotazione
+            // resta fluida come prima.
+            let needsRender = true;
+            function requestRender() { needsRender = true; }
+
+            // OrbitControls emette 'change' a ogni movimento di camera (drag, zoom,
+            // damping): e' il segnale piu' affidabile per sapere che va ridisegnato.
+            if (controls && typeof controls.addEventListener === 'function') {
+                controls.addEventListener('change', requestRender);
+            }
+            // Un resize cambia la viewport: serve un frame nuovo.
+            window.addEventListener('resize', requestRender);
+
             function animate() {
                 requestAnimationFrame(animate);
                 const dt = clock.getDelta();
@@ -8338,7 +10079,16 @@
                 if (selectionBoxHelper) selectionBoxHelper.update();
 
                 controls.update();
-                renderer.render(scene, camera);
+
+                // Disegna solo quando serve: qualcosa e' cambiato (needsRender), oppure
+                // c'e' un movimento in corso (rotazione, animazione rig, damping camera).
+                const animating = rotating
+                    || (mixer && rigPreviewActive)
+                    || (controls && controls.enableDamping && controls.autoRotate);
+                if (needsRender || animating) {
+                    renderer.render(scene, camera);
+                    needsRender = false;
+                }
             }
 
             // T1 Fase A: wrap the initial model as the first (active) scene object so
