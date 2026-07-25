@@ -9,8 +9,15 @@
             // animazione del rig, damping di OrbitControls) tengono vivo il loop da
             // sole: la condizione `needsRender` sotto le riconosce, quindi la rotazione
             // resta fluida come prima.
-            let needsRender = true;
-            function requestRender() { needsRender = true; }
+            // `renderBudget` = quanti frame disegnare ancora. requestRender() lo
+            // ricarica. Non e' un semplice flag booleano di proposito: molte modifiche
+            // alla scena avvengono in piu' passaggi (anteprima -> commit -> rebuild) e
+            // un solo frame catturerebbe uno stato intermedio.
+            let renderBudget = 3;
+            function requestRender(frames) {
+                const n = frames || 3;
+                if (n > renderBudget) renderBudget = n;
+            }
 
             // OrbitControls emette 'change' a ogni movimento di camera (drag, zoom,
             // damping): e' il segnale piu' affidabile per sapere che va ridisegnato.
@@ -18,7 +25,29 @@
                 controls.addEventListener('change', requestRender);
             }
             // Un resize cambia la viewport: serve un frame nuovo.
-            window.addEventListener('resize', requestRender);
+            window.addEventListener('resize', () => requestRender(3));
+
+            // ===== RETE DI SICUREZZA CONTRO LO SCHERMO CONGELATO =====
+            // Decine di percorsi modificano la scena senza passare da buildModel():
+            // il ghost del pennello, il piano di simmetria, il gizmo del rig, le
+            // anteprime di estrusione, la visibilita' degli oggetti. Pretendere che
+            // ognuno ricordi di chiamare requestRender() e' fragile: UNO dimenticato
+            // significa interfaccia bloccata.
+            // Quindi: qualunque input dell'utente ricarica il budget per un po' di
+            // frame. Il risparmio resta dove serve davvero (scena ferma, nessun
+            // input), ma l'app non puo' piu' apparire congelata mentre ci si lavora.
+            const KEEP_ALIVE_FRAMES = 30;   // ~0,5 s a 60fps dopo l'ultimo input
+            ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'keyup',
+             'touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click'
+            ].forEach(evt => {
+                window.addEventListener(evt, () => requestRender(KEEP_ALIVE_FRAMES),
+                    { passive: true, capture: true });
+            });
+            // Cambi di stato dell'interfaccia (input, select, checkbox) idem.
+            ['change', 'input'].forEach(evt => {
+                window.addEventListener(evt, () => requestRender(KEEP_ALIVE_FRAMES),
+                    { passive: true, capture: true });
+            });
 
             function animate() {
                 requestAnimationFrame(animate);
@@ -50,14 +79,15 @@
 
                 controls.update();
 
-                // Disegna solo quando serve: qualcosa e' cambiato (needsRender), oppure
-                // c'e' un movimento in corso (rotazione, animazione rig, damping camera).
+                // Disegna se c'e' budget residuo o se qualcosa e' in movimento
+                // (rotazione automatica, clip del rig, damping della camera).
                 const animating = rotating
-                    || (mixer && rigPreviewActive)
-                    || (controls && controls.enableDamping && controls.autoRotate);
-                if (needsRender || animating) {
+                    || mixer
+                    || rigPreviewActive
+                    || (controls && controls.autoRotate);
+                if (renderBudget > 0 || animating) {
                     renderer.render(scene, camera);
-                    needsRender = false;
+                    if (renderBudget > 0) renderBudget--;
                 }
             }
 
