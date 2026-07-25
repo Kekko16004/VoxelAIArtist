@@ -26,5 +26,8 @@
   "lib/24-plugins.js",
   "lib/25-properties.js",
   "lib/26-settings-modal.js",
+  "lib/28-incremental.js",
+  "lib/29-zip.js",
+  "lib/27-pack.js",
   "lib/18-bootstrap-tail.js"
 ]

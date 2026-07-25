@@ -1,4 +1,25 @@
             const clock = new THREE.Clock();
+
+            // ===== RENDER ON-DEMAND (F7) =====
+            // Prima si rinderizzava a 60 fps anche con la scena ferma: GPU e batteria
+            // consumate per ridisegnare pixel identici. Ora il frame si disegna solo se
+            // qualcosa e' cambiato davvero. Chi modifica la scena chiama requestRender().
+            //
+            // Le sorgenti di movimento continuo (rotazione automatica, clip di
+            // animazione del rig, damping di OrbitControls) tengono vivo il loop da
+            // sole: la condizione `needsRender` sotto le riconosce, quindi la rotazione
+            // resta fluida come prima.
+            let needsRender = true;
+            function requestRender() { needsRender = true; }
+
+            // OrbitControls emette 'change' a ogni movimento di camera (drag, zoom,
+            // damping): e' il segnale piu' affidabile per sapere che va ridisegnato.
+            if (controls && typeof controls.addEventListener === 'function') {
+                controls.addEventListener('change', requestRender);
+            }
+            // Un resize cambia la viewport: serve un frame nuovo.
+            window.addEventListener('resize', requestRender);
+
             function animate() {
                 requestAnimationFrame(animate);
                 const dt = clock.getDelta();
@@ -28,7 +49,16 @@
                 if (selectionBoxHelper) selectionBoxHelper.update();
 
                 controls.update();
-                renderer.render(scene, camera);
+
+                // Disegna solo quando serve: qualcosa e' cambiato (needsRender), oppure
+                // c'e' un movimento in corso (rotazione, animazione rig, damping camera).
+                const animating = rotating
+                    || (mixer && rigPreviewActive)
+                    || (controls && controls.enableDamping && controls.autoRotate);
+                if (needsRender || animating) {
+                    renderer.render(scene, camera);
+                    needsRender = false;
+                }
             }
 
             // T1 Fase A: wrap the initial model as the first (active) scene object so

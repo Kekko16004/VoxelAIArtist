@@ -72,7 +72,16 @@ const parts = [];
 for (const rel of manifest) {
   const abs = path.join(SRC_DIR, rel);
   if (!fs.existsSync(abs)) fail('modulo mancante nel manifest: ' + rel);
-  parts.push(fs.readFileSync(abs, 'latin1'));
+  const buf = fs.readFileSync(abs);
+  // Guardia: i moduli sono letti/scritti in latin1. Un carattere non
+  // rappresentabile (bullet, emoji, virgolette tipografiche) verrebbe
+  // corrotto o troncherebbe il file allo script di scrittura. Meglio un
+  // errore chiaro adesso che un bundle silenziosamente sbagliato.
+  if (buf.length === 0) fail('modulo VUOTO (scrittura troncata?): ' + rel);
+  const txt = buf.toString('latin1');
+  const bad = txt.match(/[^\x00-\xFF]/);
+  if (bad) fail('carattere non latin1 in ' + rel + ': ' + JSON.stringify(bad[0]));
+  parts.push(txt);
 }
 const bundle = parts.join('\n');
 

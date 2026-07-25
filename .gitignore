@@ -1,0 +1,58 @@
+# ===== VoxelAIArtist — file da NON versionare =====
+
+# --- CREDENZIALI (mai committare) ---
+# token.txt e cookies.json contengono token di sessione. Se sono gia' finiti in
+# git, rimuoverli dall'index NON li rende sicuri: vanno anche REVOCATI/rigenerati
+# lato servizio, perche' restano leggibili nella storia dei commit.
+token.txt
+cookies.json
+*.cookies.json
+.env
+.env.*
+secrets.json
+
+# --- Bytecode Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Ambienti virtuali ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Artefatti di build PyInstaller ---
+build/
+dist/
+*.spec.bak
+
+# --- Backup e snapshot di lavoro ---
+# Le copie .bak / .tar.gz sono utili in locale ma pesano nel repo e sono
+# ricostruibili: la storia di git E' il sistema di backup.
+.claude/backups/
+*.bak
+*.orig
+*.rej
+
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Log e temporanei ---
+*.log
+tmp/
+temp/
+
+# Artefatti temporanei dei test
+tests/.js_out.json
+tests/.bundle_check.js

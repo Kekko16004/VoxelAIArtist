@@ -12,6 +12,7 @@ from urllib.parse import urlparse, parse_qs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 import settings as app_settings
+import pack as pack_engine
 
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox"
 
@@ -50,6 +51,16 @@ if GUI_AVAILABLE:
     class WebEnginePage(QWebEnginePage):
         def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
             print(f"[JS Console] Riga {lineNumber}: {message}")
+else:
+    # Senza binding Qt la classe MainWindow (definita a livello di modulo) non
+    # avrebbe una classe base valida e il modulo esploderebbe con NameError
+    # ancora prima di arrivare al fallback browser documentato nel CLAUDE.md,
+    # rendendolo codice morto. Questi alias tengono il modulo IMPORTABILE:
+    # MainWindow diventa una classe inerte che non viene mai istanziata (il
+    # `main()` la salta quando GUI_AVAILABLE e' False). Serve anche a poter
+    # importare main.py nei test headless.
+    QMainWindow = object
+    WebEnginePage = object
 
 from gemini import Gemini
 
@@ -169,6 +180,161 @@ def _apply_dark_palette(app):
         print(f"[palette] impossibile applicare la palette scura: {e}")
 
 
+# ---------------------------------------------------------------------------
+# Generazione AI: funzioni condivise fra /api/generate e la coda pack.
+# Estratte dall'handler HTTP perche' la coda pack (src/pack.py) gira su thread
+# worker e non ha un oggetto request da cui attingere.
+# ---------------------------------------------------------------------------
+
+def _prompts_dir():
+    return os.path.join(BASE_DIR, "assets", "prompts")
+
+
+def _read_prompt_file(name, fallback=""):
+    path = os.path.join(_prompts_dir(), name)
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except OSError as e:
+            print(f"[prompt] impossibile leggere {name}: {e}")
+    return fallback
+
+
+BIG_STRUCTURE_RULE = """
+
+[MODALITA' STRUTTURA GRANDE - ISTRUZIONI PRIORITARIE]
+L'utente sta generando una STRUTTURA GRANDE (casa, edificio, veicolo, scena o
+ambiente), non un piccolo oggetto. Regole aggiuntive vincolanti:
+
+1. SFRUTTA TUTTA LA GRIGLIA. Il modello deve occupare almeno il 70% delle
+   dimensioni disponibili su ogni asse. Un edificio che usa un angolino della
+   griglia e' un errore: la griglia grande e' stata scelta apposta.
+
+2. DETTAGLIO ARCHITETTONICO OBBLIGATORIO. Non fermarti al volume esterno:
+   - facciate con porte, finestre (con infissi e vetri di colore diverso),
+     davanzali, cornici, insegne;
+   - tetto con struttura vera (tegole, spioventi, comignoli, grondaie);
+   - basamento/fondamenta, gradini, terrazze, balconi, ringhiere;
+   - variazione dei materiali sulle pareti (mattoni, legno, intonaco).
+
+3. INTERNI, se il soggetto li prevede. Pareti divisorie, pavimenti per piano,
+   scale fra i piani, e arredi essenziali. Non fare un guscio vuoto.
+
+4. USA MOLTI PIU' COMANDI. Una struttura grande richiede centinaia di ops:
+   usa `fill` per le masse, `box` per le stanze cave, `rect` per pavimenti e
+   solai, `line` per travi e ringhiere, `del` per scavare porte e finestre.
+   Non essere pigro: la qualita' si misura sul dettaglio.
+
+5. COERENZA STRUTTURALE. Il modello deve stare in piedi: niente parti
+   fluttuanti, pareti di spessore >= 1 voxel, tetto appoggiato alle pareti,
+   proporzioni credibili (una porta alta ~2/3 del piano terra).
+"""
+
+
+def _apply_grid_rule(prompt_text, grid_size):
+    """Aggiunge la regola tassativa sulla griglia, se non e' 'auto'."""
+    if not grid_size or grid_size == "auto":
+        return prompt_text
+    dims = str(grid_size).split('x')
+    if len(dims) != 3:
+        return prompt_text
+    return prompt_text + (
+        f"\n\n[REGOLA TASSATIVA: L'utente ha richiesto esplicitamente la griglia {grid_size}. "
+        f"Nel metadata JSON imposta ASSOLUTAMENTE 'grid_size': [{dims[0]}, {dims[1]}, {dims[2]}]. "
+        "Sfrutta tutta la griglia per aggiungere dettagli!]"
+    )
+
+
+def _gemini_client():
+    """Crea il client Gemini con i cookie salvati (o auto-discovery)."""
+    cookies_dict = app_settings.load_cookies()
+    if cookies_dict:
+        return Gemini(cookies=cookies_dict, timeout=180)
+    return Gemini(auto_cookies=True, timeout=180)
+
+
+def run_ai_generation(final_prompt, model=None):
+    """
+    Invia il prompt a Gemini e ritorna il modello JSON parsato.
+    Solleva un'eccezione se la risposta non e' recuperabile: la coda pack la
+    trasforma in un job in errore, /api/generate in una 500.
+    """
+    client = _gemini_client()
+    response = client.generate_content(final_prompt)
+    answer = response.text if hasattr(response, 'text') else str(response)
+
+    sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+    from parser import extract_and_parse_json
+    return extract_and_parse_json(answer)
+
+
+def build_pack_prompt(object_name, variant, style_contract, options):
+    """
+    Costruisce il prompt di UN asset del pack.
+
+    Struttura (l'ordine conta: le regole piu' vincolanti vanno vicino alla fine,
+    dove i modelli linguistici le seguono meglio):
+      1. lo schema del formato compatto  -> prompt.txt (riusato, mai duplicato)
+      2. le regole della modalita' pack  -> prompt-pack.txt
+      3. il soggetto + l'etichetta asset
+      4. la direttiva di variante (anti-cloni)
+      5. il contratto di stile           -> palette/griglia/dettaglio vincolanti
+    """
+    # La taglia relativa e' dichiarabile nel nome ("Armadio :grande"): la
+    # estraiamo per istruire l'AI sull'ingombro atteso, e usiamo il nome pulito
+    # come soggetto ed etichetta.
+    clean_name, size_hint = pack_engine.parse_size_hint(object_name)
+    object_name = clean_name or object_name
+    label = "%s_%d" % (pack_engine.slugify(object_name), variant)
+    base = _read_prompt_file("prompt.txt", "Genera un modello voxel in JSON compatto.")
+    # Il template singolo contiene un placeholder del soggetto: lo neutralizziamo
+    # perche' in modalita' pack il soggetto viene dichiarato separatamente.
+    base = base.replace("[INSERISCI QUI IL MODELLO DESIDERATO]", object_name)
+
+    pack_rules = _read_prompt_file("prompt-pack.txt", "")
+
+    parts = [base]
+    if pack_rules:
+        parts.append(pack_rules)
+
+    parts.append(
+        "### ASSET DA GENERARE ORA\n\n"
+        f"SOGGETTO: {object_name}\n"
+        f"ETICHETTA ASSET (usala come metadata.name): {label}\n\n"
+        "Progetta le coordinate da zero per rappresentare fedelmente QUESTO "
+        "soggetto. Non copiare la topologia degli esempi."
+    )
+
+    parts.append(pack_engine.variant_directive(
+        object_name, variant, options.get("variants") if options else None))
+
+    if size_hint:
+        frac = pack_engine.SIZE_HINTS.get(size_hint)
+        parts.append(
+            "TAGLIA RELATIVA NEL PACK: '%s'. Questo oggetto deve occupare circa il "
+            "%d%% della griglia sull'asse maggiore. Gli asset del pack finiranno "
+            "nella stessa scena: le proporzioni fra loro devono essere credibili."
+            % (size_hint, int((frac or 0.5) * 100))
+        )
+
+    if style_contract:
+        parts.append(style_contract)
+
+    prompt = "\n\n".join(p for p in parts if p)
+    return _apply_grid_rule(prompt, (options or {}).get("grid_size"))
+
+
+def _pack_generate(prompt, model, grid_size):
+    """Adattatore passato a PackManager: firma (prompt, model, grid) -> dict."""
+    return run_ai_generation(prompt, model)
+
+
+# Istanza unica della coda pack. `daemon` implicito: i worker sono thread daemon,
+# quindi non impediscono la chiusura dell'app.
+PACK_MANAGER = pack_engine.PackManager(_pack_generate, prompt_builder=build_pack_prompt)
+
+
 class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -196,6 +362,101 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        # ===== MULTIGENERAZIONE: stato e risultati =====
+        # GET /api/pack/status?runId=...  -> stato leggero (senza i modelli)
+        # GET /api/pack/result?runId=...&jobId=...  -> il modello di UN job
+        if self.path.startswith('/api/pack/status'):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                run_id = (qs.get('runId') or [None])[0]
+                run = PACK_MANAGER.get(run_id) if run_id else PACK_MANAGER.latest()
+                if not run:
+                    self._send_json(200, {"empty": True})
+                    return
+                # Deliberatamente NON include i payload dei modelli: lo status
+                # viene interrogato in polling ogni pochi secondi e i modelli
+                # pesano decine di KB l'uno.
+                self._send_json(200, run.to_dict())
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        if self.path.startswith('/api/pack/result'):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                run_id = (qs.get('runId') or [None])[0]
+                job_id = (qs.get('jobId') or [None])[0]
+                run = PACK_MANAGER.get(run_id) if run_id else PACK_MANAGER.latest()
+                if not run:
+                    self._send_json(404, {"error": "Pack non trovato."})
+                    return
+                if not job_id:
+                    self._send_json(400, {"error": "jobId mancante."})
+                    return
+                job = run.find(job_id)
+                if not job:
+                    self._send_json(404, {"error": "Asset non trovato."})
+                    return
+                if job.status != 'done' or not job.result:
+                    self._send_json(409, {"error": "Asset non ancora pronto.",
+                                          "status": job.status})
+                    return
+                self._send_json(200, {"job": job.to_dict(), "model": job.result})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # GET /api/pack/saved -> elenco dei pack salvati su disco (#9)
+        if self.path.startswith('/api/pack/saved'):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                folder = (qs.get('folder') or [None])[0]
+                if folder:
+                    data = pack_engine.load_saved_pack(folder)
+                    if not data:
+                        self._send_json(404, {"error": "Pack salvato non trovato."})
+                        return
+                    self._send_json(200, data)
+                else:
+                    self._send_json(200, {"packs": pack_engine.list_saved_packs()})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # GET /api/pack/report?runId=... -> report di coerenza dimensionale (#4)
+        if self.path.startswith('/api/pack/report'):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                run_id = (qs.get('runId') or [None])[0]
+                run = PACK_MANAGER.get(run_id) if run_id else PACK_MANAGER.latest()
+                if not run:
+                    self._send_json(404, {"error": "Pack non trovato."})
+                    return
+                assets = [{"label": j.label, "model": j.result}
+                          for j in run.jobs if j.status == 'done' and j.result]
+                self._send_json(200, pack_engine.pack_coherence_report(assets))
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # GET /api/pack/all?runId=... -> tutti i modelli pronti (export del pack)
+        if self.path.startswith('/api/pack/all'):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                run_id = (qs.get('runId') or [None])[0]
+                run = PACK_MANAGER.get(run_id) if run_id else PACK_MANAGER.latest()
+                if not run:
+                    self._send_json(404, {"error": "Pack non trovato."})
+                    return
+                assets = [{"label": j.label, "objectName": j.object_name,
+                           "variant": j.variant, "model": j.result}
+                          for j in run.jobs if j.status == 'done' and j.result]
+                self._send_json(200, {"runId": run.id, "count": len(assets),
+                                      "assets": assets})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
         if self.path == '/api/settings':
             self._send_json(200, {
                 "has_cookies": app_settings.has_cookies(),
@@ -373,8 +634,17 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if self.path == '/api/settings/cookies':
-            length = int(self.headers['Content-Length'])
-            data = json.loads(self.rfile.read(length).decode('utf-8'))
+            # Stessa insidia di /api/generate: header assente -> int(None) ->
+            # TypeError non catturato -> nessuna risposta al client.
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+                if length <= 0:
+                    self._send_json(400, {"error": "Corpo della richiesta mancante."})
+                    return
+                data = json.loads(self.rfile.read(length).decode('utf-8'))
+            except (TypeError, ValueError) as e:
+                self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+                return
             try:
                 app_settings.save_cookies(data)
                 self._send_json(200, {"ok": True})
@@ -382,8 +652,74 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": str(e)})
             return
 
+        # ===== MULTIGENERAZIONE / ASSET PACK =====
+        # Avvia un pack: N oggetti x M varianti, in coda serializzata lato server.
+        if self.path == '/api/pack/start':
+            try:
+                body = self._read_json_body()
+                objects = body.get("objects") or []
+                variants = body.get("variants", 1)
+                references = body.get("references") or []
+                options = {
+                    "model": body.get("model"),
+                    "grid_size": body.get("gridSize"),
+                    "concurrency": body.get("concurrency"),
+                    "notes": body.get("notes"),
+                    "variants": variants,
+                    "enforce_palette": body.get("enforcePalette", True),
+                    "normalize": body.get("normalize", True),
+                }
+                run = PACK_MANAGER.create_run(objects, variants, references, options)
+                print(f"[pack] avviato {run.id}: {len(run.jobs)} job "
+                      f"(stile da {run.style.get('sources', 0)} riferimenti)")
+                self._send_json(200, run.to_dict())
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # Annulla un pack in corso (i job gia' partiti finiscono da soli).
+        if self.path == '/api/pack/cancel':
+            try:
+                body = self._read_json_body()
+                run = PACK_MANAGER.cancel(body.get("runId"))
+                if not run:
+                    self._send_json(404, {"error": "Pack non trovato."})
+                    return
+                self._send_json(200, run.to_dict())
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # Rimette in coda un job fallito (o tutti se jobId manca).
+        if self.path == '/api/pack/retry':
+            try:
+                body = self._read_json_body()
+                run = PACK_MANAGER.retry(body.get("runId"), body.get("jobId"))
+                if not run:
+                    self._send_json(404, {"error": "Pack non trovato."})
+                    return
+                self._send_json(200, run.to_dict())
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
         if self.path == "/api/generate":
-            content_length = int(self.headers['Content-Length'])
+            # `self.headers['Content-Length']` e' None se l'header manca, e
+            # int(None) solleva TypeError FUORI dal try: il thread muore e la
+            # connessione si chiude senza alcuna risposta HTTP (il client vede
+            # un errore di rete inspiegabile). Il default a 0 rende il caso un
+            # 400 pulito gestito dal blocco except sotto.
+            try:
+                content_length = int(self.headers.get('Content-Length') or 0)
+            except (TypeError, ValueError):
+                content_length = 0
+            if content_length <= 0:
+                self._send_json(400, {"error": "Corpo della richiesta mancante o Content-Length assente."})
+                return
             post_data = self.rfile.read(content_length)
             try:
                 payload = json.loads(post_data.decode('utf-8'))
@@ -428,6 +764,11 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                         "Non copiare le coordinate o la topologia della torre dell'esempio.\n\n"
                         + final_prompt
                     )
+
+                # Modalita' struttura grande: istruzioni esplicite, altrimenti l'AI
+                # genera un oggetto piccolo anche su una griglia enorme.
+                if payload.get("bigStructure"):
+                    final_prompt += BIG_STRUCTURE_RULE
 
                 if grid_size != "auto":
                     dims = grid_size.split('x')

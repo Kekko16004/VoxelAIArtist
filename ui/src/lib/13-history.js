@@ -42,6 +42,11 @@
 
             function restoreSnapshot(snap) {
                 restoreSceneMeta(snap);
+                // Undo/redo rimpiazza l'intero array dei voxel: gli indici del renderer
+                // incrementale non valgono piu'. (Il buildModel() che segue lo
+                // rigenerera' comunque, ma invalidare qui evita ogni finestra di stato
+                // incoerente se in futuro qualcuno cambiasse quell'ordine.)
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 currentModelData.voxels = snap.voxels;
                 if (snap.rig) {
                     rig = {

@@ -41,3 +41,6 @@
 - [x] cull glb internal faces (100%)
 - [x] fix i18n url fetch (100%)
 - [x] fix resizeobserver loop error (100%)
+- [/] apply 01-codice.patch & push (50%)
+- [ ] apply 02-pulizia.patch & push (0%)
+

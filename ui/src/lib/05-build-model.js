@@ -23,6 +23,7 @@
 
                 const meta = currentModelData.metadata || {};
                 const voxels = currentModelData.voxels || [];
+                const builtMeshByColor = new Map();
 
                 rebuildVoxelMap();
 
@@ -34,16 +35,11 @@
                 voxelCountEl.textContent = voxels.length;
                 visibleCountEl.textContent = visibleVoxels.length;
 
+                // Palette: usa la funzione condivisa con il renderer incrementale
+                // (28-incremental.js) invece di duplicarne il codice, cosi' le due
+                // strade non possono divergere e le swatch non lampeggiano.
                 const uniqueColors = [...new Set(voxels.map(v => v.color.toUpperCase()))];
-                paletteEl.innerHTML = '';
-                uniqueColors.forEach(c => {
-                    const s = document.createElement('div');
-                    s.className = 'swatch';
-                    s.style.backgroundColor = c;
-                    s.title = `${c} — clic per usarlo come colore attivo`;
-                    s.addEventListener('click', () => setActiveColor(c));
-                    paletteEl.appendChild(s);
-                });
+                renderPaletteSwatches(uniqueColors);
 
                 let minX, maxX, minY, maxY, minZ, maxZ;
                 if (voxels.length === 0) {
@@ -109,6 +105,7 @@
                         instMesh.userData.voxels = groupList;
                         modelPivot.add(instMesh);
                         meshes.push(instMesh);
+                        builtMeshByColor.set(colorHex, instMesh);
                     });
                 }
 
@@ -142,6 +139,12 @@
                     controls.target.copy(center);
                     camera.position.set(center.x + maxBoundingSize, center.y + maxBoundingSize, center.z + maxBoundingSize);
                     camera.lookAt(center);
+                }
+
+                // Da qui in poi gli edit possono usare il percorso incrementale:
+                // registriamo indici, visibilita' e mesh appena costruiti.
+                if (typeof primeIncrementalState === 'function') {
+                    primeIncrementalState(voxels, visibleVoxels, builtMeshByColor);
                 }
 
                 if (typeof updateMirrorPlane === 'function') updateMirrorPlane();

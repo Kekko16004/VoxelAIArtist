@@ -216,14 +216,26 @@
                 try { prefs = await loadPrefs(); } catch (e) { prefs = {}; }
                 if (!prefs || typeof prefs !== 'object') prefs = {};
 
-                // Tema: applica quello salvato (se diverso da quello già impostato da initTheme).
+                // ANTI-FLICKER (F2). Tema e accent sono GIA' stati applicati prima di
+                // arrivare qui: dallo script anti-flash nell'<head> e dagli
+                // inizializzatori sincroni initTheme()/initAccent(). Questo blocco gira
+                // DOPO il round-trip di rete, quindi riapplicarli a occhi chiusi
+                // produce un ulteriore cambio d'aspetto visibile.
+                // Regola: tocca il DOM solo se il backend dice qualcosa di DIVERSO da
+                // cio' che si vede gia'. Nel caso normale (prefs allineate) non accade
+                // nulla e l'utente non vede alcuno sfarfallio.
                 if (prefs.theme === 'light' || prefs.theme === 'dark') {
-                    if (typeof applyTheme === 'function') applyTheme(prefs.theme);
+                    const currentTheme = document.documentElement.getAttribute('data-theme');
+                    if (prefs.theme !== currentTheme && typeof applyTheme === 'function') {
+                        applyTheme(prefs.theme);
+                    }
                 }
-                // Accent color: applica quello salvato dal backend (initAccent ha già
-                // fatto il ripristino sincrono da localStorage; qui allineiamo al backend).
                 if (prefs.accent && typeof applyAccent === 'function') {
-                    applyAccent(prefs.accent, { persist: false });
+                    const currentAccent = (document.documentElement.style
+                        .getPropertyValue('--accent-primary') || '').trim().toLowerCase();
+                    if (String(prefs.accent).trim().toLowerCase() !== currentAccent) {
+                        applyAccent(prefs.accent, { persist: false });
+                    }
                     const ai = document.getElementById('accentColorInput');
                     if (ai) ai.value = prefs.accent;
                 }

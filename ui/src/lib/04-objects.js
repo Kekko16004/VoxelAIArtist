@@ -43,6 +43,10 @@
                 if (!obj) return null;
                 activeObjectId = id;
                 currentModelData = obj.data;
+                // Il renderer incrementale indicizza l'oggetto ATTIVO: cambiando oggetto
+                // gli indici puntano ai voxel sbagliati. Invalidiamo, cosi' il prossimo
+                // edit passa dal rebuild completo che riallinea tutto.
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 // T1 Fase B: refresh outliner selection / bounding-box highlight here.
                 return obj;
             }

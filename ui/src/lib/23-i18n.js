@@ -14,6 +14,7 @@
 
             const I18N_FALLBACK = 'it';
             let i18nLang = I18N_FALLBACK;
+            let i18nApplied = false;           // true dopo la prima applicazione reale
             let i18nDict = {};                 // dizionario lingua attiva
             const i18nCache = { it: null };    // code -> dict (evita rifetch)
             let i18nLocales = [{ code: 'it', name: 'Italiano' }]; // popolato da index.json
@@ -80,9 +81,17 @@
                     // Assicura sempre il fallback it in cache (per t() e applyI18n).
                     if (!i18nCache.it) { try { i18nCache.it = await fetchDict('it'); } catch (e) {} }
                     const dict = (code === 'it' && i18nCache.it) ? i18nCache.it : await fetchDict(code);
+                    const sameAsDom = (code === I18N_FALLBACK && i18nLang === I18N_FALLBACK && !i18nApplied);
                     i18nDict = dict;
                     i18nLang = code;
-                    applyI18n(document);
+                    // ANTI-FLICKER (F3). I testi italiani sono GIA' nel DOM (it.json e' la
+                    // fonte da cui il template e' annotato). Alla prima applicazione in
+                    // italiano, applyI18n() riscriverebbe centinaia di nodi con stringhe
+                    // identiche: lavoro inutile subito dopo il primo paint. Lo saltiamo.
+                    // Per le altre lingue il testo deve davvero cambiare, quindi si
+                    // applica normalmente.
+                    if (!sameAsDom) applyI18n(document);
+                    i18nApplied = true;
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
                     if (sel && sel.value !== code) sel.value = code;

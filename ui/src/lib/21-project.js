@@ -210,6 +210,18 @@
             async function runAutosave() {
                 if (!projectDirty || !sceneHasVoxels() || autosaveInFlight) return;
                 autosaveInFlight = true;
+                // F8: getSceneSavePayload() comprime tutti i voxel della scena e su un
+                // modello grande costa parecchio. Girando dritto dentro il timer, quel
+                // costo cadeva su un frame qualsiasi: micro-blocco visibile ogni 90 s,
+                // magari nel mezzo di una pennellata. requestIdleCallback lo sposta in
+                // un momento in cui il browser non ha nulla da disegnare.
+                await new Promise(resolve => {
+                    if (typeof requestIdleCallback === 'function') {
+                        requestIdleCallback(() => resolve(), { timeout: 2000 });
+                    } else {
+                        setTimeout(resolve, 0);   // Safari e webview vecchie
+                    }
+                });
                 const data = getSceneSavePayload();
                 const projectId = deriveProjectId();
                 try {

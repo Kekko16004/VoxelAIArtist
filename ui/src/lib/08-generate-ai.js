@@ -67,6 +67,26 @@
                 }
             });
 
+            // ===== MODALITA' STRUTTURA GRANDE =====
+            // Alza la griglia a un valore adeguato (se l'utente e' su una piccola) e
+            // mostra l'avviso sul costo. Il flag viaggia poi nel POST: il backend lo
+            // traduce in istruzioni esplicite per l'AI (vedi main.py).
+            const toggleBigStructure = document.getElementById('toggleBigStructure');
+            const bigStructureHint = document.getElementById('bigStructureHint');
+            if (toggleBigStructure) {
+                toggleBigStructure.addEventListener('change', () => {
+                    const on = toggleBigStructure.checked;
+                    if (bigStructureHint) bigStructureHint.style.display = on ? '' : 'none';
+                    if (on) {
+                        // Sotto 128 una "struttura grande" non ha spazio per esistere.
+                        const cur = gridSelect.value;
+                        const small = (cur === 'auto' || cur === '32x32x32'
+                            || cur === '48x48x48' || cur === '64x64x64');
+                        if (small) gridSelect.value = '192x192x192';
+                    }
+                });
+            }
+
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
@@ -93,6 +113,7 @@
                         model: modelSelect.value,
                         gridSize: gridSelect.value,
                         mode: modeSelect.value,
+                        bigStructure: toggleBigStructure ? toggleBigStructure.checked : false,
                         currentModel: getSavePayload(),
                         image: selectedImageBase64
                     })

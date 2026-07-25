@@ -80,9 +80,12 @@
             }
 
             // Build the .mtl text for every color used in the model.
-            function buildMtlText() {
+            // `voxelsOverride` permette di esportare un modello DIVERSO da quello
+            // attivo (serve all'export del pack, che scrive N asset in uno ZIP).
+            // Omesso = comportamento originale sull'oggetto attivo.
+            function buildMtlText(voxelsOverride) {
                 let mtlText = `# Voxel Materials File\n# Exported from VoxelAIArtist\n\n`;
-                const allVoxels = currentModelData.voxels || [];
+                const allVoxels = voxelsOverride || currentModelData.voxels || [];
                 const uniqueColors = [...new Set(allVoxels.map(v => v.color.toUpperCase()))];
                 uniqueColors.forEach(color => {
                     const hex = color.replace('#', '');
@@ -101,8 +104,8 @@
             }
 
             // Build the greedy-meshed .obj text, referencing the given mtl file name.
-            function buildObjText(mtlFileName) {
-                const voxels = currentModelData.voxels || [];
+            function buildObjText(mtlFileName, voxelsOverride) {
+                const voxels = voxelsOverride || currentModelData.voxels || [];
                 const quads = greedyMesh(voxels);
 
                 let objText = `# Voxel 3D Model\n# Exported from VoxelAIArtist (greedy meshed)\n`;

@@ -994,6 +994,214 @@
             box-shadow: 0 2px 10px var(--accent-glow);
         }
 
+        /* ===== MULTIGENERAZIONE / ASSET PACK ===== */
+        /* Sotto-navigazione Singolo/Pack: riusa .segmented ma a 2 colonne. */
+        #genModeSwitch { grid-template-columns: repeat(2, 1fr); margin-bottom: 12px; }
+
+        /* Lista degli oggetti da generare: riga input + bottone rimuovi. */
+        .pack-obj-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pack-obj-row .field { flex: 1; min-width: 0; }
+        .pack-row-btn {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            color: var(--text-secondary);
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .pack-row-btn:hover {
+            color: var(--text-primary);
+            background: var(--hover-bg);
+            border-color: var(--accent-primary);
+        }
+        .pack-row-btn.danger:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+        .pack-row-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        /* Riferimenti di stile caricati (chip rimovibili). */
+        .pack-ref-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .pack-ref-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            max-width: 100%;
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+        }
+        .pack-ref-chip span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pack-ref-chip button {
+            background: transparent;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 13px;
+            padding: 0;
+            line-height: 1;
+        }
+
+        /* Pannello risultati: vive NELLA VIEWPORT a lato della griglia (non nella
+           sidebar), cosi' l'utente vede gli asset caricare mentre lavora. */
+        #packResultsPanel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 210px;
+            max-height: calc(100% - 24px);
+            display: none;
+            flex-direction: column;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border);
+            background: var(--glass-bg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+            z-index: 60;
+            overflow: hidden;
+        }
+        #packResultsPanel.open { display: flex; }
+        .pack-panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+        .pack-panel-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .pack-panel-body {
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pack-group-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            padding: 4px 4px 0;
+        }
+
+        /* Un asset nella lista. Cliccabile SOLO quando e' pronto. */
+        .pack-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 7px 9px;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            background: var(--inset-bg);
+            color: var(--text-secondary);
+            font-size: 11.5px;
+            font-family: inherit;
+            text-align: left;
+            cursor: default;
+            transition: all 0.15s;
+        }
+        .pack-item.is-done {
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+        .pack-item.is-done:hover {
+            background: var(--hover-bg);
+            border-color: var(--accent-primary);
+            transform: translateX(-2px);
+        }
+        .pack-item.is-active {
+            border-color: var(--accent-primary);
+            background: var(--hover-bg);
+        }
+        .pack-item.is-error { color: var(--danger); cursor: pointer; }
+        .pack-item-label {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pack-item-meta {
+            flex-shrink: 0;
+            font-size: 9.5px;
+            opacity: 0.75;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Indicatore di stato per asset: puntino o spinner. */
+        .pack-dot {
+            flex-shrink: 0;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            opacity: 0.35;
+        }
+        .pack-item.is-done .pack-dot { background: #22c55e; opacity: 1; }
+        .pack-item.is-error .pack-dot { background: var(--danger); opacity: 1; }
+        .pack-item.is-cancelled .pack-dot { opacity: 0.2; }
+        .pack-spin {
+            flex-shrink: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-primary);
+            border-top-color: transparent;
+            animation: packSpin 0.7s linear infinite;
+        }
+        @keyframes packSpin { to { transform: rotate(360deg); } }
+
+        /* Barra di avanzamento complessiva del pack. */
+        .pack-progress {
+            height: 4px;
+            border-radius: 2px;
+            background: var(--inset-bg);
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .pack-progress-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-deep));
+            transition: width 0.4s ease;
+        }
+
         /* Rig tab */
         .hint-text {
             font-size: 11px;
@@ -1282,6 +1490,68 @@
             .sidebar { padding-top: 12px; padding-bottom: 12px; gap: 10px; }
         }
     </style>
+
+    <!-- ===== ANTI-FLASH ALL'AVVIO (F1) =====
+         Il bundle JS sta in fondo al <body>: senza questo blocco il browser
+         dipinge la pagina con i default di :root (accent grafite, 13px, tema
+         scuro) e SOLO DOPO il JS applica tema/accent/font salvati. Risultato:
+         per un istante l'app si vedeva "vecchia" e poi cambiava aspetto.
+
+         Questo script e' volutamente SINCRONO e inline nell'<head>: gira prima
+         del primo paint, quindi la pagina nasce gia' con l'aspetto giusto.
+         Legge solo localStorage: un fetch sarebbe asincrono e reintrodurrebbe
+         esattamente il flash che stiamo eliminando.
+
+         Le chiavi devono restare allineate a 17-theme.js e 26-settings-modal.js.
+         Se qualcosa va storto si prosegue con i default CSS: mai bloccare
+         l'avvio per una preferenza estetica. -->
+    <script>
+        (function preventStartupFlash() {
+            var d = document.documentElement;
+            function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+            // --- Tema (stessa chiave di THEME_KEY in 17-theme.js) ---
+            try {
+                var theme = ls('voxelai-theme');
+                if (!theme) {
+                    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+                        ? 'light' : 'dark';
+                }
+                d.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+            } catch (e) { }
+
+            // --- Accent: stessa derivazione di applyAccent() in 17-theme.js ---
+            try {
+                var hex = ls('voxelai-accent');
+                if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex.trim())) {
+                    var h = hex.trim().replace('#', '');
+                    var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+                    var cl = function (n) { return Math.max(0, Math.min(255, Math.round(n))); };
+                    var hx = function (n) { n = cl(n).toString(16); return n.length === 1 ? '0' + n : n; };
+                    var mix = function (c, t, f) { return hx(c + (t - c) * f); };
+                    d.style.setProperty('--accent-primary', '#' + hx(r) + hx(g) + hx(b));
+                    d.style.setProperty('--accent-secondary', '#' + mix(r, 255, 0.20) + mix(g, 255, 0.20) + mix(b, 255, 0.20));
+                    d.style.setProperty('--accent-deep', '#' + mix(r, 0, 0.22) + mix(g, 0, 0.22) + mix(b, 0, 0.22));
+                    d.style.setProperty('--accent-soft', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.25)');
+                    d.style.setProperty('--accent-glow', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.35)');
+                    d.style.setProperty('--glass-border-focus', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.45)');
+                }
+            } catch (e) { }
+
+            // --- Font e dimensione (blob prefs scritto da 19-prefs.js) ---
+            try {
+                var raw = ls('voxelai-prefs');
+                if (raw) {
+                    var p = JSON.parse(raw);
+                    if (p && typeof p === 'object') {
+                        if (p.uiFont) d.style.setProperty('--ui-font', p.uiFont);
+                        var n = parseInt(p.uiFontSize, 10);
+                        if (n >= 10 && n <= 24) d.style.setProperty('--ui-font-size', n + 'px');
+                    }
+                }
+            } catch (e) { }
+        })();
+    </script>
 </head>
 
 <body>
@@ -1396,6 +1666,19 @@
         <div class="tab-content">
             <!-- ===== TAB: GENERA ===== -->
             <div class="tab-panel active" data-panel="generate">
+                <!-- Sotto-navigazione: generazione singola vs Asset Pack.
+                     Riusa il componente .segmented gia' presente nel tema. -->
+                <div class="segmented" id="genModeSwitch">
+                    <button class="seg-btn active" data-genmode="single"
+                        title="Genera un singolo modello" data-i18n-title="genMode.singleTitle"
+                        data-i18n="genMode.single">Singolo</button>
+                    <button class="seg-btn" data-genmode="pack"
+                        title="Genera un pack di asset coerenti" data-i18n-title="genMode.packTitle"
+                        data-i18n="genMode.pack">Pack</button>
+                </div>
+
+                <!-- ===== MODALITA' SINGOLA (invariata) ===== -->
+                <div id="genModeSingle">
                 <div>
                     <div class="section-title" data-i18n="generate.sectionTitle">Generazione Voxel AI</div>
                     <div class="controls-group glass"
@@ -1443,8 +1726,33 @@
                                 <option value="48x48x48" data-i18n="generate.gridMedium">48x48x48 (Media)</option>
                                 <option value="64x64x64" data-i18n="generate.gridDetailed">64x64x64 (Dettagliato)</option>
                                 <option value="128x128x128" data-i18n="generate.gridSlow">128x128x128 (Lento)</option>
+                                <option value="192x192x192" data-i18n="generate.gridHuge">192x192x192 (Enorme)</option>
+                                <option value="256x256x256" data-i18n="generate.gridMassive">256x256x256 (Edifici)</option>
+                                <option value="384x384x384" data-i18n="generate.gridColossal">384x384x384 (Colossale)</option>
+                                <option value="512x512x512" data-i18n="generate.gridExtreme">512x512x512 (Estrema)</option>
                             </select>
                         </div>
+
+                        <!-- ===== MODALITA' STRUTTURA GRANDE =====
+                             Per case, edifici e scene servono griglie molto ampie e
+                             l'istruzione esplicita all'AI di sfruttarle: senza questa
+                             spunta il modello tende a produrre oggetti piccoli e centrati
+                             anche quando la griglia e' enorme. -->
+                        <div class="control-row">
+                            <label title="Per case, edifici e scene: griglia ampia e istruzioni per un modello ricco di dettagli"
+                                data-i18n-title="generate.bigStructureTitle"
+                                data-i18n="generate.bigStructure">Struttura grande / alto dettaglio</label>
+                            <label class="switch">
+                                <input type="checkbox" id="toggleBigStructure">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p class="hint-text" id="bigStructureHint" style="margin: 0; display: none;"
+                            data-i18n="generate.bigStructureHint">
+                            L'IA userà tutta la griglia con interni ed elementi architettonici.
+                            La generazione è più lenta e il modello più pesante da visualizzare.
+                        </p>
+
                         <button class="btn btn-primary" id="generateBtn"
                             style="width: 100%; font-size: 12px; padding: 10px;" data-i18n="generate.generateBtn">Genera Modello</button>
                     </div>
@@ -1523,6 +1831,114 @@
                             <button id="submitNewProjectBtn" class="btn btn-primary"
                                 style="padding: 4px 12px; font-size: 11px; font-weight: 600;" data-i18n="newProject.create">Crea</button>
                         </div>
+                    </div>
+                </div>
+                </div><!-- /#genModeSingle -->
+
+                <!-- ===== MODALITA' PACK (multigenerazione) ===== -->
+                <div id="genModePack" style="display: none;">
+                    <div class="section-title" data-i18n="pack.sectionTitle">Asset Pack (multigenerazione)</div>
+
+                    <div class="controls-group glass"
+                        style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+
+                        <p class="hint-text" style="margin: 0;" data-i18n="pack.intro">
+                            Genera più oggetti in una sola volta, tutti con lo stesso stile e la stessa
+                            palette. Ideale per creare set di asset pronti per un gioco.
+                        </p>
+
+                        <!-- 1. Riferimenti di stile (opzionali) -->
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;"
+                                data-i18n="pack.refsLabel">Riferimenti di stile (opzionali)</label>
+                            <button class="btn btn-secondary" id="packAddRefBtn"
+                                style="font-size: 11px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;"
+                                title="Carica modelli JSON esistenti per definire lo stile del pack"
+                                data-i18n-title="pack.refsBtnTitle">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                <span data-i18n="pack.refsBtn">Carica JSON di riferimento</span>
+                            </button>
+                            <input type="file" id="packRefInput" accept=".json,.voxelai" multiple style="display: none;">
+                            <div class="pack-ref-list" id="packRefList"></div>
+                            <p class="hint-text" id="packRefHint" style="margin: 0;" data-i18n="pack.refsHint">
+                                Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.
+                            </p>
+                        </div>
+
+                        <!-- 2. Oggetti da generare -->
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <label style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;"
+                                data-i18n="pack.objectsLabel">Oggetti da generare</label>
+                            <div id="packObjectList" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                            <button class="btn btn-secondary" id="packAddObjBtn"
+                                style="font-size: 11px; padding: 7px 12px;" title="Aggiungi un altro oggetto"
+                                data-i18n-title="pack.addObjTitle">
+                                <span data-i18n="pack.addObj">+ Aggiungi oggetto</span>
+                            </button>
+                            <p class="hint-text" style="margin: 0;" data-i18n="pack.sizeHintLabel">
+                                Suggerimento: aggiungi :piccolo, :medio, :grande o :enorme dopo il nome
+                                per definire la scala relativa
+                            </p>
+                        </div>
+
+                        <!-- 3. Varianti per oggetto -->
+                        <div class="control-row">
+                            <label data-i18n="pack.variants">Generazioni per oggetto</label>
+                            <select id="packVariants" class="field-strong"
+                                style="padding: 6px; font-size: 12px; width: 90px;">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="8">8</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+
+                        <!-- 4. Impostazioni comuni del pack -->
+                        <div class="control-row">
+                            <label data-i18n="generate.aiModel">Modello AI</label>
+                            <select id="packModelSelect" class="field-strong"
+                                style="padding: 6px; font-size: 12px; width: 160px;"></select>
+                        </div>
+                        <div class="control-row">
+                            <label data-i18n="pack.gridLabel">Griglia comune</label>
+                            <select id="packGridSelect" class="field-strong"
+                                style="padding: 6px; font-size: 12px; width: 160px;">
+                                <option value="auto" data-i18n="generate.gridAuto">Auto (Decide l'IA)</option>
+                                <option value="32x32x32" data-i18n="generate.gridFast">32x32x32 (Veloce)</option>
+                                <option value="48x48x48" selected data-i18n="generate.gridMedium">48x48x48 (Media)</option>
+                                <option value="64x64x64" data-i18n="generate.gridDetailed">64x64x64 (Dettagliato)</option>
+                                <option value="128x128x128" data-i18n="generate.gridSlow">128x128x128 (Lento)</option>
+                                <option value="192x192x192" data-i18n="generate.gridHuge">192x192x192 (Enorme)</option>
+                                <option value="256x256x256" data-i18n="generate.gridMassive">256x256x256 (Edifici)</option>
+                            </select>
+                        </div>
+                        <div class="control-row">
+                            <label title="Rimappa i colori di ogni asset sulla palette condivisa del pack"
+                                data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packEnforcePalette" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Stima del lavoro: evita la sorpresa di 40 minuti di coda -->
+                        <p class="hint-text" id="packEstimate" style="margin: 0;"></p>
+
+                        <button class="btn btn-primary" id="packStartBtn"
+                            style="width: 100%; font-size: 12px; padding: 10px;"
+                            data-i18n="pack.startBtn">Genera Pack</button>
+                        <button class="btn btn-secondary" id="packCancelBtn"
+                            style="width: 100%; font-size: 11px; padding: 8px; display: none;"
+                            data-i18n="pack.cancelBtn">Annulla pack</button>
                     </div>
                 </div>
 
@@ -1782,6 +2198,35 @@
     <!-- Main Canvas viewport -->
     <div class="canvas-container">
         <canvas id="canvas3d"></canvas>
+
+        <!-- ===== PANNELLO RISULTATI DEL PACK =====
+             Sta nella viewport (non nella sidebar) perche' e' un elenco vivo: gli
+             asset caricano uno a uno e cliccando su uno pronto lo si vede subito
+             nella griglia. Popolato da lib/27-pack.js. -->
+        <div id="packResultsPanel">
+            <div class="pack-panel-head">
+                <div style="min-width:0; flex:1;">
+                    <div class="pack-panel-title" data-i18n="pack.resultsTitle">Asset Pack</div>
+                    <div id="packProgressText" style="font-size:10.5px; color:var(--text-secondary); margin-top:3px;"></div>
+                    <div class="pack-progress"><div class="pack-progress-bar" id="packProgressBar"></div></div>
+                </div>
+                <button id="packPanelClose" class="pack-row-btn" title="Chiudi pannello"
+                    data-i18n-title="pack.closePanel" style="width:22px;height:22px;font-size:14px;">×</button>
+            </div>
+            <div class="pack-panel-body" id="packResultsList"></div>
+            <div style="padding:8px; border-top:1px solid var(--glass-border); display:flex; flex-direction:column; gap:6px;">
+                <button id="packLoadAllBtn" class="btn btn-secondary"
+                    style="font-size:10.5px; padding:6px;" title="Carica tutti gli asset pronti come oggetti separati nella scena"
+                    data-i18n-title="pack.loadAllTitle" data-i18n="pack.loadAll">Carica tutti nella scena</button>
+                <div id="packCoherence" style="display:none; font-size:10px; line-height:1.45;
+                    padding:6px 8px; border-radius:var(--radius-sm); background:var(--inset-bg);
+                    color:var(--text-secondary);"></div>
+                <button id="packExportAllBtn" class="btn btn-secondary"
+                    style="font-size:10.5px; padding:6px;" title="Scarica ogni asset pronto come file JSON"
+                    data-i18n-title="pack.exportZipTitle" data-i18n="pack.exportZip">Esporta pack (ZIP)</button>
+            </div>
+        </div>
+
         <!-- Gizmo mode switch: only shown while a rig is active on the rig tab. -->
         <div id="gizmoBar" class="canvas-hud"
             style="position:absolute; top:14px; left:14px; z-index:20; gap:6px; padding:6px;">

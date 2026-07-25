@@ -44,7 +44,14 @@ Restituisci ESCLUSIVAMENTE un unico blocco ```json ... ``` valido. Nessun testo,
 
 1. `palette`: mappa di chiavi corte (una o due lettere) verso colori esadecimali. Definisci OGNI colore qui UNA sola volta e poi riferisciti alla chiave. Non ripetere mai stringhe esadecimali dentro `ops`.
 
-2. `grid_size` = `[W, H, D]` interi. Minimo `[32, 32, 32]`; per modelli dettagliati sali a 64, 128 o più (per quanto mi riguarda anche 1000 se necessario per strutture grandi). Y è l'altezza (verso l'alto).
+2. `grid_size` = `[W, H, D]` interi. Minimo `[32, 32, 32]`. Scegli la griglia in base al SOGGETTO, non per abitudine:
+   - oggetto singolo piccolo (tazza, arma, attrezzo): 32-64
+   - oggetto complesso (veicolo, mobile, personaggio): 64-128
+   - **struttura grande (casa, edificio, negozio, torre, scena): 192-384**
+   - **scena o complesso architettonico molto grande: fino a 512**
+   ATTENZIONE: il limite tecnico di visualizzazione e' di circa 8 milioni di voxel
+   effettivi. Una griglia grande NON significa riempirla tutta: le strutture sono
+   in gran parte vuote (stanze, cortili, aria). Y e' l'altezza (verso l'alto).
 
 3. Ogni comando è un ARRAY. Le coordinate sono SEMPRE interi entro i limiti della griglia (0..W-1, 0..H-1, 0..D-1).
 
@@ -82,4 +89,8 @@ Gli `ops` vengono applicati in ORDINE: quelli successivi sovrascrivono i precede
 ### REGOLA FONDAMENTALE
 DEVI generare un array `ops` PIENO DI COMANDI per creare il modello richiesto. NON GENERARE MAI un array vuoto `[]`. Se non generi i comandi, il modello non esisterà.
 
-Ora genera il modello voxel 3D ad alto dettaglio in formato COMPATTO (griglia MINIMA 32x32x32 se non richiesto diversamente, ma per oggetti complessi puoi arrivare anche a 1000x1000x1000, sopratutto se ti chiedo qualcosa di dettagliato). Genera SOLO il JSON. Il soggetto richiesto: [INSERISCI QUI IL MODELLO DESIDERATO]
+Ora genera il modello voxel 3D ad alto dettaglio in formato COMPATTO. Scegli la
+griglia in base al soggetto secondo la regola 2 (minimo 32x32x32; per case,
+edifici e scene usa 192-384, fino a 512 per complessi molto grandi), e riempi la
+griglia scelta in modo proporzionato al soggetto. Genera SOLO il JSON.
+Il soggetto richiesto: [INSERISCI QUI IL MODELLO DESIDERATO]

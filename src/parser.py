@@ -57,6 +57,44 @@ def compute_visibility(voxels):
             visible_voxels.append(v)
     return visible_voxels
 
+# Tetto massimo di celle espandibili da un singolo modello. Deve restare
+# ALLINEATO ai valori in ui/src/utils/expand-ops.js (parita' Python <-> JS).
+#
+# Il tetto e' ADATTIVO: con le griglie grandi (192/256/384/512, usate per case ed
+# edifici) un limite fisso a 4M troncava modelli legittimi. Ora la soglia segue la
+# griglia dichiarata nel metadata, con un massimo assoluto che protegge comunque
+# da un op malformato (`fill 0 0 0 999 999 999` = un miliardo di celle).
+#
+# Nota: una griglia piena e' un caso teorico. Un edificio 256^3 realistico sta
+# ampiamente sotto il milione di voxel, perche' e' quasi tutto vuoto.
+# Il tetto assoluto e' dettato dal BROWSER, non da Python. Misurato: una cella
+# nella Map JS (chiave stringa "x,y,z" + valore colore) costa ~98 byte, quindi
+# 24M celle = ~2,2 GB -> heap esaurito e tab morto (verificato: Node va in
+# "heap out of memory"). 8M celle = ~0,8 GB, che sta comodamente dentro il
+# budget di una webview. Meglio un modello troncato che un'app che muore.
+MAX_VOXELS = 4_000_000          # default quando la griglia non e' dichiarata
+MAX_VOXELS_ABSOLUTE = 8_000_000   # tetto invalicabile (~0,8 GB nel browser)
+
+
+def voxel_budget_for(grid_size):
+    """
+    Tetto di celle adatto alla griglia dichiarata.
+
+    Regola: meta' del volume della griglia (un modello piu' che pieno per meta'
+    non e' un modello, e' un errore), con minimo il default e massimo il tetto
+    assoluto. `grid_size` e' [W, H, D]; se manca o e' invalido si usa il default.
+    """
+    try:
+        if isinstance(grid_size, (list, tuple)) and len(grid_size) == 3:
+            w, h, d = (int(grid_size[0]), int(grid_size[1]), int(grid_size[2]))
+            if w > 0 and h > 0 and d > 0:
+                half = (w * h * d) // 2
+                return max(MAX_VOXELS, min(half, MAX_VOXELS_ABSOLUTE))
+    except (TypeError, ValueError):
+        pass
+    return MAX_VOXELS
+
+
 def expand_ops(data):
     """Expand the compact palette+ops format into a flat {'voxels': [...]} model.
 
@@ -87,16 +125,33 @@ def expand_ops(data):
     # Sparse dict keyed by (x,y,z) -> color. Later writes overwrite earlier ones.
     grid = {}
 
+    # Budget adattivo: una griglia 256^3 ha diritto a piu' celle di una 32^3.
+    meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    budget_limit = voxel_budget_for(meta.get("grid_size"))
+
     def rng(a, b):
         a, b = int(a), int(b)
         if a > b:
             a, b = b, a
         return range(a, b + 1)
 
+    def budget_ok(extra=1):
+        """
+        Tetto di sicurezza sul numero di celle. Un singolo op malformato prodotto
+        dall'AI (es. `fill 0 0 0 299 299 299`) generava 27 MILIONI di voci: il
+        processo restava bloccato per minuti o esauriva la memoria, senza alcun
+        messaggio. Superata la soglia si smette di aggiungere celle e il modello
+        viene troncato: meglio un modello parziale visibile che un'app congelata.
+        Il limite e' adattivo alla griglia: vedi voxel_budget_for().
+        """
+        return len(grid) + extra <= budget_limit
+
     def do_fill(x0, y0, z0, x1, y1, z1, color):
         for x in rng(x0, x1):
             for y in rng(y0, y1):
                 for z in rng(z0, z1):
+                    if not budget_ok():
+                        return
                     grid[(x, y, z)] = color
 
     def do_box(x0, y0, z0, x1, y1, z1, color):
@@ -110,6 +165,8 @@ def expand_ops(data):
             for y in ys:
                 for z in zs:
                     if (x in (xmin, xmax) or y in (ymin, ymax) or z in (zmin, zmax)):
+                        if not budget_ok():
+                            return
                         grid[(x, y, z)] = color
 
     def do_line(x0, y0, z0, x1, y1, z1, color):
@@ -125,6 +182,8 @@ def expand_ops(data):
             x = round(x0 + (x1 - x0) * t)
             y = round(y0 + (y1 - y0) * t)
             z = round(z0 + (z1 - z0) * t)
+            if not budget_ok():
+                return
             grid[(x, y, z)] = color
 
     def do_rect(axis, level, a0, b0, a1, b1, color):
@@ -132,6 +191,8 @@ def expand_ops(data):
         axis = str(axis).lower()
         for a in rng(a0, a1):
             for b in rng(b0, b1):
+                if not budget_ok():
+                    return
                 if axis == "y":
                     grid[(a, level, b)] = color   # a=x, b=z
                 elif axis == "x":
@@ -142,6 +203,8 @@ def expand_ops(data):
     def do_set(color, coords):
         for i in range(0, len(coords) - 2, 3):
             x, y, z = int(coords[i]), int(coords[i + 1]), int(coords[i + 2])
+            if not budget_ok():
+                return
             grid[(x, y, z)] = color
 
     def do_del(x0, y0, z0, x1, y1, z1):

@@ -1,0 +1,49 @@
+### MODALITÀ ASSET PACK
+
+Stai generando UN SINGOLO asset che fa parte di un PACK COERENTE di asset voxel
+destinati a un videogioco. Non stai generando un pezzo isolato: stai generando
+un pezzo di un set che verrà usato insieme, nella stessa scena, dallo stesso
+gioco.
+
+Questo cambia le priorità rispetto a una generazione singola:
+
+1. **La coerenza vince sull'originalità.** Un asset bellissimo ma con uno stile
+   diverso dagli altri ROVINA il pack e verrà scartato. Meglio un asset
+   leggermente più semplice ma perfettamente in stile.
+
+2. **Rispetta il contratto di stile alla lettera.** Il blocco
+   `[CONTRATTO DI STILE DEL PACK]` più sotto non è un suggerimento: palette,
+   griglia e livello di dettaglio sono VINCOLI. Se un colore che vorresti usare
+   non è nella palette, usa il più vicino fra quelli disponibili.
+
+3. **Scala relativa plausibile.** Gli asset del pack verranno messi nella stessa
+   scena. Un oggetto piccolo (un auricolare) deve occupare una frazione della
+   griglia; un oggetto grande (un armadio) deve occuparne molta. Non riempire
+   sempre tutta la griglia a prescindere dal soggetto: sarebbe come se ogni
+   oggetto del gioco avesse la stessa dimensione.
+
+4. **Ancoraggio geometrico uniforme.** Ogni asset: centrato sugli assi X e Z,
+   appoggiato al piano y=0 (nessun oggetto che fluttua o che parte da y=5),
+   orientamento frontale verso +Z. Questo permette di importare il pack in un
+   motore di gioco senza riposizionare a mano ogni pezzo.
+
+5. **Coerenza di linguaggio visivo.** Mantieni uniformi su tutto il pack:
+   - lo spessore dell'outline (se lo usi, usalo su tutti);
+   - il modo di rendere le ombre (stesso colore scuro della palette);
+   - il grado di arrotondamento degli spigoli;
+   - la densità del dettaglio superficiale.
+
+6. **Leggibilità alla dimensione reale.** Gli asset di gioco vengono visti
+   piccoli e da lontano. Preferisci forme leggibili e silhouette chiare a
+   micro-dettagli che diventeranno rumore. Se un dettaglio è più piccolo di 2
+   voxel, probabilmente è inutile.
+
+7. **Solidità.** L'asset deve essere un corpo unico e stampabile: nessun voxel
+   isolato staccato dal resto, nessuna parete di spessore 0. Le parti sottili
+   (manici, antenne, cavi) devono essere spesse almeno 1 voxel ma connesse.
+
+### NOME DEL MODELLO
+
+Imposta `metadata.name` esattamente al valore indicato come ETICHETTA ASSET.
+Non inventare un nome diverso: quel nome è la chiave con cui l'asset viene
+identificato nel pack ed è anche il nome del file all'esportazione.

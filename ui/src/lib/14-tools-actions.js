@@ -146,8 +146,13 @@
                         .filter(c => inBounds(c) && !voxelMap.has(`${c.x},${c.y},${c.z}`));
                     if (cells.length === 0) return false;
                     cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
-                    syncVoxelsFromMap();
-                    buildModel(false, true); // edit oggetto attivo: non ricostruire gli inattivi
+                    // Percorso rapido (28-incremental.js): aggiorna solo le celle toccate
+                    // e i mesh dei colori coinvolti. Se non e' disponibile si ricade sul
+                    // rebuild completo, che resta la strada sicura.
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                        syncVoxelsFromMap();
+                        buildModel(false, true);
+                    }
                     return true;
                 } else if (currentTool === 'remove') {
                     const base = { x: pick.voxel.x, y: pick.voxel.y, z: pick.voxel.z };
@@ -155,8 +160,10 @@
                         .filter(c => voxelMap.has(`${c.x},${c.y},${c.z}`));
                     if (cells.length === 0) return false;
                     cells.forEach(c => voxelMap.delete(`${c.x},${c.y},${c.z}`));
-                    syncVoxelsFromMap();
-                    buildModel(false, true); // edit oggetto attivo: non ricostruire gli inattivi
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, removed: true })))) {
+                        syncVoxelsFromMap();
+                        buildModel(false, true);
+                    }
                     return true;
                 } else if (currentTool === 'draw') {
                     const base = { x: pick.voxel.x, y: pick.voxel.y, z: pick.voxel.z };
@@ -168,8 +175,10 @@
                         });
                     if (cells.length === 0) return false;
                     cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
-                    syncVoxelsFromMap();
-                    buildModel(false, true); // edit oggetto attivo: non ricostruire gli inattivi
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                        syncVoxelsFromMap();
+                        buildModel(false, true);
+                    }
                     return true;
                 } else if (currentTool === 'pick') {
                     setActiveColor(pick.voxel.color);
