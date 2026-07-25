@@ -39,11 +39,16 @@ global.setActiveColor=()=>{};
 global.disposeMesh=(m)=>{ if(m&&m.geometry&&m.geometry.dispose)m.geometry.dispose();
   if(m&&m.material&&m.material.dispose)m.material.dispose(); };
 global.requestRender=()=>{};
+// buildModel fornisce la geometria CONDIVISA: lo stub la simula, altrimenti
+// l'incrementale ne creerebbe una nuova per colore.
+let _sg=null;
+global.getVoxelGeometry=(size)=>{ if(!_sg){ _sg=new THREE.BoxGeometry(size,size,size);
+  _sg.userData={shared:true}; } return _sg; };
 
 // carica il modulo incrementale reale
 const src=fs.readFileSync(path.join(REPO_ROOT,'ui/src/lib/28-incremental.js'),'latin1');
 const api=new Function(src+`
- ;return {primeIncrementalState,applyVoxelEdits,invalidateIncremental,isVisibleAt,
+ ;return {primeIncrementalState,applyVoxelEdits,invalidateIncremental,isVisibleAt,syncVisibleVoxels,
           getState:()=>({voxelIndex,visibleColorByKey,visibleByColor,meshByColor,incrementalReady})};`)();
 
 // --- riferimento: la logica COMPLETA (come computeVisibility + colorGroups) ---
@@ -138,9 +143,12 @@ sameState('dopo rimozione ultimo verde');
 ok(!api.getState().visibleByColor.has('#00FF00'),'il colore sparito non resta in visibleByColor');
 ok(!api.getState().meshByColor.has('#00FF00'),'il mesh del colore sparito e rimosso');
 
-console.log('=== 8. visibleVoxels aggiornato (serve all export GLB) ===');
+console.log('=== 8. visibleVoxels aggiornato in modo PIGRO (serve all export GLB) ===');
+// Ricostruirlo a ogni edit costava O(voxel visibili) PER PENNELLATA e faceva
+// bloccare l'editing: ora si marca sporco e si sincronizza solo alla lettura.
+api.syncVisibleVoxels();
 ok(visibleVoxels.length===fullRebuildState().visible,
-   `visibleVoxels allineato: ${visibleVoxels.length} = ${fullRebuildState().visible}`);
+   `visibleVoxels allineato dopo syncVisibleVoxels(): ${visibleVoxels.length} = ${fullRebuildState().visible}`);
 
 console.log('=== 9. sequenza lunga casuale (100 edit) vs rebuild completo ===');
 let seed=42; const rnd=()=>((seed=seed*1103515245+12345&0x7fffffff)/0x7fffffff);

@@ -3669,7 +3669,7 @@
 
                     const gap = parseFloat(voxelGap.value);
                     const boxSize = 1.0 - gap;
-                    const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                    const geometry = getVoxelGeometry(boxSize);
 
                     Object.keys(colorGroups).forEach(colorHex => {
                         const groupList = colorGroups[colorHex];
@@ -3738,6 +3738,13 @@
                     primeIncrementalState(voxels, visibleVoxels, builtMeshByColor);
                 }
 
+                // CRITICO col render on-demand: senza questa richiesta il frame non
+                // viene ridisegnato e la scena appare CONGELATA dopo ogni modifica
+                // (era la causa del blocco su piazza/rompi/colora). Sta qui, dentro
+                // buildModel, cosi' ogni chiamante e' coperto automaticamente: non
+                // serve ricordarsi di aggiungerla nei ~25 punti che la invocano.
+                if (typeof requestRender === 'function') requestRender();
+
                 if (typeof updateMirrorPlane === 'function') updateMirrorPlane();
 
                 // T-props: se c'è un'anteprima transform live in corso, riapplicala dopo il
@@ -3755,10 +3762,51 @@
             // il doppio dispose è innocuo, ma libera comunque ogni material distinto.
             function disposeMesh(m) {
                 if (!m) return;
-                if (m.geometry && typeof m.geometry.dispose === 'function') m.geometry.dispose();
+                // ATTENZIONE: la BoxGeometry dei voxel e' CONDIVISA fra tutti gli
+                // InstancedMesh (uno per colore). Distruggerla qui liberava sulla GPU
+                // una geometria ancora usata dagli altri colori: i mesh restanti
+                // diventavano invalidi e l'editing si bloccava. Le geometrie condivise
+                // sono marcate con userData.shared e vanno liberate SOLO da
+                // releaseSharedVoxelGeometry().
+                if (m.geometry && typeof m.geometry.dispose === 'function'
+                    && !(m.geometry.userData && m.geometry.userData.shared)) {
+                    m.geometry.dispose();
+                }
                 const mat = m.material;
                 if (Array.isArray(mat)) mat.forEach(x => x && x.dispose && x.dispose());
                 else if (mat && typeof mat.dispose === 'function') mat.dispose();
+            }
+
+            // ===== Geometria voxel condivisa =====
+            // Una sola BoxGeometry per un dato boxSize, riusata da tutti i colori e da
+            // entrambi i percorsi di rendering (completo e incrementale). Ricrearla per
+            // ogni colore a ogni pennellata era spreco puro; distruggerla per errore
+            // rompeva la scena. Cambia solo quando cambia il "gap" fra i voxel.
+            let _sharedVoxelGeometry = null;
+            let _sharedVoxelGeometrySize = null;
+
+            function getVoxelGeometry(boxSize) {
+                if (_sharedVoxelGeometry && _sharedVoxelGeometrySize === boxSize) {
+                    return _sharedVoxelGeometry;
+                }
+                releaseSharedVoxelGeometry();
+                const g = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                g.userData = g.userData || {};
+                g.userData.shared = true;   // protetta da disposeMesh()
+                _sharedVoxelGeometry = g;
+                _sharedVoxelGeometrySize = boxSize;
+                return g;
+            }
+
+            function releaseSharedVoxelGeometry() {
+                if (_sharedVoxelGeometry && typeof _sharedVoxelGeometry.dispose === 'function') {
+                    // Toglie il marchio prima di liberarla, altrimenti disposeMesh la
+                    // salterebbe anche qui.
+                    if (_sharedVoxelGeometry.userData) _sharedVoxelGeometry.userData.shared = false;
+                    _sharedVoxelGeometry.dispose();
+                }
+                _sharedVoxelGeometry = null;
+                _sharedVoxelGeometrySize = null;
             }
 
             // Export Functionality
@@ -6369,6 +6417,10 @@
                 allVoxels.forEach(vox => voxelSet.add(`${vox.x},${vox.y},${vox.z}`));
 
                 const byColor = {};
+                // Il renderer incrementale aggiorna visibleVoxels in modo pigro:
+                // sincronizziamo qui, prima di leggerlo, cosi' l'export non usa mai
+                // uno stato vecchio.
+                if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
                 visibleVoxels.forEach(v => {
                     if (!byColor[v.color]) byColor[v.color] = [];
                     byColor[v.color].push(v);
@@ -8935,6 +8987,18 @@
             let visibleByColor = null;     // "#RRGGBB" -> Map("x,y,z" -> voxel)
             let paletteSignature = '';     // per non riscrivere il DOM della palette invano
             let incrementalReady = false;  // false = usa sempre il percorso completo
+            let visibleVoxelsDirty = false; // visibleVoxels da ricostruire alla prossima lettura
+
+            // Riallinea `visibleVoxels` alle liste per colore, ma SOLO se qualcosa e'
+            // cambiato dall'ultima volta. Va chiamata da chi legge visibleVoxels (es.
+            // l'export GLB) invece di pagare la ricostruzione a ogni pennellata.
+            function syncVisibleVoxels() {
+                if (!visibleVoxelsDirty || !visibleByColor) return;
+                const fresh = [];
+                visibleByColor.forEach(m => m.forEach(v => fresh.push(v)));
+                visibleVoxels = fresh;
+                visibleVoxelsDirty = false;
+            }
 
             const NEIGHBOR_OFFSETS = [
                 [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
@@ -8974,6 +9038,8 @@
                     }
                     meshByColor = meshMap || new Map();
                     paletteSignature = computePaletteSignature();
+                    // buildModel ha appena ricalcolato visibleVoxels: non e' sporco.
+                    visibleVoxelsDirty = false;
                     incrementalReady = true;
                 } catch (e) {
                     incrementalReady = false;
@@ -9036,7 +9102,13 @@
                 // stessi voxel, nello stesso ordine degli indici delle istanze.
                 const gap = parseFloat(voxelGap.value);
                 const boxSize = 1.0 - gap;
-                const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                // Riusa la geometria CONDIVISA (vedi getVoxelGeometry in
+                // 05-build-model.js). Crearne una nuova per ogni colore a ogni
+                // pennellata sprecava memoria GPU, e la vecchia veniva liberata da
+                // disposeMesh rompendo gli altri mesh che la condividevano.
+                const geometry = (typeof getVoxelGeometry === 'function')
+                    ? getVoxelGeometry(boxSize)
+                    : new THREE.BoxGeometry(boxSize, boxSize, boxSize);
                 const material = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(colorHex),
                     roughness: 0.2,
@@ -9133,13 +9205,13 @@
                     // 4. Contatori e palette. La palette si riscrive solo se l'insieme dei
                     //    colori e' cambiato davvero: altrimenti le swatch lampeggiano a
                     //    ogni pennellata.
-                    // IMPORTANTE: `visibleVoxels` e' letto da 16-export-glb.js. Se
-                    // restasse fermo allo stato dell'ultimo rebuild completo, un export
-                    // GLB dopo qualche pennellata esporterebbe il modello VECCHIO. Va
-                    // quindi rigenerato dalle liste per colore, che sono aggiornate.
-                    const freshVisible = [];
-                    visibleByColor.forEach(m => m.forEach(v => freshVisible.push(v)));
-                    visibleVoxels = freshVisible;
+                    // `visibleVoxels` e' letto da 16-export-glb.js e deve restare
+                    // aggiornato. MA ricostruire l'intero array a ogni pennellata era
+                    // O(voxel visibili) PER TRATTO: su un modello grande annullava tutto
+                    // il guadagno dell'incrementale e l'editing tornava a bloccarsi.
+                    // Soluzione: marcarlo come "sporco" (costo zero) e ricostruirlo solo
+                    // quando qualcuno lo legge davvero -> syncVisibleVoxels().
+                    visibleVoxelsDirty = true;
 
                     voxelCountEl.textContent = currentModelData.voxels.length;
                     visibleCountEl.textContent = visibleColorByKey.size;
@@ -10039,8 +10111,15 @@
             // animazione del rig, damping di OrbitControls) tengono vivo il loop da
             // sole: la condizione `needsRender` sotto le riconosce, quindi la rotazione
             // resta fluida come prima.
-            let needsRender = true;
-            function requestRender() { needsRender = true; }
+            // `renderBudget` = quanti frame disegnare ancora. requestRender() lo
+            // ricarica. Non e' un semplice flag booleano di proposito: molte modifiche
+            // alla scena avvengono in piu' passaggi (anteprima -> commit -> rebuild) e
+            // un solo frame catturerebbe uno stato intermedio.
+            let renderBudget = 3;
+            function requestRender(frames) {
+                const n = frames || 3;
+                if (n > renderBudget) renderBudget = n;
+            }
 
             // OrbitControls emette 'change' a ogni movimento di camera (drag, zoom,
             // damping): e' il segnale piu' affidabile per sapere che va ridisegnato.
@@ -10048,7 +10127,29 @@
                 controls.addEventListener('change', requestRender);
             }
             // Un resize cambia la viewport: serve un frame nuovo.
-            window.addEventListener('resize', requestRender);
+            window.addEventListener('resize', () => requestRender(3));
+
+            // ===== RETE DI SICUREZZA CONTRO LO SCHERMO CONGELATO =====
+            // Decine di percorsi modificano la scena senza passare da buildModel():
+            // il ghost del pennello, il piano di simmetria, il gizmo del rig, le
+            // anteprime di estrusione, la visibilita' degli oggetti. Pretendere che
+            // ognuno ricordi di chiamare requestRender() e' fragile: UNO dimenticato
+            // significa interfaccia bloccata.
+            // Quindi: qualunque input dell'utente ricarica il budget per un po' di
+            // frame. Il risparmio resta dove serve davvero (scena ferma, nessun
+            // input), ma l'app non puo' piu' apparire congelata mentre ci si lavora.
+            const KEEP_ALIVE_FRAMES = 30;   // ~0,5 s a 60fps dopo l'ultimo input
+            ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'keyup',
+             'touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click'
+            ].forEach(evt => {
+                window.addEventListener(evt, () => requestRender(KEEP_ALIVE_FRAMES),
+                    { passive: true, capture: true });
+            });
+            // Cambi di stato dell'interfaccia (input, select, checkbox) idem.
+            ['change', 'input'].forEach(evt => {
+                window.addEventListener(evt, () => requestRender(KEEP_ALIVE_FRAMES),
+                    { passive: true, capture: true });
+            });
 
             function animate() {
                 requestAnimationFrame(animate);
@@ -10080,14 +10181,15 @@
 
                 controls.update();
 
-                // Disegna solo quando serve: qualcosa e' cambiato (needsRender), oppure
-                // c'e' un movimento in corso (rotazione, animazione rig, damping camera).
+                // Disegna se c'e' budget residuo o se qualcosa e' in movimento
+                // (rotazione automatica, clip del rig, damping della camera).
                 const animating = rotating
-                    || (mixer && rigPreviewActive)
-                    || (controls && controls.enableDamping && controls.autoRotate);
-                if (needsRender || animating) {
+                    || mixer
+                    || rigPreviewActive
+                    || (controls && controls.autoRotate);
+                if (renderBudget > 0 || animating) {
                     renderer.render(scene, camera);
-                    needsRender = false;
+                    if (renderBudget > 0) renderBudget--;
                 }
             }
 

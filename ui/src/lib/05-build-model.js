@@ -78,7 +78,7 @@
 
                     const gap = parseFloat(voxelGap.value);
                     const boxSize = 1.0 - gap;
-                    const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                    const geometry = getVoxelGeometry(boxSize);
 
                     Object.keys(colorGroups).forEach(colorHex => {
                         const groupList = colorGroups[colorHex];
@@ -147,6 +147,13 @@
                     primeIncrementalState(voxels, visibleVoxels, builtMeshByColor);
                 }
 
+                // CRITICO col render on-demand: senza questa richiesta il frame non
+                // viene ridisegnato e la scena appare CONGELATA dopo ogni modifica
+                // (era la causa del blocco su piazza/rompi/colora). Sta qui, dentro
+                // buildModel, cosi' ogni chiamante e' coperto automaticamente: non
+                // serve ricordarsi di aggiungerla nei ~25 punti che la invocano.
+                if (typeof requestRender === 'function') requestRender();
+
                 if (typeof updateMirrorPlane === 'function') updateMirrorPlane();
 
                 // T-props: se c'è un'anteprima transform live in corso, riapplicala dopo il
@@ -164,10 +171,51 @@
             // il doppio dispose è innocuo, ma libera comunque ogni material distinto.
             function disposeMesh(m) {
                 if (!m) return;
-                if (m.geometry && typeof m.geometry.dispose === 'function') m.geometry.dispose();
+                // ATTENZIONE: la BoxGeometry dei voxel e' CONDIVISA fra tutti gli
+                // InstancedMesh (uno per colore). Distruggerla qui liberava sulla GPU
+                // una geometria ancora usata dagli altri colori: i mesh restanti
+                // diventavano invalidi e l'editing si bloccava. Le geometrie condivise
+                // sono marcate con userData.shared e vanno liberate SOLO da
+                // releaseSharedVoxelGeometry().
+                if (m.geometry && typeof m.geometry.dispose === 'function'
+                    && !(m.geometry.userData && m.geometry.userData.shared)) {
+                    m.geometry.dispose();
+                }
                 const mat = m.material;
                 if (Array.isArray(mat)) mat.forEach(x => x && x.dispose && x.dispose());
                 else if (mat && typeof mat.dispose === 'function') mat.dispose();
+            }
+
+            // ===== Geometria voxel condivisa =====
+            // Una sola BoxGeometry per un dato boxSize, riusata da tutti i colori e da
+            // entrambi i percorsi di rendering (completo e incrementale). Ricrearla per
+            // ogni colore a ogni pennellata era spreco puro; distruggerla per errore
+            // rompeva la scena. Cambia solo quando cambia il "gap" fra i voxel.
+            let _sharedVoxelGeometry = null;
+            let _sharedVoxelGeometrySize = null;
+
+            function getVoxelGeometry(boxSize) {
+                if (_sharedVoxelGeometry && _sharedVoxelGeometrySize === boxSize) {
+                    return _sharedVoxelGeometry;
+                }
+                releaseSharedVoxelGeometry();
+                const g = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                g.userData = g.userData || {};
+                g.userData.shared = true;   // protetta da disposeMesh()
+                _sharedVoxelGeometry = g;
+                _sharedVoxelGeometrySize = boxSize;
+                return g;
+            }
+
+            function releaseSharedVoxelGeometry() {
+                if (_sharedVoxelGeometry && typeof _sharedVoxelGeometry.dispose === 'function') {
+                    // Toglie il marchio prima di liberarla, altrimenti disposeMesh la
+                    // salterebbe anche qui.
+                    if (_sharedVoxelGeometry.userData) _sharedVoxelGeometry.userData.shared = false;
+                    _sharedVoxelGeometry.dispose();
+                }
+                _sharedVoxelGeometry = null;
+                _sharedVoxelGeometrySize = null;
             }
 
             // Export Functionality

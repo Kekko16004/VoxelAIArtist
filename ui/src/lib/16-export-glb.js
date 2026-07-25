@@ -30,6 +30,10 @@
                 allVoxels.forEach(vox => voxelSet.add(`${vox.x},${vox.y},${vox.z}`));
 
                 const byColor = {};
+                // Il renderer incrementale aggiorna visibleVoxels in modo pigro:
+                // sincronizziamo qui, prima di leggerlo, cosi' l'export non usa mai
+                // uno stato vecchio.
+                if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
                 visibleVoxels.forEach(v => {
                     if (!byColor[v.color]) byColor[v.color] = [];
                     byColor[v.color].push(v);
