@@ -1,0 +1,7 @@
+# VoxelAIArtist — dipendenze di BUILD (solo per creare l'exe con PyInstaller).
+# Installazione: pip install -r requirements-build.txt
+# Richiede anche le dipendenze runtime: pip install -r requirements.txt
+#
+# Versione verificata 2026-07-19 su Python 3.10.11.
+
+pyinstaller==6.2.0

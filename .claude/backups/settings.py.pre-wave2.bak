@@ -1,0 +1,59 @@
+import os
+import json
+
+APP_NAME = "VoxelAIArtist"
+
+def get_appdata_dir():
+    appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+    path = os.path.join(appdata, APP_NAME)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def get_cookies_path():
+    return os.path.join(get_appdata_dir(), "cookies.json")
+
+def get_settings_path():
+    return os.path.join(get_appdata_dir(), "settings.json")
+
+def has_cookies():
+    p = get_cookies_path()
+    if not os.path.exists(p):
+        return False
+    try:
+        data = json.loads(open(p, "r", encoding="utf-8").read())
+        return bool(data)
+    except Exception:
+        return False
+
+def load_cookies():
+    p = get_cookies_path()
+    if not os.path.exists(p):
+        return {}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return {c["name"]: c["value"] for c in data if "name" in c and "value" in c}
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+def save_cookies(cookies_data):
+    with open(get_cookies_path(), "w", encoding="utf-8") as f:
+        json.dump(cookies_data, f, indent=2)
+
+def load_settings():
+    p = get_settings_path()
+    if not os.path.exists(p):
+        return {}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_settings(data):
+    with open(get_settings_path(), "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)

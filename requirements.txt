@@ -1,0 +1,30 @@
+# VoxelAIArtist — dipendenze RUNTIME (versioni pinnate, verificate 2026-07-19)
+# Target: Python 3.10.x (i .pyc del progetto sono cpython-310).
+# Installazione: pip install -r requirements.txt
+#
+# NOTA sui nomi pacchetto vs modulo importato:
+#   - il modulo `from gemini import Gemini` (main.py) e' fornito dal pacchetto PyPI
+#     `python-gemini-api` (NON da `gemini-api`, che installa un modulo diverso `gemini_api`).
+#   - il modulo `import perplexity` (src/parser.py, riga 3) e' fornito da `perplexity-api`.
+
+# --- GUI / WebView (cuore dell'app) ---
+PyQt6==6.11.0
+PyQt6-WebEngine==6.11.0
+
+# Sottopacchetti binari Qt trascinati come dipendenze da PyQt6/PyQt6-WebEngine.
+# Pinnati esplicitamente per una ricostruzione deterministica del venv.
+PyQt6-Qt6==6.11.1
+PyQt6-sip==13.10.0
+PyQt6-WebEngine-Qt6==6.11.1
+
+# --- Client AI (Gemini web, reverse-engineered) ---
+# Fornisce il modulo `gemini`.
+python-gemini-api==2.4.12
+
+# --- Legacy: client Perplexity (NON piu' dipendenza runtime) ---
+# RIMOSSO da runtime (2026-07-19). L'import di `perplexity` in src/parser.py e'
+# stato reso LAZY: e' presente solo dentro start_local_server() (server standalone
+# legacy, non usato dall'app). Il path live (main.py -> extract_and_parse_json)
+# non tocca mai Perplexity, quindi `perplexity-api` non serve piu' per eseguire
+# l'app. Se vuoi usare il server CLI legacy `python src/parser.py`, installa a mano:
+#   pip install perplexity-api==0.2.0

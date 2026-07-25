@@ -1,0 +1,43 @@
+- [x] write prompt.txt (100%)
+- [x] build index.html web view (100%)
+- [x] update parser.py serve & cull (100%)
+- [x] test run (100%)
+- [x] fix prompt make solid (100%)
+- [x] install perplexity-ai git (100%)
+- [x] build ui input thinking bar (100%)
+- [x] build backend generate api (100%)
+- [x] integrate session token auth (100%)
+- [x] pretty print response test_perplexity (100%)
+- [x] integrate claude50sonnet client models (100%)
+- [x] robust JSON parser parser.py (100%)
+- [x] add spinner/progress UI index.html (100%)
+- [x] improve prompt grid detail level (100%)
+- [x] add debug print parsing errors (100%)
+- [x] fix prompt placeholder bypass and thickness guidelines (100%)
+- [x] fix modelPivot (100%)
+- [x] rig character (100%)
+- [x] fix json parsing errors parser.py (100%)
+- [x] fix prompt ignoring bug parser.py (100%)
+
+- [x] ui layout metadata [100%]
+- [x] paste json feature [100%]
+- [x] new project from scratch [100%]
+- [x] resizable sidebar [100%]
+- [x] pyqt6 desktop migration [100%]
+- [x] gemini api integration [100%]
+- [x] voxel gap to 0 [100%]
+- [x] blender navigation & right click destroy [100%]
+- [x] square brush fix [100%]
+- [x] rename project & ctrl+a gizmo [100%]
+- [x] cookies.json auto-load [100%]
+- [x] unified undo/redo chronological stack [100%]
+- [x] import format auto-detect json/voxelai [100%]
+- [x] resize canvas fullscreen bug [100%]
+- [x] prompt-edit.txt & modify mode [100%]
+- [x] ctrl+a text input bypass [100%]
+- [x] photo reference input support [100%]
+- [x] clear all on Nuovo and Canc (Ctrl+A) [100%]
+- [x] scale glb export (100%)
+- [x] cull glb internal faces (100%)
+- [x] fix i18n url fetch (100%)
+- [x] fix resizeobserver loop error (100%)
