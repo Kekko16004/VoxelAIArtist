@@ -67,6 +67,15 @@ run "Pack: ancoraggio, report, persistenza" python3 tests/test_pack_extras.py
 # 4c. Renderer incrementale: deve produrre lo STESSO stato del rebuild completo.
 run "Rendering incrementale (Node)" node tests/test_incremental.mjs
 
+# 4c-bis. REGRESSIONE EDITING: la geometria condivisa non va distrutta, il frame
+#         va richiesto, e il costo per pennellata non deve dipendere dal modello.
+#         Questi tre difetti rendevano l'editing bloccante: test obbligatorio.
+run "Editing non si blocca (Node)" node tests/test_editing_freeze.mjs
+
+# 4c-ter. Loop di render: il budget deve ricaricarsi a ogni input, altrimenti
+#         un percorso che dimentica requestRender congela lo schermo.
+run "Loop di render (Node)" node tests/test_render_loop.mjs
+
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 
