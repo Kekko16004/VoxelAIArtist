@@ -39,6 +39,18 @@
             let visibleByColor = null;     // "#RRGGBB" -> Map("x,y,z" -> voxel)
             let paletteSignature = '';     // per non riscrivere il DOM della palette invano
             let incrementalReady = false;  // false = usa sempre il percorso completo
+            let visibleVoxelsDirty = false; // visibleVoxels da ricostruire alla prossima lettura
+
+            // Riallinea `visibleVoxels` alle liste per colore, ma SOLO se qualcosa e'
+            // cambiato dall'ultima volta. Va chiamata da chi legge visibleVoxels (es.
+            // l'export GLB) invece di pagare la ricostruzione a ogni pennellata.
+            function syncVisibleVoxels() {
+                if (!visibleVoxelsDirty || !visibleByColor) return;
+                const fresh = [];
+                visibleByColor.forEach(m => m.forEach(v => fresh.push(v)));
+                visibleVoxels = fresh;
+                visibleVoxelsDirty = false;
+            }
 
             const NEIGHBOR_OFFSETS = [
                 [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
@@ -78,6 +90,8 @@
                     }
                     meshByColor = meshMap || new Map();
                     paletteSignature = computePaletteSignature();
+                    // buildModel ha appena ricalcolato visibleVoxels: non e' sporco.
+                    visibleVoxelsDirty = false;
                     incrementalReady = true;
                 } catch (e) {
                     incrementalReady = false;
@@ -140,7 +154,13 @@
                 // stessi voxel, nello stesso ordine degli indici delle istanze.
                 const gap = parseFloat(voxelGap.value);
                 const boxSize = 1.0 - gap;
-                const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
+                // Riusa la geometria CONDIVISA (vedi getVoxelGeometry in
+                // 05-build-model.js). Crearne una nuova per ogni colore a ogni
+                // pennellata sprecava memoria GPU, e la vecchia veniva liberata da
+                // disposeMesh rompendo gli altri mesh che la condividevano.
+                const geometry = (typeof getVoxelGeometry === 'function')
+                    ? getVoxelGeometry(boxSize)
+                    : new THREE.BoxGeometry(boxSize, boxSize, boxSize);
                 const material = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(colorHex),
                     roughness: 0.2,
@@ -237,13 +257,13 @@
                     // 4. Contatori e palette. La palette si riscrive solo se l'insieme dei
                     //    colori e' cambiato davvero: altrimenti le swatch lampeggiano a
                     //    ogni pennellata.
-                    // IMPORTANTE: `visibleVoxels` e' letto da 16-export-glb.js. Se
-                    // restasse fermo allo stato dell'ultimo rebuild completo, un export
-                    // GLB dopo qualche pennellata esporterebbe il modello VECCHIO. Va
-                    // quindi rigenerato dalle liste per colore, che sono aggiornate.
-                    const freshVisible = [];
-                    visibleByColor.forEach(m => m.forEach(v => freshVisible.push(v)));
-                    visibleVoxels = freshVisible;
+                    // `visibleVoxels` e' letto da 16-export-glb.js e deve restare
+                    // aggiornato. MA ricostruire l'intero array a ogni pennellata era
+                    // O(voxel visibili) PER TRATTO: su un modello grande annullava tutto
+                    // il guadagno dell'incrementale e l'editing tornava a bloccarsi.
+                    // Soluzione: marcarlo come "sporco" (costo zero) e ricostruirlo solo
+                    // quando qualcuno lo legge davvero -> syncVisibleVoxels().
+                    visibleVoxelsDirty = true;
 
                     voxelCountEl.textContent = currentModelData.voxels.length;
                     visibleCountEl.textContent = visibleColorByKey.size;
