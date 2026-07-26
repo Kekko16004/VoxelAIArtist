@@ -303,5 +303,11 @@
   "pack.coherenceOutliers": "Certains assets sont hors échelle par rapport au reste du pack.",
   "pack.savedPacks": "Packs sauvegardés",
   "pack.savedPacksTitle": "Rouvrir un pack généré précédemment",
-  "pack.noSavedPacks": "Aucun pack sauvegardé."
+  "pack.noSavedPacks": "Aucun pack sauvegardé.",
+  "pack.modular": "Tuiles modulaires (snap)",
+  "pack.modularTitle": "Blocs remplissant toute la grille avec des faces planes : ils s'emboîtent seuls grâce au snap du level builder",
+  "pack.modularHint": "Chaque bloc remplira toute la grille avec des faces planes et des détails creusés vers l'intérieur, sans laisser d'espace entre eux. Le résultat est vérifié automatiquement.",
+  "pack.enforcePaletteHint": "À activer uniquement si les objets partagent le même matériau. Avec des matériaux différents, le métal risque de prendre les couleurs de la terre.",
+  "pack.modularOk": "Bloc modulaire conforme",
+  "pack.modularWarn": "Ce bloc ne s'emboîte pas correctement"
 }
