@@ -309,5 +309,11 @@
   "pack.modularHint": "Cada bloque llenará toda la cuadrícula con caras planas y detalles tallados hacia adentro, sin dejar huecos al colocarlos juntos. El resultado se verifica automáticamente.",
   "pack.enforcePaletteHint": "Actívalo solo si los objetos comparten el mismo material. Con materiales distintos, el metal puede tomar los colores de la tierra.",
   "pack.modularOk": "Bloque modular conforme",
-  "pack.modularWarn": "Este bloque no encaja correctamente"
+  "pack.modularWarn": "Este bloque no encaja correctamente",
+  "pack.exportFormat": "Formato 3D",
+  "pack.formatGlb": "GLB (Unity, Godot, Blender)",
+  "pack.formatObj": "OBJ + MTL (Blender, 3ds Max)",
+  "pack.formatBoth": "Ambos",
+  "pack.formatVox": "Incluir también .vox (MagicaVoxel)",
+  "pack.exportPartial": "Algunos formatos no se han generado: "
 }
