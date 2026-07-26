@@ -1068,6 +1068,13 @@
 
         /* Pannello risultati: vive NELLA VIEWPORT a lato della griglia (non nella
            sidebar), cosi' l'utente vede gli asset caricare mentre lavora. */
+        /* Il pannello dei risultati sta SOPRA il canvas 3D, quindi segue la regola
+           di .canvas-hud: fondo OPACO, NIENTE backdrop-filter. Un blur sopra un
+           canvas WebGL che si ridisegna costringe Chromium/QtWebEngine a
+           ricampionare lo sfondo a ogni frame -> il pannello lampeggia (sparisce e
+           riappare). E' esattamente il difetto segnalato dall'utente.
+           `contain` e `will-change` isolano il layer e lo tengono composto sulla
+           GPU, evitando ridisegni della UI quando la scena 3D cambia. */
         #packResultsPanel {
             position: absolute;
             top: 12px;
@@ -1078,12 +1085,12 @@
             flex-direction: column;
             border-radius: var(--radius-md);
             border: 1px solid var(--glass-border);
-            background: var(--glass-bg);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            background: var(--hud-bg);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
             z-index: 60;
             overflow: hidden;
+            contain: layout paint;
+            will-change: transform;
         }
         #packResultsPanel.open { display: flex; }
         .pack-panel-head {
@@ -1149,6 +1156,9 @@
             background: var(--hover-bg);
         }
         .pack-item.is-error { color: var(--danger); cursor: pointer; }
+        /* Blocco generato ma NON conforme allo snap: si puo' aprire, ma va
+           rigenerato se serve davvero modulare. */
+        .pack-item.is-warn { border-color: var(--danger); }
         .pack-item-label {
             flex: 1;
             min-width: 0;
@@ -1424,6 +1434,7 @@
             }
         }
 
+        /* Anche il loader copre il canvas: niente blur (vedi #packResultsPanel). */
         .loader-overlay {
             position: absolute;
             top: 0;
@@ -1435,7 +1446,6 @@
             justify-content: center;
             z-index: 10;
             background: var(--overlay-scrim);
-            backdrop-filter: blur(12px);
             transition: all 0.3s ease;
         }
 
@@ -1922,13 +1932,32 @@
                             </select>
                         </div>
                         <div class="control-row">
-                            <label title="Rimappa i colori di ogni asset sulla palette condivisa del pack"
-                                data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
+                            <label title="Blocchi che riempiono tutta la griglia con facce piane: si incastrano da soli con lo snap del level builder"
+                                data-i18n-title="pack.modularTitle" data-i18n="pack.modular">Blocchi modulari (snap)</label>
                             <label class="switch">
-                                <input type="checkbox" id="packEnforcePalette" checked>
+                                <input type="checkbox" id="packModular">
                                 <span class="slider"></span>
                             </label>
                         </div>
+                        <p class="hint-text" id="packModularHint" style="margin: 0; display: none;"
+                            data-i18n="pack.modularHint">
+                            Ogni blocco riempir� tutta la griglia con facce piane e dettagli
+                            incisi verso l'interno, cos� affiancandoli non restano fessure.
+                            Il risultato viene verificato automaticamente.
+                        </p>
+                        <div class="control-row">
+                            <label title="Rimappa i colori di ogni asset sulla palette condivisa. Lascialo SPENTO se gli oggetti sono di materiali diversi (ferro, pietra, terra)."
+                                data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packEnforcePalette">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p class="hint-text" style="margin: 0;" data-i18n="pack.enforcePaletteHint">
+                            Attivala solo se gli oggetti condividono lo stesso materiale.
+                            Con materiali diversi il ferro rischia di prendere i colori
+                            della terra.
+                        </p>
 
                         <!-- Stima del lavoro: evita la sorpresa di 40 minuti di coda -->
                         <p class="hint-text" id="packEstimate" style="margin: 0;"></p>
