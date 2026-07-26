@@ -32,8 +32,8 @@
     <style>
         /*
          * ============================================================
-         *  TEMA — Design tokens (CSS custom properties)
-         *  Default = tema SCURO (glassmorphism). Il tema CHIARO è un
+         *  TEMA â Design tokens (CSS custom properties)
+         *  Default = tema SCURO (glassmorphism). Il tema CHIARO Ã¨ un
          *  override completo attivato da  <html data-theme="light">.
          *  Cambio tema: document.documentElement.setAttribute('data-theme','light'|'dark')
          *  (vedi applyTheme() / KEYMAP nel <script> in fondo al file).
@@ -68,7 +68,7 @@
             --text-secondary: #9ca3af;
             --text-muted: #9ca3af;
             --text-on-accent: #ffffff;
-            /* Accenti — grafite neutro (look professionale, monocromo) */
+            /* Accenti â grafite neutro (look professionale, monocromo) */
             --accent-primary: #475569;
             --accent-secondary: #64748b;
             --accent-deep: #334155;
@@ -79,7 +79,7 @@
             /* Ombre */
             --shadow-panel: 10px 0 30px rgba(0, 0, 0, 0.5);
             --shadow-soft: 0 4px 10px rgba(0, 0, 0, 0.3);
-            /* Raggi — estetica "voxel": spigoli netti, quasi squadrati */
+            /* Raggi â estetica "voxel": spigoli netti, quasi squadrati */
             --radius-sm: 0px;
             --radius-md: 2px;
             --radius-lg: 3px;
@@ -267,7 +267,7 @@
         }
         .menu-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; color: var(--text-secondary); }
 
-        /* ===== Pannello destro (Outliner / Proprietà / Palette / Vista) ===== */
+        /* ===== Pannello destro (Outliner / ProprietÃ  / Palette / Vista) ===== */
         .rightpanel {
             width: var(--rightpanel-width);
             flex-shrink: 0;
@@ -335,7 +335,7 @@
             border-radius: var(--radius-lg);
         }
 
-        /* HUD sopra il canvas 3D — NIENTE backdrop-filter.
+        /* HUD sopra il canvas 3D â NIENTE backdrop-filter.
          * Il blur ricampiona cio' che sta dietro a OGNI frame; sopra un canvas
          * WebGL che si ridisegna (rotazione/disegno) Chromium/QtWebEngine lo
          * ricalcola di continuo -> flicker. Questi overlay stanno SEMPRE sopra il
@@ -446,7 +446,7 @@
             }
         }
 
-        /* Pinned footer (export/save) — always visible under the tabs */
+        /* Pinned footer (export/save) â always visible under the tabs */
         .sidebar-footer {
             display: flex;
             flex-direction: column;
@@ -565,7 +565,7 @@
             -webkit-text-fill-color: transparent;
         }
 
-        /* Titoli di sezione: taglio "tech/voxel" — monospace, maiuscolo, spaziato */
+        /* Titoli di sezione: taglio "tech/voxel" â monospace, maiuscolo, spaziato */
         .section-title {
             font-family: 'Plus Jakarta Sans', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
             font-size: 11px;
@@ -1468,9 +1468,9 @@
             color: rgba(255, 255, 255, 0.5);
         }
 
-        /* --- Adattività finestra (T4) ---------------------------------------
+        /* --- AdattivitÃ  finestra (T4) ---------------------------------------
          * La sidebar ha larghezza fissa (--sidebar-width). Su finestre strette
-         * si restringe progressivamente così il canvas resta usabile; sotto una
+         * si restringe progressivamente cosÃ¬ il canvas resta usabile; sotto una
          * certa soglia la UI si compatta per non rompere il layout. */
         @media (max-width: 1100px) {
             :root { --sidebar-width: 320px; }
@@ -1568,15 +1568,15 @@
         <div class="menu" id="menuFile">
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.file">File</button>
             <div class="menu-dropdown" id="menuFileDropdown">
-                <button class="menu-item" id="saveProjectBtn" title="Salva il progetto nativo (.voxai) — intera scena">
-                    <span class="mi-icon">💾</span><span data-i18n="file.saveProject">Salva progetto (.voxai)</span></button>
+                <button class="menu-item" id="saveProjectBtn" title="Salva il progetto nativo (.voxai) â intera scena">
+                    <span class="mi-icon">ð¾</span><span data-i18n="file.saveProject">Salva progetto (.voxai)</span></button>
                 <button class="menu-item" id="saveProjectAsBtn" title="Salva il progetto con un nuovo nome (.voxai)">
-                    <span class="mi-icon"></span><span data-i18n="file.saveProjectAs">Salva con nome…</span></button>
+                    <span class="mi-icon"></span><span data-i18n="file.saveProjectAs">Salva con nomeâ¦</span></button>
                 <button class="menu-item" id="openProjectBtn" title="Apri un progetto (.voxai / .json / .vox / .schem)">
-                    <span class="mi-icon">📂</span><span data-i18n="file.openProject">Apri progetto…</span></button>
+                    <span class="mi-icon">ð</span><span data-i18n="file.openProject">Apri progettoâ¦</span></button>
                 <div class="menu-sep"></div>
                 <button class="menu-item" id="autosaveHistoryBtn" title="Mostra la cronologia dei salvataggi automatici">
-                    <span class="mi-icon">🕒</span><span data-i18n="file.autosaveHistory">Cronologia salvataggi</span></button>
+                    <span class="mi-icon">ð</span><span data-i18n="file.autosaveHistory">Cronologia salvataggi</span></button>
                 <div id="autosaveStatus" class="menu-row" style="min-height:12px; opacity:0.7;"></div>
             </div>
         </div>
@@ -1587,10 +1587,10 @@
             <div class="menu-dropdown" id="menuImportDropdown">
                 <div class="menu-label" data-i18n="import.label">Importa file</div>
                 <button class="menu-item" id="importFileBtn" title="Importa .voxai / .json / .vox / .schem">
-                    <span class="mi-icon">📥</span><span data-i18n="import.file">Da file…</span>
+                    <span class="mi-icon">ð¥</span><span data-i18n="import.file">Da fileâ¦</span>
                     <span class="mi-hint">.vox .schem .voxai .json</span></button>
                 <button class="menu-item" id="importPasteBtn" title="Incolla un modello JSON">
-                    <span class="mi-icon">📋</span><span data-i18n="import.paste">Incolla JSON…</span></button>
+                    <span class="mi-icon">ð</span><span data-i18n="import.paste">Incolla JSONâ¦</span></button>
             </div>
         </div>
 
@@ -1599,25 +1599,25 @@
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.export">Esporta</button>
             <div class="menu-dropdown" id="menuExportDropdown">
                 <div class="menu-label" data-i18n="export.label3d">Modello 3D</div>
-                <button class="menu-item" id="exportObjBtn"><span class="mi-icon">📦</span><span data-i18n="export.obj">Esporta OBJ</span></button>
+                <button class="menu-item" id="exportObjBtn"><span class="mi-icon">ð¦</span><span data-i18n="export.obj">Esporta OBJ</span></button>
                 <button class="menu-item" id="exportMtlBtn"><span class="mi-icon"></span><span data-i18n="export.mtl">Esporta MTL</span></button>
                 <button class="menu-item" id="exportGlbBtn" title="Esporta GLB con scheletro e pesi rigidi (per Blender/Unity/Godot)." data-i18n-title="export.glbTitle">
-                    <span class="mi-icon">🎞</span><span data-i18n="export.glb">Esporta GLB (riggato)</span></button>
+                    <span class="mi-icon">ð</span><span data-i18n="export.glb">Esporta GLB (riggato)</span></button>
                 <label class="menu-row" style="cursor:pointer;">
                     <input type="checkbox" id="glbScaleCheckbox" checked style="cursor:pointer; accent-color:var(--accent-primary);">
                     <span data-i18n="export.glbAutoscale">Autoscale GLB 1/100 (Unity/Blender)</span></label>
                 <div class="menu-sep"></div>
                 <div class="menu-label" data-i18n="export.labelVoxel">Voxel / Minecraft</div>
                 <button class="menu-item" id="exportVoxBtn" title="Esporta in formato MagicaVoxel (.vox)">
-                    <span class="mi-icon">🧊</span><span data-i18n="export.vox">Esporta .vox (MagicaVoxel)</span></button>
+                    <span class="mi-icon">ð§</span><span data-i18n="export.vox">Esporta .vox (MagicaVoxel)</span></button>
                 <button class="menu-item" id="exportSchemBtn" title="Esporta in formato Minecraft Sponge Schematic (.schem) per WorldEdit/Litematica">
-                    <span class="mi-icon">⛏</span><span data-i18n="export.schem">Esporta .schem (Minecraft)</span></button>
+                    <span class="mi-icon">â</span><span data-i18n="export.schem">Esporta .schem (Minecraft)</span></button>
                 <div class="menu-sep"></div>
                 <div class="menu-label" data-i18n="export.labelData">Dati</div>
                 <button class="menu-item" id="saveJsonBtn" title="Salva come file VoxelAI crittografato (.voxelai)" data-i18n-title="export.saveVoxelaiTitle">
-                    <span class="mi-icon">💾</span><span data-i18n="export.saveVoxelai">Salva VoxelAI</span></button>
+                    <span class="mi-icon">ð¾</span><span data-i18n="export.saveVoxelai">Salva VoxelAI</span></button>
                 <button class="menu-item" id="savePlainJsonBtn" title="Salva come file JSON in chiaro (.json)" data-i18n-title="export.saveJsonTitle">
-                    <span class="mi-icon">💾</span><span data-i18n="export.saveJson">Salva JSON</span></button>
+                    <span class="mi-icon">ð¾</span><span data-i18n="export.saveJson">Salva JSON</span></button>
             </div>
         </div>
 
@@ -1625,7 +1625,7 @@
 
         <!-- Impostazioni (apre la modale) -->
         <div class="menu">
-            <button class="menu-trigger" type="button" id="openSettingsBtn" title="Impostazioni" data-i18n-title="topbar.settingsTitle" data-i18n="topbar.settings">⚙ Impostazioni</button>
+            <button class="menu-trigger" type="button" id="openSettingsBtn" title="Impostazioni" data-i18n-title="topbar.settingsTitle" data-i18n="topbar.settings">â Impostazioni</button>
         </div>
     </div>
 
@@ -1689,13 +1689,13 @@
                         <div style="display: none; align-items: center; gap: 8px;">
                             <!-- Pulsante immagine temporaneamente disabilitato -->
                             <button class="btn btn-secondary" id="uploadImageBtn" style="padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;" title="Aggiungi un'immagine di riferimento" data-i18n-title="generate.uploadImage">
-                                📷 Riferimento Foto
+                                ð· Riferimento Foto
                             </button>
                             <input type="file" id="imageInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
                             <div id="imagePreviewContainer" style="display: none; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--hover-bg); border: 1px solid var(--glass-border); overflow: hidden; flex-grow: 1;">
                                 <img id="imagePreview" style="width: 24px; height: 24px; object-fit: cover; border-radius: 4px;" src="">
                                 <span id="imageName" style="font-size: 11px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px;"></span>
-                                <button id="removeImageBtn" style="background: transparent; border: none; color: var(--danger); font-size: 14px; cursor: pointer; padding: 0 4px;" title="Rimuovi immagine" data-i18n-title="generate.removeImage">×</button>
+                                <button id="removeImageBtn" style="background: transparent; border: none; color: var(--danger); font-size: 14px; cursor: pointer; padding: 0 4px;" title="Rimuovi immagine" data-i18n-title="generate.removeImage">Ã</button>
                             </div>
                         </div>
                         <div class="control-row" style="display: none;">
@@ -1706,7 +1706,7 @@
                             </label>
                         </div>
                         <div class="control-row">
-                            <label data-i18n="generate.mode">Modalità</label>
+                            <label data-i18n="generate.mode">ModalitÃ </label>
                             <select id="modeSelect" class="field-strong"
                                 style="padding: 6px; font-size: 12px; width: 160px;">
                                 <option value="generate" selected data-i18n="generate.modeGenerate">Genera da zero</option>
@@ -1750,8 +1750,8 @@
                         </div>
                         <p class="hint-text" id="bigStructureHint" style="margin: 0; display: none;"
                             data-i18n="generate.bigStructureHint">
-                            L'IA userà tutta la griglia con interni ed elementi architettonici.
-                            La generazione è più lenta e il modello più pesante da visualizzare.
+                            L'IA userÃ  tutta la griglia con interni ed elementi architettonici.
+                            La generazione Ã¨ piÃ¹ lenta e il modello piÃ¹ pesante da visualizzare.
                         </p>
 
                         <div class="control-row">
@@ -1765,7 +1765,7 @@
                         </div>
                         <p class="hint-text" id="modularHint" style="margin: 0; display: none;"
                             data-i18n="generate.modularHint">
-                            L'IA allineerà i bordi alla griglia in modo che il modello sia componibile e affiancabile.
+                            L'IA allineerÃ  i bordi alla griglia in modo che il modello sia componibile e affiancabile.
                         </p>
 
                         <button class="btn btn-primary" id="generateBtn"
@@ -1784,6 +1784,50 @@
                     <p data-i18n="dropzone.hint">Trascina il JSON/GLB o clicca qui</p>
                     <input type="file" id="fileInput" accept=".json,.voxelai,.vox,.schem,.schematic,.glb,.gltf" style="display: none;">
                 </div>
+
+                <!-- ===== OPZIONI DI VOXELIZZAZIONE GLB/GLTF =====
+                     Valgono quando si importa un modello poligonale: la
+                     risoluzione decide quanti voxel per lato, il riempimento
+                     produce un solido invece di un guscio cavo, e il numero di
+                     colori riduce la palette (una mesh con texture ne produce
+                     centinaia, inutilizzabili come palette voxel). -->
+                <details class="glass" style="padding:10px 12px; margin-top:8px;">
+                    <summary style="cursor:pointer; font-size:11px; text-transform:uppercase;
+                        letter-spacing:0.5px; color:var(--text-secondary);"
+                        data-i18n="glb.options">Opzioni importazione GLB</summary>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+                        <div class="control-row">
+                            <label data-i18n="glb.resolution">Risoluzione</label>
+                            <select id="glbGridSize" class="field-strong"
+                                style="padding:5px; font-size:11px; width:130px;">
+                                <option value="32">32 (veloce)</option>
+                                <option value="64" selected>64 (consigliata)</option>
+                                <option value="96">96 (dettagliata)</option>
+                                <option value="128">128 (lenta)</option>
+                            </select>
+                        </div>
+                        <div class="control-row">
+                            <label title="Riempie l'interno invece di lasciare un guscio cavo"
+                                data-i18n-title="glb.fillTitle" data-i18n="glb.fill">Modello pieno</label>
+                            <label class="switch">
+                                <input type="checkbox" id="glbFillInterior" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="control-row">
+                            <label title="Una mesh con texture produce centinaia di colori quasi identici"
+                                data-i18n-title="glb.colorsTitle" data-i18n="glb.colors">Colori palette</label>
+                            <select id="glbMaxColors" class="field-strong"
+                                style="padding:5px; font-size:11px; width:130px;">
+                                <option value="16">16</option>
+                                <option value="32">32</option>
+                                <option value="64" selected>64</option>
+                                <option value="128">128</option>
+                                <option value="256">256</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
 
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; margin-bottom: 8px;">
                     <div style="display: flex; gap: 8px;">
@@ -1858,7 +1902,7 @@
                         style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
 
                         <p class="hint-text" style="margin: 0;" data-i18n="pack.intro">
-                            Genera più oggetti in una sola volta, tutti con lo stesso stile e la stessa
+                            Genera piÃ¹ oggetti in una sola volta, tutti con lo stesso stile e la stessa
                             palette. Ideale per creare set di asset pronti per un gioco.
                         </p>
 
@@ -1881,7 +1925,7 @@
                             <input type="file" id="packRefInput" accept=".json,.voxelai" multiple style="display: none;">
                             <div class="pack-ref-list" id="packRefList"></div>
                             <p class="hint-text" id="packRefHint" style="margin: 0;" data-i18n="pack.refsHint">
-                                Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.
+                                Nessun riferimento: lo stile del primo asset generato guiderÃ  tutti gli altri.
                             </p>
                         </div>
 
@@ -1897,7 +1941,7 @@
                             </button>
                             <p class="hint-text" style="margin: 0;" data-i18n="pack.sizeHintLabel">
                                 Suggerimento: aggiungi :piccolo, :medio, :grande, :enorme o :modulare dopo il nome
-                                per definire la scala o la modularità
+                                per definire la scala o la modularitÃ 
                             </p>
                         </div>
 
@@ -2090,18 +2134,18 @@
                                 <button class="seg-btn active" data-axis="auto" title="Auto: basato sulla faccia cliccata" data-i18n-title="dragPlane.autoTitle" data-i18n="dragPlane.auto">Auto</button>
                                 <button class="seg-btn" data-axis="x" title="Piano YZ (Larghezza X fissa)" data-i18n-title="dragPlane.xTitle">X</button>
                                 <button class="seg-btn" data-axis="y" title="Piano XZ (Altezza Y fissa)" data-i18n-title="dragPlane.yTitle">Y</button>
-                                <button class="seg-btn" data-axis="z" title="Piano XY (Profondità Z fissa)" data-i18n-title="dragPlane.zTitle">Z</button>
+                                <button class="seg-btn" data-axis="z" title="Piano XY (ProfonditÃ  Z fissa)" data-i18n-title="dragPlane.zTitle">Z</button>
                             </div>
                         </div>
                         <p id="editHint"
                             style="font-size:11px; color:var(--text-secondary); line-height:1.5; margin-top:2px;">
-                            Modalità Vista: trascina per orbitare. Scegli uno strumento per modificare il modello.
+                            ModalitÃ  Vista: trascina per orbitare. Scegli uno strumento per modificare il modello.
                         </p>
                         <div class="btn-group" style="margin-top:4px; grid-template-columns:1fr 1fr;">
                             <button class="btn btn-secondary" id="undoBtn" disabled
-                                style="padding:8px; font-size:12px;">↶ Annulla</button>
+                                style="padding:8px; font-size:12px;">â¶ Annulla</button>
                             <button class="btn btn-secondary" id="redoBtn" disabled
-                                style="padding:8px; font-size:12px;">↷ Ripeti</button>
+                                style="padding:8px; font-size:12px;">â· Ripeti</button>
                         </div>
                     </div>
                 </div>
@@ -2123,9 +2167,9 @@
                             placeholder="// function transform(voxels, api) { ... return voxels; }"></textarea>
                         <div style="display:flex; gap:6px;">
                             <button class="btn btn-primary" id="pluginRunBtn" style="flex:2; font-size:12px; padding:8px 6px;"
-                                data-i18n="plugins.run" title="Esegui lo script nella sandbox" data-i18n-title="plugins.runTitle">▶ Esegui</button>
+                                data-i18n="plugins.run" title="Esegui lo script nella sandbox" data-i18n-title="plugins.runTitle">â¶ Esegui</button>
                             <button class="btn btn-secondary" id="pluginResetBtn" style="flex:1; font-size:12px; padding:8px 6px;"
-                                data-i18n="plugins.reset" title="Ripristina il codice del plugin selezionato" data-i18n-title="plugins.resetTitle">↺</button>
+                                data-i18n="plugins.reset" title="Ripristina il codice del plugin selezionato" data-i18n-title="plugins.resetTitle">âº</button>
                         </div>
                         <div id="pluginStatus" style="display:none; font-size:11px; line-height:1.4; padding:6px 8px; border-radius:6px;"></div>
                     </div>
@@ -2148,7 +2192,7 @@
                         </div>
                         <button class="btn btn-primary" id="autoRigBtn"
                             style="width:100%; font-size:12px; padding:10px; margin-top:4px;" data-i18n="rig.autoRig">
-                            🦴 Auto-Rig
+                            ð¦´ Auto-Rig
                         </button>
                         <div class="control-row">
                             <label title="Mostra le ossa sovrapposte al modello" data-i18n-title="rig.showSkeletonTitle" data-i18n="rig.showSkeleton">Mostra scheletro</label>
@@ -2167,7 +2211,7 @@
                         </div>
                         <p id="rigHint" class="hint-text" style="margin-top:2px;">
                             Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un
-                            solo osso, così i cubi non si deformano).
+                            solo osso, cosÃ¬ i cubi non si deformano).
                         </p>
                     </div>
                 </div>
@@ -2182,15 +2226,15 @@
                     <div class="section-title" style="margin-top:16px;" data-i18n="rig.selectedPose">Posa osso selezionato</div>
                     <div class="controls-group glass" style="padding:16px;">
                         <div id="poseControls">
-                            <div class="pose-axis"><label>Rot X <span id="rotXVal">0°</span></label><input type="range"
+                            <div class="pose-axis"><label>Rot X <span id="rotXVal">0Â°</span></label><input type="range"
                                     id="poseRotX" min="-180" max="180" step="1" value="0"></div>
-                            <div class="pose-axis"><label>Rot Y <span id="rotYVal">0°</span></label><input type="range"
+                            <div class="pose-axis"><label>Rot Y <span id="rotYVal">0Â°</span></label><input type="range"
                                     id="poseRotY" min="-180" max="180" step="1" value="0"></div>
-                            <div class="pose-axis"><label>Rot Z <span id="rotZVal">0°</span></label><input type="range"
+                            <div class="pose-axis"><label>Rot Z <span id="rotZVal">0Â°</span></label><input type="range"
                                     id="poseRotZ" min="-180" max="180" step="1" value="0"></div>
                         </div>
                         <button class="btn btn-secondary" id="resetPoseBtn"
-                            style="width:100%; padding:8px; font-size:12px; margin-top:8px;">↺ Riporta a T-pose</button>
+                            style="width:100%; padding:8px; font-size:12px; margin-top:8px;">âº Riporta a T-pose</button>
                     </div>
 
                     <div class="section-title" style="margin-top:16px;" data-i18n="rig.animations">Animazioni</div>
@@ -2234,7 +2278,7 @@
                     <div class="pack-progress"><div class="pack-progress-bar" id="packProgressBar"></div></div>
                 </div>
                 <button id="packPanelClose" class="pack-row-btn" title="Chiudi pannello"
-                    data-i18n-title="pack.closePanel" style="width:22px;height:22px;font-size:14px;">×</button>
+                    data-i18n-title="pack.closePanel" style="width:22px;height:22px;font-size:14px;">Ã</button>
             </div>
             <div class="pack-panel-body" id="packResultsList"></div>
             <div style="padding:8px; border-top:1px solid var(--glass-border); display:flex; flex-direction:column; gap:6px;">
@@ -2253,8 +2297,8 @@
         <!-- Gizmo mode switch: only shown while a rig is active on the rig tab. -->
         <div id="gizmoBar" class="canvas-hud"
             style="position:absolute; top:14px; left:14px; z-index:20; gap:6px; padding:6px;">
-            <button id="gizmoRotateBtn" class="gizmo-btn active" title="Ruota osso — posa (R)" data-i18n-title="gizmo.rotateTitle" data-i18n="gizmo.rotate">⟳ Ruota</button>
-            <button id="gizmoTranslateBtn" class="gizmo-btn" title="Sposta giunto — modifica scheletro (G)" data-i18n-title="gizmo.translateTitle">✥
+            <button id="gizmoRotateBtn" class="gizmo-btn active" title="Ruota osso â posa (R)" data-i18n-title="gizmo.rotateTitle" data-i18n="gizmo.rotate">â³ Ruota</button>
+            <button id="gizmoTranslateBtn" class="gizmo-btn" title="Sposta giunto â modifica scheletro (G)" data-i18n-title="gizmo.translateTitle">â¥
                 Sposta</button>
         </div>
         <div id="loaderOverlay" class="loader-overlay glass" style="display: none;">
@@ -2265,12 +2309,12 @@
             </div>
         </div>
         <!-- <div class="tooltip glass" id="viewTooltip">
-            Vista: Sinistro Ruota · Destro Pan · Rotella Zoom &nbsp;|&nbsp; Modifica: Sinistro Agisce · Destro Ruota
+            Vista: Sinistro Ruota Â· Destro Pan Â· Rotella Zoom &nbsp;|&nbsp; Modifica: Sinistro Agisce Â· Destro Ruota
         </div> -->
-        <!-- T1 Fase B: indicatore modalità Oggetto/Modifica -->
+        <!-- T1 Fase B: indicatore modalitÃ  Oggetto/Modifica -->
         <div id="editorModeBadge" class="canvas-hud"
              style="position:absolute; top:14px; right:14px; z-index:20; padding:8px 14px; font-size:12px; font-weight:600; color:var(--text-primary, #e5e7eb); letter-spacing:0.03em; pointer-events:none;" data-i18n="mode.edit">
-            Modalità Modifica
+            ModalitÃ  Modifica
         </div>
         <!-- HUD display for box-drag axis constraint -->
         <div id="dragConstraintHUD" class="canvas-hud"
@@ -2290,14 +2334,14 @@
                 </div>
                 <div id="autosaveList" style="overflow-y:auto; flex:1; margin-bottom:12px;"></div>
                 <button class="btn btn-secondary" id="autosaveOpenFolderBtn" style="width:100%; font-size:12px; padding:8px;"
-                    title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>
+                    title="Apri la cartella dei salvataggi automatici">ð Apri cartella autosave</button>
             </div>
         </div>
     </div>
 
     <div id="rightResizer"></div>
 
-    <!-- ===== Pannello destro: Outliner / Proprietà / Palette / Vista ===== -->
+    <!-- ===== Pannello destro: Outliner / ProprietÃ  / Palette / Vista ===== -->
     <aside class="rightpanel" id="rightPanel">
 
         <!-- Outliner oggetti -->
@@ -2305,24 +2349,24 @@
             <summary data-i18n="objects.sectionTitle">Oggetti della Scena</summary>
             <div class="rp-body" id="objectsPanel">
                 <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;">
-                    Premi <b>Tab</b> per passare da Modifica a Oggetto. In Modalità Oggetto clicca un oggetto per selezionarlo.
+                    Premi <b>Tab</b> per passare da Modifica a Oggetto. In ModalitÃ  Oggetto clicca un oggetto per selezionarlo.
                 </div>
                 <div id="objectsList" style="display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto;">
                     <!-- Righe oggetto iniettate qui -->
                 </div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                    <button class="btn btn-secondary" id="objNewBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Aggiungi un nuovo oggetto vuoto" data-i18n-title="objects.newTitle" data-i18n="objects.new">＋ Nuovo</button>
-                    <button class="btn btn-secondary" id="objDuplicateBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Duplica l'oggetto attivo" data-i18n-title="objects.duplicateTitle" data-i18n="objects.duplicate">⧉ Duplica</button>
-                    <button class="btn btn-secondary" id="objRenameBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Rinomina l'oggetto attivo" data-i18n-title="objects.renameTitle" data-i18n="objects.rename">✎ Rinomina</button>
-                    <button class="btn btn-secondary" id="objMergeBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Unisce gli oggetti spuntati in uno solo" data-i18n-title="objects.mergeTitle" data-i18n="objects.merge">⛓ Unisci</button>
-                    <button class="btn btn-secondary" id="objDeleteBtn" style="flex:1 1 100%; font-size:11px; padding:8px 6px; color:var(--danger, #ef4444);" title="Elimina l'oggetto attivo" data-i18n-title="objects.deleteTitle" data-i18n="objects.delete">🗑 Elimina attivo</button>
+                    <button class="btn btn-secondary" id="objNewBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Aggiungi un nuovo oggetto vuoto" data-i18n-title="objects.newTitle" data-i18n="objects.new">ï¼ Nuovo</button>
+                    <button class="btn btn-secondary" id="objDuplicateBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Duplica l'oggetto attivo" data-i18n-title="objects.duplicateTitle" data-i18n="objects.duplicate">â§ Duplica</button>
+                    <button class="btn btn-secondary" id="objRenameBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Rinomina l'oggetto attivo" data-i18n-title="objects.renameTitle" data-i18n="objects.rename">â Rinomina</button>
+                    <button class="btn btn-secondary" id="objMergeBtn" style="flex:1 1 45%; font-size:11px; padding:8px 6px;" title="Unisce gli oggetti spuntati in uno solo" data-i18n-title="objects.mergeTitle" data-i18n="objects.merge">â Unisci</button>
+                    <button class="btn btn-secondary" id="objDeleteBtn" style="flex:1 1 100%; font-size:11px; padding:8px 6px; color:var(--danger, #ef4444);" title="Elimina l'oggetto attivo" data-i18n-title="objects.deleteTitle" data-i18n="objects.delete">ð Elimina attivo</button>
                 </div>
             </div>
         </details>
 
-        <!-- Proprietà oggetto attivo/selezionato -->
+        <!-- ProprietÃ  oggetto attivo/selezionato -->
         <details class="rp-section" id="rpProperties" open>
-            <summary data-i18n="properties.sectionTitle">Proprietà</summary>
+            <summary data-i18n="properties.sectionTitle">ProprietÃ </summary>
             <div class="rp-body" id="propertiesPanel">
                 <!-- Popolato da 25-properties.js -->
                 <div class="screens-section-note" id="propertiesEmpty" data-i18n="properties.empty">Nessun oggetto selezionato.</div>
@@ -2361,7 +2405,7 @@
                             title="La camera orbita fluidamente attorno all'oggetto (stile The Finals)" data-i18n-title="view.rotationCameraTitle" data-i18n="view.rotationCamera">Camera</button>
                     </div>
                     <input type="range" id="rotationSpeed" min="0.2" max="3" step="0.1" value="1"
-                        title="Velocità di rotazione" data-i18n-title="view.rotationSpeed" style="width:100%;">
+                        title="VelocitÃ  di rotazione" data-i18n-title="view.rotationSpeed" style="width:100%;">
                 </div>
                 <div class="control-row">
                     <label data-i18n="view.wireframe">Wireframe</label>
@@ -2462,7 +2506,7 @@
                         </div>
                         <div id="shortcutConflict" style="display:none; font-size:11px; color:var(--danger, #ef4444); line-height:1.4; padding:4px 0;"></div>
                         <div style="display:flex; gap:6px;">
-                            <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" title="Ripristina tutte le scorciatoie ai valori predefiniti">↺ Ripristina predefiniti</button>
+                            <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" title="Ripristina tutte le scorciatoie ai valori predefiniti">âº Ripristina predefiniti</button>
                         </div>
                     </div>
                 </div>
@@ -2859,8 +2903,28 @@
                         alert("Il modulo import-glb.js non è stato caricato.");
                         return;
                     }
-                    importGlbFormat(file).then(parsed => {
-                        if (!parsed || !Array.isArray(parsed.voxels)) return;
+                    // Opzioni lette dalla UI (con default sensati se i campi non
+                    // esistono ancora): risoluzione, riempimento e colori palette.
+                    const _gEl = document.getElementById('glbGridSize');
+                    const _fEl = document.getElementById('glbFillInterior');
+                    const _cEl = document.getElementById('glbMaxColors');
+                    importGlbFormat(file, {
+                        maxGridSize: _gEl ? parseInt(_gEl.value, 10) : 64,
+                        fillInterior: _fEl ? _fEl.checked : true,
+                        maxColors: _cEl ? parseInt(_cEl.value, 10) : 64
+                    }).then(parsed => {
+                        // Il voxelizzatore restituisce il formato COMPATTO
+                        // (palette + ops), come i modelli generati: accettiamo sia
+                        // quello sia il vecchio formato con `voxels` gia' espansi.
+                        // Senza questo controllo l'import falliva in SILENZIO,
+                        // perche' il ramo `voxels` non c'era piu'.
+                        if (!parsed) return;
+                        const hasOps = Array.isArray(parsed.ops) && parsed.ops.length;
+                        const hasVox = Array.isArray(parsed.voxels) && parsed.voxels.length;
+                        if (!hasOps && !hasVox) {
+                            alert('Il modello importato non contiene voxel.');
+                            return;
+                        }
                         if (!parsed.metadata) parsed.metadata = {};
                         if (!parsed.metadata.name) parsed.metadata.name = file.name.replace(/\.[^/.]+$/, "");
                         const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
@@ -3100,7 +3164,7 @@
                     return MAX_VOXELS;
                 })();
                 const budgetOk = () => grid.size < budgetLimit;
-                // ATTENZIONE — PARITA' CON PYTHON (src/parser.py::expand_ops).
+                // ATTENZIONE â PARITA' CON PYTHON (src/parser.py::expand_ops).
                 // `int()` in Python TRONCA verso zero; Math.round() arrotonda al
                 // piu' vicino. Con coordinate frazionarie (che l'AI produce) le due
                 // implementazioni divergevano: un `fill 0.9 ... 3.9` dava x 0..3 in
@@ -3199,7 +3263,7 @@
                 return { metadata: data.metadata || {}, voxels };
             }
 
-            // Occlusion Culling Algorithm — compact numeric key (avoids 32-bit signed overflow)
+            // Occlusion Culling Algorithm â compact numeric key (avoids 32-bit signed overflow)
             function computeVisibility(voxels) {
                 if (!voxels || !voxels.length) return voxels;
                 // Usa moltiplicatori numeri primi grandi ma sicuri per non avere collisioni
@@ -3256,7 +3320,7 @@
                 return { position: { x: 0, y: 0, z: 0 }, rotationY: 0, scale: 1 };
             }
 
-            // createObject(data, opts) — wraps model data into a scene object and appends it.
+            // createObject(data, opts) â wraps model data into a scene object and appends it.
             // Does NOT change the active object; call setActiveObject() for that.
             function createObject(data, opts) {
                 opts = opts || {};
@@ -3284,7 +3348,7 @@
                 return sceneObjects.find(o => o.id === activeObjectId) || null;
             }
 
-            // setActiveObject(id) — makes an object active and points currentModelData at it.
+            // setActiveObject(id) â makes an object active and points currentModelData at it.
             // currentModelData stays a live view of the active object's data, so all the
             // existing single-object editing code keeps working unchanged.
             function setActiveObject(id) {
@@ -3300,7 +3364,7 @@
                 return obj;
             }
 
-            // loadSceneFromParsed(parsed) — replaces the whole scene from a parsed payload.
+            // loadSceneFromParsed(parsed) â replaces the whole scene from a parsed payload.
             // Retro-compatibility: legacy single-object ({voxels}/{ops}) becomes ONE object;
             // extended multi-object ({objects:[...]}) loads them all.
             function loadSceneFromParsed(parsed) {
@@ -3330,7 +3394,7 @@
                 // T1 Fase B: rebuild outliner list + render all objects (not just active).
             }
 
-            // ===== T1 Fase B: modalità editor, rendering multi-oggetto, selezione =====
+            // ===== T1 Fase B: modalitÃ  editor, rendering multi-oggetto, selezione =====
             // editorMode: 'edit' (default, comportamento storico: gli strumenti agiscono
             // sull'oggetto attivo) | 'object' (selezione/spostamento oggetti, nessun edit voxel).
             let editorMode = 'edit';
@@ -3342,7 +3406,7 @@
             scene.add(inactiveGroup);
             const objectGroups = new Map(); // id -> THREE.Group (solo oggetti non attivi)
 
-            // BoxHelper verde attorno all'oggetto attivo (mostrato in Modalità Oggetto).
+            // BoxHelper verde attorno all'oggetto attivo (mostrato in ModalitÃ  Oggetto).
             let selectionBoxHelper = null;
 
             // Centro (in coord. voxel) di un elenco di voxel; [0,0,0] se vuoto.
@@ -3363,16 +3427,16 @@
             }
 
             // Applica il transform di un oggetto direttamente ai suoi voxel (coordinate),
-            // poi lo resetta a identità. Necessario perché l'oggetto ATTIVO è sempre a
-            // transform identità (così editing/raycasting/gizmo/rig funzionano come prima).
+            // poi lo resetta a identitÃ . Necessario perchÃ© l'oggetto ATTIVO Ã¨ sempre a
+            // transform identitÃ  (cosÃ¬ editing/raycasting/gizmo/rig funzionano come prima).
             // LIMITE noto: le coordinate voxel sono intere, quindi rotationY viene snappata
-            // al multiplo di 90° più vicino e position/scale vengono arrotondate.
+            // al multiplo di 90Â° piÃ¹ vicino e position/scale vengono arrotondate.
             function bakeTransform(obj) {
                 const t = obj.transform || makeDefaultTransform();
                 if (isIdentityTransform(t)) { obj.transform = makeDefaultTransform(); return; }
                 const c = voxelsCenter(obj.data.voxels);
                 const scale = (t.scale === undefined) ? 1 : t.scale;
-                // rotationY snappata a step di 90° (PI/2)
+                // rotationY snappata a step di 90Â° (PI/2)
                 const steps = Math.round((t.rotationY || 0) / (Math.PI / 2)) & 3;
                 const cos = [1, 0, -1, 0][steps];
                 const sin = [0, 1, 0, -1][steps];
@@ -3389,7 +3453,7 @@
             }
 
             // Costruisce (o ricostruisce) i Group di TUTTI gli oggetti non attivi visibili.
-            // Non tocca l'oggetto attivo (gestito da buildModel) né lo stack di editing.
+            // Non tocca l'oggetto attivo (gestito da buildModel) nÃ© lo stack di editing.
             function renderInactiveObjects() {
                 // Svuota e libera i group precedenti.
                 objectGroups.forEach(g => {
@@ -3447,7 +3511,7 @@
                     objectGroups.set(obj.id, g);
                     inactiveGroup.add(g);
                 });
-                // La visibilità dell'inactiveGroup segue la vista voxel (nascosto in rig).
+                // La visibilitÃ  dell'inactiveGroup segue la vista voxel (nascosto in rig).
                 inactiveGroup.visible = !rigPreviewActive;
             }
 
@@ -3471,9 +3535,9 @@
             // Applica alla UI l'attuale editorMode (badge, cursore, tool).
             function applyEditorMode() {
                 const badge = document.getElementById('editorModeBadge');
-                if (badge) badge.textContent = editorMode === 'object' ? 'Modalità Oggetto' : 'Modalità Modifica';
+                if (badge) badge.textContent = editorMode === 'object' ? 'ModalitÃ  Oggetto' : 'ModalitÃ  Modifica';
                 if (editorMode === 'object') {
-                    // In Modalità Oggetto niente editing: torna alla vista/orbita.
+                    // In ModalitÃ  Oggetto niente editing: torna alla vista/orbita.
                     if (currentTool !== 'view') setTool('view');
                     renderer.domElement.style.cursor = 'pointer';
                 }
@@ -3482,7 +3546,7 @@
 
             function toggleEditorMode() {
                 editorMode = (editorMode === 'edit') ? 'object' : 'edit';
-                // T2: uscire dalla Modalità Modifica annulla un eventuale gesto di estrusione.
+                // T2: uscire dalla ModalitÃ  Modifica annulla un eventuale gesto di estrusione.
                 if (editorMode === 'object' && typeof cancelExtrude === 'function') cancelExtrude();
                 applyEditorMode();
             }
@@ -3514,7 +3578,7 @@
 
                     // Icona occhio (visibile/nascosto)
                     const eye = document.createElement('span');
-                    eye.textContent = obj.visible ? '👁' : '🚫';
+                    eye.textContent = obj.visible ? 'ð' : 'ð«';
                     eye.title = obj.visible ? 'Nascondi oggetto' : 'Mostra oggetto';
                     eye.style.cssText = 'cursor:pointer; user-select:none; opacity:' + (obj.visible ? '1' : '0.5') + ';';
                     eye.addEventListener('click', (ev) => {
@@ -3544,7 +3608,7 @@
             }
 
             // Rende attivo un oggetto e ridisegna scena/outliner (senza reset camera).
-            // L'oggetto attivo è sempre a transform identità (editing/gizmo/rig lavorano in
+            // L'oggetto attivo Ã¨ sempre a transform identitÃ  (editing/gizmo/rig lavorano in
             // coordinate voxel dirette), quindi eventuale transform pendente viene "baked".
             function selectActiveObjectAndRefresh(id) {
                 const obj = sceneObjects.find(o => o.id === id);
@@ -3595,7 +3659,7 @@
             function objDelete() {
                 const active = getActiveObject();
                 if (!active) return;
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"? L\'operazione non è annullabile.')) return;
+                if (!confirm('Eliminare l\'oggetto "' + active.name + '"? L\'operazione non Ã¨ annullabile.')) return;
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
                 if (idx === -1) return;
                 sceneObjects.splice(idx, 1);
@@ -3680,7 +3744,7 @@
             // resetCamera: ricentra la camera sul modello (solo su load/generate).
             // skipInactive: salta il rebuild degli oggetti INATTIVI (T1). Durante un edit
             //   dell'oggetto attivo (place/remove/draw) gli altri oggetti non cambiano,
-            //   quindi ricostruirli a ogni pennellata è spreco. Default false = comportamento
+            //   quindi ricostruirli a ogni pennellata Ã¨ spreco. Default false = comportamento
             //   invariato (rebuild completo per load/generate/import/switch oggetto).
             function buildModel(resetCamera = true, skipInactive = false) {
                 if (typeof clearRigPreview === 'function') {
@@ -3743,7 +3807,7 @@
                 modelPivot.position.copy(center);
                 modelPivot.rotation.set(0, 0, 0);
                 // T-props: memorizza il centro "base" del modello. L'anteprima live del
-                // pannello Proprietà sposta/ruota/scala il modelPivot rispetto a questo
+                // pannello ProprietÃ  sposta/ruota/scala il modelPivot rispetto a questo
                 // centro senza toccare i voxel (bake solo al commit). Vedi applyLiveTransform().
                 modelPivotBaseCenter.copy(center);
 
@@ -3835,7 +3899,7 @@
 
                 if (typeof updateMirrorPlane === 'function') updateMirrorPlane();
 
-                // T-props: se c'è un'anteprima transform live in corso, riapplicala dopo il
+                // T-props: se c'Ã¨ un'anteprima transform live in corso, riapplicala dopo il
                 // rebuild (buildModel ha appena resettato pivot a position=center, rotation=0).
                 if (typeof reapplyLiveTransform === 'function') reapplyLiveTransform();
 
@@ -3847,7 +3911,7 @@
 
             // Perf: libera le risorse GPU (geometry + material) di un mesh/linesegments.
             // In r128 gli InstancedMesh raggruppati per colore condividono una geometry:
-            // il doppio dispose è innocuo, ma libera comunque ogni material distinto.
+            // il doppio dispose Ã¨ innocuo, ma libera comunque ogni material distinto.
             function disposeMesh(m) {
                 if (!m) return;
                 // ATTENZIONE: la BoxGeometry dei voxel e' CONDIVISA fra tutti gli
@@ -4048,7 +4112,7 @@
                 return objText;
             }
 
-            // Exporting OBJ downloads the MTL too — Blender needs the .mtl next to the
+            // Exporting OBJ downloads the MTL too â Blender needs the .mtl next to the
             // .obj (with the exact name in `mtllib`) or every material imports white.
             document.getElementById('exportObjBtn').addEventListener('click', () => {
                 const meta = currentModelData.metadata || {};
@@ -4362,7 +4426,7 @@
             // shows a green ghost cube for placement and a red outline for removal.
             let currentTool = 'view';
             let activeColorHex = '#6366F1';
-            let symmetryAxis = 'none';  // 'none' | 'x' | 'y' | 'z' — mirror edits across model center
+            let symmetryAxis = 'none';  // 'none' | 'x' | 'y' | 'z' â mirror edits across model center
             const raycaster = new THREE.Raycaster();
             const pointer = new THREE.Vector2();
             let hoverCell = null;      // {x,y,z} cell that would be affected
@@ -4393,7 +4457,7 @@
             const redoBtn = document.getElementById('redoBtn');
 
             const HINTS = {
-                view: 'Modalità Vista: trascina per orbitare, rotella per zoom.',
+                view: 'ModalitÃ  Vista: trascina per orbitare, rotella per zoom.',
                 place: 'Aggiungi: trascina con tasto sinistro per creare un\'area (Scrap Mechanic). Premi Q per ciclare l\'asse.',
                 remove: 'Rimuovi: trascina con tasto destro o strumento attivo per cancellare aree. Premi Q per ciclare l\'asse.',
                 draw: 'Disegna: trascina per ricolorare un\'intera area. Premi Q per ciclare l\'asse.',
@@ -4442,18 +4506,18 @@
 
             // T2b: "spessore" della selezione box. Mentre trascini un rettangolo di
             // selezione (isDraggingArea) puoi premere E per BLOCCARE le due dimensioni
-            // nel piano e trasformare il rettangolo in un cubo, dando profondità lungo
-            // il terzo asse (quello bloccato/normale) col movimento su/giù del mouse.
+            // nel piano e trasformare il rettangolo in un cubo, dando profonditÃ  lungo
+            // il terzo asse (quello bloccato/normale) col movimento su/giÃ¹ del mouse.
             // Mouse in alto -> cresce verso +asse, in basso -> verso -asse.
             let boxDepthMode = false;      // true dopo aver premuto E durante il drag
-            let boxDepthAxis = null;       // 'x' | 'y' | 'z' — asse di profondità
+            let boxDepthAxis = null;       // 'x' | 'y' | 'z' â asse di profonditÃ 
             let boxDepthAnchor = null;     // punto-mondo sull'asse per la proiezione
             let lockedDragAxis = 'y';      // ultimo asse bloccato calcolato dal piano
 
             const dragConstraintHUD = document.getElementById('dragConstraintHUD');
 
             // ===== T2: Estrusione facce (tasto E) =====
-            // Gesto: in Modalità Modifica, punta la faccia di un voxel esistente e premi E.
+            // Gesto: in ModalitÃ  Modifica, punta la faccia di un voxel esistente e premi E.
             // Si "arma" l'estrusione: la faccia esposta contigua e complanare viene raccolta
             // (flood-fill 4-vicini) e trascinando il mouse si generano N passi di voxel lungo
             // l'asse. Ri-premere E cicla l'asse (X->Y->Z). Click sx conferma (1 sola voce undo),
@@ -4510,11 +4574,11 @@
                 const axisNames = {
                     x: 'Piano YZ (Larghezza X fissa)',
                     y: 'Piano XZ (Altezza Y fissa)',
-                    z: 'Piano XY (Profondità Z fissa)'
+                    z: 'Piano XY (ProfonditÃ  Z fissa)'
                 };
                 dragConstraintHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🔧 <b>Asse Drag:</b> ${axis.toUpperCase()}</span>
+                        <span>ð§ <b>Asse Drag:</b> ${axis.toUpperCase()}</span>
                         <span style="color:var(--text-secondary); font-size:11px;">(${axisNames[axis]})</span>
                         <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Premi Q per cambiare</span>
                     </div>
@@ -4545,7 +4609,7 @@
                     constant = -boxStartCell.z;
                 }
                 activePlane = new THREE.Plane(normalVec, constant);
-                lockedDragAxis = lockedAxis; // T2b: asse di profondità per il gesto E
+                lockedDragAxis = lockedAxis; // T2b: asse di profonditÃ  per il gesto E
                 updateConstraintHUD(lockedAxis);
 
                 const btnGroup = document.getElementById('dragAxisSelect');
@@ -4556,13 +4620,13 @@
                 }
             }
 
-            // T2b: attiva il "gesto profondità" sul box di selezione in corso. Blocca
+            // T2b: attiva il "gesto profonditÃ " sul box di selezione in corso. Blocca
             // le due dimensioni nel piano e prepara la proiezione lungo l'asse normale
-            // (lockedDragAxis). Da qui il movimento su/giù del mouse dà spessore.
+            // (lockedDragAxis). Da qui il movimento su/giÃ¹ del mouse dÃ  spessore.
             function startBoxDepth() {
                 if (!isDraggingArea || !boxStartCell || !boxEndCell) return false;
                 boxDepthAxis = lockedDragAxis;
-                // Ancora = centro del rettangolo, al livello del piano (base della profondità).
+                // Ancora = centro del rettangolo, al livello del piano (base della profonditÃ ).
                 const midA = (boxStartCell.x + boxEndCell.x) / 2;
                 const midB = (boxStartCell.y + boxEndCell.y) / 2;
                 const midC = (boxStartCell.z + boxEndCell.z) / 2;
@@ -4573,21 +4637,21 @@
                 return true;
             }
 
-            // T2b: HUD del gesto profondità (riusa il riquadro del drag-constraint).
+            // T2b: HUD del gesto profonditÃ  (riusa il riquadro del drag-constraint).
             function updateBoxDepthHUD() {
                 if (!dragConstraintHUD || !boxDepthMode || !boxDepthAxis) return;
                 dragConstraintHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>📦 <b>Profondità:</b> asse ${boxDepthAxis.toUpperCase()}</span>
-                        <span style="color:var(--text-secondary); font-size:11px;">Muovi il mouse su/giù per lo spessore</span>
+                        <span>ð¦ <b>ProfonditÃ :</b> asse ${boxDepthAxis.toUpperCase()}</span>
+                        <span style="color:var(--text-secondary); font-size:11px;">Muovi il mouse su/giÃ¹ per lo spessore</span>
                         <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Rilascia per confermare</span>
                     </div>`;
                 dragConstraintHUD.style.display = 'block';
             }
 
             // T2b: dal puntatore, calcola la coordinata bersaglio lungo l'asse di
-            // profondità (closest point retta-asse / raggio) e la scrive su boxEndCell.
-            // boxStartCell resta al livello del piano: min..max nel commit dà il verso.
+            // profonditÃ  (closest point retta-asse / raggio) e la scrive su boxEndCell.
+            // boxStartCell resta al livello del piano: min..max nel commit dÃ  il verso.
             function updateBoxDepthFromPointer(e) {
                 if (!boxDepthMode || !boxDepthAnchor || !boxStartCell) return;
                 const rect = renderer.domElement.getBoundingClientRect();
@@ -4601,7 +4665,7 @@
                 const v = raycaster.ray.direction.clone();
                 const w0 = new THREE.Vector3().subVectors(O, P0);
                 const b = u.dot(v), c = v.dot(v), dd = u.dot(w0), ee = v.dot(w0);
-                const denom = c - b * b; // a = u·u = 1
+                const denom = c - b * b; // a = uÂ·u = 1
                 if (Math.abs(denom) < 1e-6) return; // sguardo parallelo all'asse
                 const sc = (b * ee - c * dd) / denom;
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
@@ -4761,7 +4825,7 @@
                 btn.addEventListener('click', () => switchTab(btn.dataset.tab));
             });
 
-            // T1 Fase B: wiring pulsanti outliner + shortcut Tab (Modalità Oggetto/Modifica).
+            // T1 Fase B: wiring pulsanti outliner + shortcut Tab (ModalitÃ  Oggetto/Modifica).
             (function bindOutliner() {
                 const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
                 bind('objNewBtn', objNew);
@@ -4808,12 +4872,12 @@
                 if (!extrudeActive) { extrudeHUD.style.display = 'none'; return; }
                 const nCells = extrudeFaceCells.length;
                 const passi = Math.abs(extrudeSteps);
-                const verso = extrudeSteps === 0 ? '' : (extrudeSteps > 0 ? '+' : '−');
+                const verso = extrudeSteps === 0 ? '' : (extrudeSteps > 0 ? '+' : 'â');
                 extrudeHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🧱 <b>Estrusione:</b> asse ${extrudeAxis.toUpperCase()} ${verso}</span>
-                        <span style="color:var(--text-secondary); font-size:11px;">${nCells} facce · ${passi} passi</span>
-                        <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Trascina · E cambia asse · click conferma · Esc annulla</span>
+                        <span>ð§± <b>Estrusione:</b> asse ${extrudeAxis.toUpperCase()} ${verso}</span>
+                        <span style="color:var(--text-secondary); font-size:11px;">${nCells} facce Â· ${passi} passi</span>
+                        <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Trascina Â· E cambia asse Â· click conferma Â· Esc annulla</span>
                     </div>`;
                 extrudeHUD.style.display = 'block';
             }
@@ -4873,7 +4937,7 @@
                 const v = raycaster.ray.direction.clone();
                 const w0 = new THREE.Vector3().subVectors(O, P0);
                 const b = u.dot(v), c = v.dot(v), dd = u.dot(w0), ee = v.dot(w0);
-                const denom = c - b * b; // a = u·u = 1
+                const denom = c - b * b; // a = uÂ·u = 1
                 if (Math.abs(denom) < 1e-6) return extrudeSteps; // sguardo parallelo all'asse
                 const sc = (b * ee - c * dd) / denom;
                 let steps = Math.round(sc);
@@ -4882,7 +4946,7 @@
                 return steps;
             }
 
-            // Arma l'estrusione dalla faccia sotto il cursore (nessuna modifica finché non si conferma).
+            // Arma l'estrusione dalla faccia sotto il cursore (nessuna modifica finchÃ© non si conferma).
             function armExtrude(clientX, clientY) {
                 const pick = pickVoxel(clientX, clientY);
                 if (!pick || pick.voxel.y < 0) return false; // niente voxel reale sotto il cursore
@@ -4946,7 +5010,7 @@
             }
 
             // T1 Fase B: cattura voxel dell'ATTIVO + rig + struttura scena (nomi, transform,
-            // visibilità, quale è attivo). LIMITE noto: NON cattura i voxel degli oggetti
+            // visibilitÃ , quale Ã¨ attivo). LIMITE noto: NON cattura i voxel degli oggetti
             // non attivi, e non ripristina aggiunte/eliminazioni di oggetti (solo attributi
             // di quelli tuttora esistenti). Le operazioni Nuovo/Duplica/Elimina/Unisci non
             // sono quindi annullabili con Ctrl+Z (per scelta: evitare snapshot pesanti).
@@ -5072,7 +5136,7 @@
                                 lockedAxis = dragConstraintMode.toUpperCase();
                             }
                             if (dragConstraintHUD) {
-                                dragConstraintHUD.innerHTML = `<span>🔧 <b>Asse Drag impostato:</b> ${lockedAxis}</span>`;
+                                dragConstraintHUD.innerHTML = `<span>ð§ <b>Asse Drag impostato:</b> ${lockedAxis}</span>`;
                                 dragConstraintHUD.style.display = 'block';
                                 if (window.hudTimeout) clearTimeout(window.hudTimeout);
                                 window.hudTimeout = setTimeout(() => {
@@ -5096,14 +5160,14 @@
                     return;
                 }
 
-                // T2: E arma l'estrusione dalla faccia sotto il cursore; se è già attiva, cicla l'asse.
-                // Solo in Modalità Modifica e non su gizmo del rig. Non interferisce con Q (drag-constraint).
+                // T2: E arma l'estrusione dalla faccia sotto il cursore; se Ã¨ giÃ  attiva, cicla l'asse.
+                // Solo in ModalitÃ  Modifica e non su gizmo del rig. Non interferisce con Q (drag-constraint).
                 if (KEYMAP.extrude && e.key.toLowerCase() === KEYMAP.extrude.toLowerCase() && !gizmoEnabled) {
                     if (editorMode !== 'object') {
                         e.preventDefault();
                         // T2b: se stai trascinando un rettangolo di selezione, E lo blocca
-                        // e passa al gesto "profondità" (rettangolo -> cubo) lungo l'asse
-                        // normale al piano; poi muovi il mouse su/giù per lo spessore.
+                        // e passa al gesto "profonditÃ " (rettangolo -> cubo) lungo l'asse
+                        // normale al piano; poi muovi il mouse su/giÃ¹ per lo spessore.
                         if (isDraggingArea && !extrudeActive) {
                             if (startBoxDepth()) {
                                 if (lastPointerEvent) updateBoxDepthFromPointer(lastPointerEvent);
@@ -5128,7 +5192,7 @@
                 // Draw-tool hotkeys (only meaningful on the draw tab, but harmless elsewhere).
                 if (e.key === KEYMAP.brushDown) { e.preventDefault(); brushSizeInput.value = Math.max(1, brushSize - 1); brushSizeInput.dispatchEvent(new Event('input')); return; }
                 if (e.key === KEYMAP.brushUp) { e.preventDefault(); brushSizeInput.value = Math.min(6, brushSize + 1); brushSizeInput.dispatchEvent(new Event('input')); return; }
-                // Tool hotkeys risolti tramite KEYMAP.tools (rimappabile — vedi definizione in cima).
+                // Tool hotkeys risolti tramite KEYMAP.tools (rimappabile â vedi definizione in cima).
                 const tool = KEYMAP.tools[e.key];
                 if (tool && document.querySelector('.tab-panel[data-panel="draw"]').classList.contains('active')) {
                     e.preventDefault(); setTool(tool);
@@ -5145,8 +5209,8 @@
                 gizmoTranslateBtn.classList.toggle('active', mode === 'translate');
                 if (typeof updateGizmo === 'function') updateGizmo();
                 if (rig) rigHint.textContent = mode === 'translate'
-                    ? 'Modalità SPOSTA (G): trascina per muovere il giunto e adattare lo scheletro. Premi R per tornare a ruotare.'
-                    : 'Modalità RUOTA (R): trascina gli anelli per posare l\'osso. Premi G per spostare il giunto.';
+                    ? 'ModalitÃ  SPOSTA (G): trascina per muovere il giunto e adattare lo scheletro. Premi R per tornare a ruotare.'
+                    : 'ModalitÃ  RUOTA (R): trascina gli anelli per posare l\'osso. Premi G per spostare il giunto.';
             }
             gizmoRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
             gizmoTranslateBtn.addEventListener('click', () => setGizmoMode('translate'));
@@ -5345,7 +5409,7 @@
                     strokeHistoryPushed = true;
                     const changed = performAction(clientX, clientY, true);
                     if (!changed) {
-                        // Nothing changed — roll back the snapshot we just pushed.
+                        // Nothing changed â roll back the snapshot we just pushed.
                         undoStack.pop();
                         strokeHistoryPushed = false;
                         updateHistoryButtons();
@@ -5369,7 +5433,7 @@
                 if (currentTool === 'view') return;
 
                 if (isDraggingArea) {
-                    // T2b: se il gesto profondità è attivo (E premuto durante il drag),
+                    // T2b: se il gesto profonditÃ  Ã¨ attivo (E premuto durante il drag),
                     // il mouse regola lo spessore lungo l'asse bloccato invece del piano.
                     if (boxDepthMode) {
                         updateBoxDepthFromPointer(e);
@@ -5400,7 +5464,7 @@
             });
 
             renderer.domElement.addEventListener('pointerdown', e => {
-                if (editorMode === 'object') return; // T1 Fase B: nessun editing in Modalità Oggetto
+                if (editorMode === 'object') return; // T1 Fase B: nessun editing in ModalitÃ  Oggetto
                 // T2: durante l'estrusione, click sx conferma, click dx annulla. Niente editing normale.
                 if (extrudeActive) {
                     if (e.button === 0) { e.preventDefault(); commitExtrude(); }
@@ -5530,7 +5594,7 @@
             // Suppress the browser context menu so right-drag can orbit while editing.
             renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
-            // T1 Fase B: in Modalità Oggetto un click seleziona l'oggetto sotto il cursore.
+            // T1 Fase B: in ModalitÃ  Oggetto un click seleziona l'oggetto sotto il cursore.
             // Non interferisce con l'editing (attivo solo quando editorMode === 'object').
             let objModeDownPos = null;
             renderer.domElement.addEventListener('pointerdown', e => {
@@ -5728,7 +5792,7 @@
                 const bones = [];
                 const add = (name, parent, head, tail) => { bones.push({ name, parent, head, tail }); return bones.length - 1; };
 
-                // Spine chain: hips → spine → chest → upperChest → neck → head → headTip.
+                // Spine chain: hips â spine â chest â upperChest â neck â head â headTip.
                 // Each bone's head is the next one's tail, and every leaf ends in a small tip
                 // bone so Blender orients them correctly (no "bones pointing up").
                 const hips = add('hips', -1, [cx, hipsY, cz], [cx, spineY, cz]);
@@ -5744,7 +5808,7 @@
                 // torso edge (so it's a proper pivot, not buried mid-arm), and the chain
                 // reaches out to the actual fingertip instead of guessing from body height.
 
-                // Torso edge just below the arms → where the shoulder attaches to the body.
+                // Torso edge just below the arms â where the shoulder attaches to the body.
                 const torsoBandLo = minY + 0.55 * H, torsoBandHi = minY + 0.68 * H;
                 let torsoMaxR = cx, torsoMinL = cx;
                 voxels.forEach(v => {
@@ -5765,7 +5829,7 @@
                 });
                 const armY = armYn ? armYsum / armYn : (shldY - 0.08 * H);
 
-                // Shoulder roots at the torso edge; the arm proper spans root → fingertip,
+                // Shoulder roots at the torso edge; the arm proper spans root â fingertip,
                 // split upperArm / forearm / hand, with the leaf tip landing on the fingertip.
                 const shRX = torsoMaxR, shLX = torsoMinL;
                 const reachR = Math.max(armOuterR - shRX, 0.18 * W);
@@ -5787,7 +5851,7 @@
                 const haL = add('hand_L', faL, [lW, armY, cz], [lH, armY, cz]);
                 add('handTip_L', haL, [lH, armY, cz], [lT, armY, cz]);
 
-                // Legs: pelvis branches out from hips, then upperLeg → lowerLeg → foot → toeTip.
+                // Legs: pelvis branches out from hips, then upperLeg â lowerLeg â foot â toeTip.
                 const pelR = add('pelvis_R', hips, [cx, hipsY, cz], [legXR, hipsY, cz]);
                 const ulR = add('upperLeg_R', pelR, [legXR, hipsY, cz], [legXR, kneeY, cz]);
                 const llR = add('lowerLeg_R', ulR, [legXR, kneeY, cz], [legXR, ankleY, ankleZ]);
@@ -6121,9 +6185,9 @@
             }
 
             function updateRotLabels() {
-                rotValEls.x.textContent = `${poseRot.x.value}°`;
-                rotValEls.y.textContent = `${poseRot.y.value}°`;
-                rotValEls.z.textContent = `${poseRot.z.value}°`;
+                rotValEls.x.textContent = `${poseRot.x.value}Â°`;
+                rotValEls.y.textContent = `${poseRot.y.value}Â°`;
+                rotValEls.z.textContent = `${poseRot.z.value}Â°`;
             }
 
             function onPoseSlider() {
@@ -6516,19 +6580,33 @@
                 return { x: (minX + maxX) / 2, y: minY - 0.5, z: (minZ + maxZ) / 2 };
             }
 
-            function buildStaticExportMesh() {
+            // `voxelsOverride` permette di costruire il mesh di un modello DIVERSO
+            // da quello in scena: serve all'export del pack, che deve produrre il
+            // GLB di N asset senza caricarli uno a uno nel viewer.
+            // Omesso = comportamento originale sull'oggetto attivo.
+            function buildStaticExportMesh(voxelsOverride) {
                 const gap = parseFloat(voxelGap.value) || 0; const s = 1.0 - gap;
-                const o = exportOrigin(currentModelData.voxels || []);
-                const allVoxels = currentModelData.voxels || [];
+                const allVoxels = voxelsOverride || currentModelData.voxels || [];
+                const o = exportOrigin(allVoxels);
                 const voxelSet = new Set();
                 allVoxels.forEach(vox => voxelSet.add(`${vox.x},${vox.y},${vox.z}`));
 
                 const byColor = {};
-                // Il renderer incrementale aggiorna visibleVoxels in modo pigro:
-                // sincronizziamo qui, prima di leggerlo, cosi' l'export non usa mai
-                // uno stato vecchio.
-                if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
-                visibleVoxels.forEach(v => {
+                // Quali voxel disegnare: quelli VISIBILI (le facce interne non
+                // servono). Per un modello esterno la visibilita' va calcolata qui,
+                // perche' `visibleVoxels` riguarda solo l'oggetto in scena.
+                let sourceVisible;
+                if (voxelsOverride) {
+                    sourceVisible = (typeof computeVisibility === 'function')
+                        ? computeVisibility(allVoxels) : allVoxels;
+                } else {
+                    // Il renderer incrementale aggiorna visibleVoxels in modo pigro:
+                    // sincronizziamo qui, prima di leggerlo, cosi' l'export non usa
+                    // mai uno stato vecchio.
+                    if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
+                    sourceVisible = visibleVoxels;
+                }
+                sourceVisible.forEach(v => {
                     if (!byColor[v.color]) byColor[v.color] = [];
                     byColor[v.color].push(v);
                 });
@@ -6560,6 +6638,47 @@
                 geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
                 geom.setIndex(indices);
                 return new THREE.Mesh(geom, materials);
+            }
+
+            /**
+             * Produce il GLB di un modello arbitrario come Uint8Array (Promise).
+             * GLTFExporter.parse e' ASINCRONO e basato su callback: qui lo avvolgo
+             * in una Promise cosi' l'export del pack puo' attendere N asset in
+             * sequenza. Il mesh temporaneo viene distrutto subito dopo: senza
+             * dispose, esportare 15 asset lascerebbe 15 geometrie sulla GPU.
+             */
+            function buildGlbForModel(model) {
+                return new Promise((resolve, reject) => {
+                    let mesh = null;
+                    try {
+                        const voxels = (model && model.voxels) || [];
+                        if (!voxels.length) { resolve(null); return; }
+                        mesh = buildStaticExportMesh(voxels);
+                        const exporter = new THREE.GLTFExporter();
+                        exporter.parse(mesh, (result) => {
+                            try {
+                                resolve(new Uint8Array(result));
+                            } catch (e) {
+                                reject(e);
+                            } finally {
+                                if (mesh) disposeExportMesh(mesh);
+                            }
+                        }, { binary: true, onlyVisible: false });
+                    } catch (e) {
+                        if (mesh) disposeExportMesh(mesh);
+                        reject(e);
+                    }
+                });
+            }
+
+            // Libera geometria e materiali di un mesh temporaneo da export.
+            function disposeExportMesh(mesh) {
+                try {
+                    if (mesh.geometry && mesh.geometry.dispose) mesh.geometry.dispose();
+                    const m = mesh.material;
+                    if (Array.isArray(m)) m.forEach(x => x && x.dispose && x.dispose());
+                    else if (m && m.dispose) m.dispose();
+                } catch (e) { /* best effort */ }
             }
 
             function exportGLB() {
@@ -6659,7 +6778,7 @@
             // Anti-flicker: il canvas 3D usa uno sfondo di scena OPACO (vedi
             // 01-scene-setup.js) invece del compositing alpha per-frame. Qui lo
             // teniamo in tinta col tema: scuro segue il fondo del gradiente, chiaro
-            // usa una tinta chiara. Best-effort: se `scene` non è pronta si ignora.
+            // usa una tinta chiara. Best-effort: se `scene` non Ã¨ pronta si ignora.
             function applySceneBackground(t) {
                 try {
                     if (typeof scene === 'undefined' || !scene) return;
@@ -6691,13 +6810,13 @@
                 const next = current === 'light' ? 'dark' : 'light';
                 applyTheme(next);
                 // T6: persisti la scelta via layer prefs (backend + fallback localStorage).
-                // applyTheme() ha già scritto localStorage per il ripristino sincrono.
+                // applyTheme() ha giÃ  scritto localStorage per il ripristino sincrono.
                 if (typeof savePref === 'function') savePref('theme', next);
             });
 
             /* ===== Accent color personalizzabile =====
              * L'utente sceglie UN colore base; da quello deriviamo tutti i token
-             * accent (primary/secondary/deep/soft/glow + glass-border-focus) così
+             * accent (primary/secondary/deep/soft/glow + glass-border-focus) cosÃ¬
              * l'intera UI resta coerente. I derivati sono schiariti/scuriti dal base
              * e le versioni "soft/glow/focus" sono lo stesso colore con alpha.
              * Persistenza come il tema: localStorage (ripristino sincrono, no flash)
@@ -6726,8 +6845,8 @@
                 const base = _hexToRgb(hex);
                 if (!base) return false;
                 const norm = _rgbToHex(base);
-                const deep = _mix(base, 0, 0.22);       // ~22% più scuro
-                const secondary = _mix(base, 255, 0.20); // ~20% più chiaro
+                const deep = _mix(base, 0, 0.22);       // ~22% piÃ¹ scuro
+                const secondary = _mix(base, 255, 0.20); // ~20% piÃ¹ chiaro
                 const root = document.documentElement.style;
                 root.setProperty('--accent-primary', norm);
                 root.setProperty('--accent-secondary', _rgbToHex(secondary));
@@ -6751,9 +6870,9 @@
             /* ===== T6: Layer preferenze (backend + fallback localStorage) =========
              * savePref/loadPrefs persistono le preferenze dell'app (tema, keymap) via
              * il backend `POST/GET /api/prefs` (merge lato server). Se il backend non
-             * risponde o non c'è (`__API_BASE__` assente, uso web/offline) si ripiega
-             * su localStorage, così l'app funziona comunque. Manteniamo anche le chiavi
-             * localStorage "legacy" (THEME_KEY, voxelai-keymap) perché gli inizializzatori
+             * risponde o non c'Ã¨ (`__API_BASE__` assente, uso web/offline) si ripiega
+             * su localStorage, cosÃ¬ l'app funziona comunque. Manteniamo anche le chiavi
+             * localStorage "legacy" (THEME_KEY, voxelai-keymap) perchÃ© gli inizializzatori
              * sincroni initTheme()/loadKeymap() le leggono all'avvio senza attese async. */
             const PREFS_LS_KEY = 'voxelai-prefs';
             const KEYMAP_LS_KEY = 'voxelai-keymap';
@@ -6768,7 +6887,7 @@
                 return {};
             }
             async function savePref(key, value) {
-                // Mirror sulle chiavi legacy, così i loader sincroni all'avvio le vedono
+                // Mirror sulle chiavi legacy, cosÃ¬ i loader sincroni all'avvio le vedono
                 // anche senza backend.
                 try {
                     if (key === 'theme') localStorage.setItem(THEME_KEY, value);
@@ -6787,10 +6906,10 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ settings: { [key]: value } })
                     });
-                } catch (e) { /* offline / backend assente: già salvato localmente */ }
+                } catch (e) { /* offline / backend assente: giÃ  salvato localmente */ }
             }
             async function loadPrefs() {
-                // Prima il backend (fonte autorevole quando c'è).
+                // Prima il backend (fonte autorevole quando c'Ã¨).
                 try {
                     const res = await fetch(prefsEndpoint());
                     if (res && res.ok) {
@@ -6808,7 +6927,7 @@
             /* ===== T6: Pannello rimappatura scorciatoie ============================
              * Elenca ogni azione di KEYMAP con il suo tasto e permette di rimapparla:
              * clic sul tasto -> "premi un tasto" -> nuova assegnazione. Rileva i
-             * conflitti (tasto già usato) e li segnala in italiano senza applicare.
+             * conflitti (tasto giÃ  usato) e li segnala in italiano senza applicare.
              * Dopo un rebind valido aggiorna KEYMAP in memoria (applicazione immediata)
              * e persiste via savePref('keymap', ...). */
             const SHORTCUT_TOOL_LABELS = {
@@ -6819,21 +6938,21 @@
                 pick: 'Strumento: Contagocce'
             };
             const SHORTCUT_SINGLE_LABELS = {
-                toggleMode: 'Modalità Oggetto/Modifica',
+                toggleMode: 'ModalitÃ  Oggetto/Modifica',
                 extrude: 'Estrusione',
-                brushDown: 'Pennello −',
+                brushDown: 'Pennello â',
                 brushUp: 'Pennello +'
             };
             const SHORTCUT_SINGLE_ORDER = ['toggleMode', 'extrude', 'brushDown', 'brushUp'];
 
             function keyDisplay(k) {
                 if (k === ' ' || k === 'Spacebar' || k === 'Space') return 'Spazio';
-                if (k === 'ArrowUp') return '↑';
-                if (k === 'ArrowDown') return '↓';
-                if (k === 'ArrowLeft') return '←';
-                if (k === 'ArrowRight') return '→';
+                if (k === 'ArrowUp') return 'â';
+                if (k === 'ArrowDown') return 'â';
+                if (k === 'ArrowLeft') return 'â';
+                if (k === 'ArrowRight') return 'â';
                 if (k === 'Escape') return 'Esc';
-                if (typeof k !== 'string' || k.length === 0) return '—';
+                if (typeof k !== 'string' || k.length === 0) return 'â';
                 return k.length === 1 ? k.toUpperCase() : k;
             }
 
@@ -6841,7 +6960,7 @@
             function collectShortcutBindings() {
                 const list = [];
                 const tools = KEYMAP.tools || {};
-                // Ordine stabile per strumento (non per tasto), così l'elenco non salta
+                // Ordine stabile per strumento (non per tasto), cosÃ¬ l'elenco non salta
                 // quando si rimappa.
                 const toolOrder = Object.keys(SHORTCUT_TOOL_LABELS);
                 const keyByTool = {};
@@ -6882,7 +7001,7 @@
             function assignShortcut(binding, newKey) {
                 const conflict = collectShortcutBindings().find(b => b.id !== binding.id && b.key === newKey);
                 if (conflict) {
-                    showShortcutConflict('Il tasto "' + keyDisplay(newKey) + '" è già usato da "' + conflict.label + '". Scegli un altro tasto.');
+                    showShortcutConflict('Il tasto "' + keyDisplay(newKey) + '" Ã¨ giÃ  usato da "' + conflict.label + '". Scegli un altro tasto.');
                     return false;
                 }
                 showShortcutConflict('');
@@ -6894,18 +7013,18 @@
                 } else {
                     KEYMAP[binding.prop] = newKey;
                 }
-                // Applicazione immediata: KEYMAP è già la fonte usata dai gestori tastiera.
+                // Applicazione immediata: KEYMAP Ã¨ giÃ  la fonte usata dai gestori tastiera.
                 savePref('keymap', KEYMAP);
                 return true;
             }
 
             function startShortcutListening(binding, btnEl) {
-                // Se stavamo già ascoltando un'altra azione, annulla quella.
+                // Se stavamo giÃ  ascoltando un'altra azione, annulla quella.
                 if (shortcutListenHandler) window.removeEventListener('keydown', shortcutListenHandler, true);
                 shortcutListeningId = binding.id;
                 showShortcutConflict('');
                 btnEl.classList.add('listening');
-                btnEl.textContent = 'premi un tasto…';
+                btnEl.textContent = 'premi un tastoâ¦';
                 shortcutListenHandler = function (e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -6931,7 +7050,7 @@
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'shortcut-key' + (shortcutListeningId === binding.id ? ' listening' : '');
-                    btn.textContent = shortcutListeningId === binding.id ? 'premi un tasto…' : keyDisplay(binding.key);
+                    btn.textContent = shortcutListeningId === binding.id ? 'premi un tastoâ¦' : keyDisplay(binding.key);
                     btn.title = 'Clicca e premi la nuova combinazione (Esc per annullare)';
                     btn.addEventListener('click', () => {
                         if (shortcutListeningId === binding.id) { stopShortcutListening(); return; }
@@ -7199,7 +7318,7 @@
                 if (bytes.length < 8) throw new Error('.vox troppo corto');
                 const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
                 if (magic !== 'VOX ') throw new Error('Magic .vox non valido (atteso "VOX ")');
-                // version = dv.getInt32(4, true) — non serve validarla.
+                // version = dv.getInt32(4, true) â non serve validarla.
 
                 // Il primo chunk (a offset 8) e' MAIN; ne scandiamo i children.
                 // Struttura chunk: id[4] + i32 lenContent + i32 lenChildren + content + children.
@@ -7598,7 +7717,7 @@
             // --- stato progetto -------------------------------------------------
             let currentProjectPath = null;   // path del .voxai correntemente aperto/salvato
             let projectDirty = false;        // true dopo una modifica non ancora salvata
-            const AUTOSAVE_SESSION_ID = 'unsaved-' + Date.now(); // id stabile finché non si salva
+            const AUTOSAVE_SESSION_ID = 'unsaved-' + Date.now(); // id stabile finchÃ© non si salva
 
             function projectApi(route) {
                 return (window.__API_BASE__ ? window.__API_BASE__ : '') + route;
@@ -7616,7 +7735,7 @@
             }
 
             // projectId per l'autosave: derivato dal nome file corrente (sanificato) o
-            // id di sessione stabile finché il progetto non è mai stato salvato.
+            // id di sessione stabile finchÃ© il progetto non Ã¨ mai stato salvato.
             function deriveProjectId() {
                 if (currentProjectPath) {
                     const base = String(currentProjectPath).split(/[\\/]/).pop() || 'progetto';
@@ -7632,7 +7751,7 @@
                 return bytes.buffer;
             }
 
-            // Carica (SOSTITUISCE la scena) un oggetto-dati progetto già deserializzato.
+            // Carica (SOSTITUISCE la scena) un oggetto-dati progetto giÃ  deserializzato.
             // Accetta scena multi-oggetto ({objects:[...]}) o modello singolo (flat/compact).
             function loadProjectData(data) {
                 if (!data || typeof data !== 'object') { alert('Dati progetto non validi.'); return false; }
@@ -7744,7 +7863,7 @@
 
                     if (j.encoding === 'json') {
                         const content = j.content;
-                        // Un .voxai ha wrapper {format:"voxai",...,data}; un .json/.voxelai è la scena diretta.
+                        // Un .voxai ha wrapper {format:"voxai",...,data}; un .json/.voxelai Ã¨ la scena diretta.
                         let data = content;
                         if (content && content.format === 'voxai' && content.data) data = content.data;
                         if (loadProjectData(data)) {
@@ -7762,7 +7881,7 @@
                             if (!parsed.metadata.name && j.path) parsed.metadata.name = String(j.path).split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
                             loadSceneFromParsed(parsed);
                             buildModel();
-                            currentProjectPath = null; // binario importato: non è un .voxai nativo
+                            currentProjectPath = null; // binario importato: non Ã¨ un .voxai nativo
                             if (j.path) pushRecent(j.path, String(j.path).split(/[\\/]/).pop());
                         };
                         if (ext === '.vox' || ext === 'vox') {
@@ -7821,7 +7940,7 @@
                         const wrapper = { format: 'voxai', version: 1, savedAt: new Date().toISOString(), projectId: projectId, data: data };
                         try { localStorage.setItem(AUTOSAVE_LS_KEY, JSON.stringify(wrapper)); markProjectSaved(); } catch (e) { }
                     }
-                } catch (e) { /* autosave best-effort: riproverà al prossimo tick */ }
+                } catch (e) { /* autosave best-effort: riproverÃ  al prossimo tick */ }
                 finally { autosaveInFlight = false; }
             }
 
@@ -7833,7 +7952,7 @@
             }
 
             // Aggancio NON invasivo al dirty flag: avvolge pushHistory() (chiamata a ogni
-            // modifica registrata nello storico) così ogni edit marca il progetto "dirty".
+            // modifica registrata nello storico) cosÃ¬ ogni edit marca il progetto "dirty".
             (function hookDirtyTracking() {
                 if (typeof pushHistory === 'function') {
                     const _origPushHistory = pushHistory;
@@ -7848,7 +7967,7 @@
             setInterval(runAutosave, AUTOSAVE_INTERVAL_MS);
 
             /* =========================================================================
-             * 3. VERSIONING / RIPRISTINO — pannello "Cronologia salvataggi"
+             * 3. VERSIONING / RIPRISTINO â pannello "Cronologia salvataggi"
              * =======================================================================*/
             function fmtBytes(n) {
                 n = Number(n) || 0;
@@ -7865,10 +7984,10 @@
                 const listEl = document.getElementById('autosaveList');
                 if (!listEl) return;
                 if (!isDesktopApp()) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi è disponibile solo nell\'app desktop.</div>';
+                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi Ã¨ disponibile solo nell\'app desktop.</div>';
                     return;
                 }
-                listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Caricamento…</div>';
+                listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Caricamentoâ¦</div>';
                 try {
                     const res = await fetch(projectApi('/api/autosave/list'));
                     if (!res || !res.ok) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Impossibile caricare la cronologia.</div>'; return; }
@@ -7882,7 +8001,7 @@
                         const info = document.createElement('div');
                         info.style.cssText = 'font-size:12px; line-height:1.4; overflow:hidden;';
                         info.innerHTML = '<div style="font-weight:600;">' + fmtSavedAt(it.savedAt) + '</div>' +
-                            '<div style="opacity:0.7;">' + (it.projectId || '') + ' · ' + fmtBytes(it.size) + '</div>';
+                            '<div style="opacity:0.7;">' + (it.projectId || '') + ' Â· ' + fmtBytes(it.size) + '</div>';
                         const btn = document.createElement('button');
                         btn.className = 'btn btn-secondary';
                         btn.textContent = 'Ripristina';
@@ -7899,7 +8018,7 @@
 
             async function restoreAutosave(name) {
                 if (!name) return;
-                if (!confirm('Ripristinare questo salvataggio automatico? La scena corrente verrà sostituita.')) return;
+                if (!confirm('Ripristinare questo salvataggio automatico? La scena corrente verrÃ  sostituita.')) return;
                 try {
                     const res = await fetch(projectApi('/api/autosave/get?name=' + encodeURIComponent(name)));
                     if (!res || !res.ok) { alert('Impossibile caricare il salvataggio selezionato.'); return; }
@@ -7955,7 +8074,7 @@
              * navigazione 3D, l'editing o la logica dei pulsanti esistenti:
              *
              *   1. Un launcher a tutto schermo mostrato all'avvio con i progetti
-             *      recenti (GET /api/recent), "Nuovo progetto" e "Apri progetto…".
+             *      recenti (GET /api/recent), "Nuovo progetto" e "Apri progettoâ¦".
              *   2. Sezioni chiare nel pannello impostazioni (tab "Vista"): Aspetto,
              *      Salvataggio, Avvio (le Scorciatoie restano dove sono, intatte).
              *   3. Raggruppamento + tooltip italiani sulla toolbar/footer.
@@ -7966,10 +8085,10 @@
              *
              * LIMITE NOTO (desktop): il backend NON espone una route "leggi file da
              * percorso"; /api/project/open apre solo il QFileDialog. Quindi il clic su
-             * un recente NON può caricare direttamente quel path: ripiega su
+             * un recente NON puÃ² caricare direttamente quel path: ripiega su
              * openProject() (dialog nativo) segnalandolo all'utente.
              *
-             * Tutto è avvolto in try/catch: se qualcosa fallisce, il bootstrap (18)
+             * Tutto Ã¨ avvolto in try/catch: se qualcosa fallisce, il bootstrap (18)
              * che gira DOPO questo modulo non deve mai rompersi. */
 
             (function initScreens() {
@@ -8017,8 +8136,8 @@
                           '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">Progetti recenti</div>' +
                           '<div id="launcherRecentList" style="overflow-y:auto;flex:1;min-height:60px;max-height:320px;margin-bottom:14px;"></div>' +
                           '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
-                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena">＋ Nuovo progetto</button>' +
-                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)">📂 Apri progetto…</button>' +
+                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena">ï¼ Nuovo progetto</button>' +
+                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)">ð Apri progettoâ¦</button>' +
                           '</div>' +
                           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--glass-border);padding-top:12px;">' +
                             '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;">' +
@@ -8111,10 +8230,10 @@
                     const listEl = document.getElementById('launcherRecentList');
                     if (!listEl) return;
                     if (!screensIsDesktop()) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">In modalità web i progetti recenti non sono disponibili. Usa "Apri progetto…".</div>';
+                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">In modalitÃ  web i progetti recenti non sono disponibili. Usa "Apri progettoâ¦".</div>';
                         return;
                     }
-                    listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Caricamento…</div>';
+                    listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Caricamentoâ¦</div>';
                     const items = await fetchRecent();
                     if (!items.length) {
                         listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Nessun progetto recente. Creane uno nuovo o aprine uno esistente.</div>';
@@ -8129,12 +8248,12 @@
                         info.style.cssText = 'overflow:hidden;';
                         const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || 'Progetto';
                         info.innerHTML = '<div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(nm) + '</div>' +
-                            '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(it.path || '') + (it.lastOpened ? ' · ' + fmtRecentDate(it.lastOpened) : '') + '</div>';
+                            '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(it.path || '') + (it.lastOpened ? ' Â· ' + fmtRecentDate(it.lastOpened) : '') + '</div>';
                         info.style.cursor = 'pointer';
                         info.addEventListener('click', () => openRecent(it));
                         const del = document.createElement('button');
                         del.className = 'launcher-recent-del';
-                        del.textContent = '✕';
+                        del.textContent = 'â';
                         del.title = 'Rimuovi dai recenti';
                         del.addEventListener('click', async (e) => { e.stopPropagation(); await deleteRecent(it.path); refreshLauncherRecent(); });
                         row.appendChild(info);
@@ -8175,12 +8294,12 @@
                             '<span>Mostra la schermata iniziale all\'avvio</span>' +
                             '<label class="switch"><input type="checkbox" id="settingsShowLauncher" checked><span class="slider"></span></label>' +
                           '</label>' +
-                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti">🗂 Apri schermata iniziale</button>' +
+                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti">ð Apri schermata iniziale</button>' +
                         '</div>' +
                         '<div class="section-title">Salvataggio</div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata (solo desktop).</div>' +
-                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>' +
+                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">ð Apri cartella autosave</button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
 
@@ -8201,12 +8320,12 @@
                     });
 
                     // Raggruppamento visivo (non funzionale) del pannello Scorciatoie T6:
-                    // gli anteponiamo un titolo di sezione senza spostarlo né toccarne gli id.
+                    // gli anteponiamo un titolo di sezione senza spostarlo nÃ© toccarne gli id.
                     try {
                         const sc = document.getElementById('shortcutsPanel');
                         if (sc && sc.parentElement && !sc.parentElement.dataset.scGrouped) {
                             const prev = sc.parentElement.previousElementSibling;
-                            // Il titolo "Scorciatoie da tastiera" esiste già nel template; niente da fare.
+                            // Il titolo "Scorciatoie da tastiera" esiste giÃ  nel template; niente da fare.
                             sc.parentElement.dataset.scGrouped = '1';
                         }
                     } catch (e) { }
@@ -8215,7 +8334,7 @@
                 /* ---------- 3. Toolbar/footer: raggruppamento + tooltip ----------
                  * Riusa gli id e i listener esistenti: NON ricabliamo la logica dei
                  * pulsanti. Aggiungiamo solo etichette di gruppo e tooltip (title) dove
-                 * mancano. Lo stato attivo degli strumenti è già gestito da setTool(). */
+                 * mancano. Lo stato attivo degli strumenti Ã¨ giÃ  gestito da setTool(). */
                 function enhanceToolbar() {
                     const footer = document.querySelector('.sidebar-footer');
                     if (!footer || footer.dataset.grouped) return;
@@ -8437,23 +8556,23 @@
             // dell'init (async). Se fallisce, l'app resta in italiano (testi del template).
             (function bootI18n() { initI18n(); })();
 
-            // ===== Plugin / Script utente — API SANDBOXATA (W2-C punto 7) =====
+            // ===== Plugin / Script utente â API SANDBOXATA (W2-C punto 7) =====
             //
             // Decisione utente (vedi board): gli script utente girano in una sandbox
             // SENZA accesso a rete / filesystem / DOM, con hook documentati.
             //
             // Isolamento: lo script gira in un **Web Worker** dedicato. Un worker non ha
             // accesso al DOM (niente `document`, `window`), non condivide scope con la app
-            // e viene TERMINATO se supera il timeout. In più il bootstrap del worker
+            // e viene TERMINATO se supera il timeout. In piÃ¹ il bootstrap del worker
             // azzera esplicitamente le API di rete/persistenza (fetch, XMLHttpRequest,
-            // WebSocket, importScripts, indexedDB, ...), così anche un plugin ostile non
-            // può esfiltrare dati o "phone home". Il worker comunica SOLO via postMessage:
+            // WebSocket, importScripts, indexedDB, ...), cosÃ¬ anche un plugin ostile non
+            // puÃ² esfiltrare dati o "phone home". Il worker comunica SOLO via postMessage:
             // riceve i voxel dell'oggetto attivo, restituisce i nuovi voxel.
             //
             // Fallback: se la creazione del Worker fallisce (ambienti che bloccano i
             // blob-URL worker), si usa un sandbox in-thread basato su `Function` con lo
-            // scope oscurato (globals pericolosi ombreggiati). Meno robusto del worker —
-            // segnalato all'utente — ma senza rete/DOM raggiungibili per nome.
+            // scope oscurato (globals pericolosi ombreggiati). Meno robusto del worker â
+            // segnalato all'utente â ma senza rete/DOM raggiungibili per nome.
             //
             // CONTRATTO PLUGIN (documentato, stabile):
             //   Lo script definisce una funzione `transform(voxels, api)`.
@@ -8465,16 +8584,16 @@
             //         api.hexToRgb(hex) -> {r,g,b}   api.rgbToHex(r,g,b) -> "#rrggbb"
             //         api.key(x,y,z)    -> "x,y,z" (chiave voxel)
             //     - Ritorno: Array di voxel {x,y,z,color}. Coordinate intere; color = "#rrggbb".
-            //   Voxel non validi vengono scartati con conteggio; se il ritorno non è un
-            //   array valido, l'operazione è annullata (nessuna modifica alla scena).
+            //   Voxel non validi vengono scartati con conteggio; se il ritorno non Ã¨ un
+            //   array valido, l'operazione Ã¨ annullata (nessuna modifica alla scena).
             //
             // HOOK/ciclo: Esegui -> valida -> pushHistory() -> sostituisci voxels ->
-            //   buildModel(false, true). Quindi è ANNULLABILE con Ctrl+Z come ogni edit.
+            //   buildModel(false, true). Quindi Ã¨ ANNULLABILE con Ctrl+Z come ogni edit.
 
             const PLUGIN_TIMEOUT_MS = 4000;   // oltre questo, il worker viene terminato
             const PLUGIN_MAX_VOXELS = 400000; // guardia anti-OOM sul risultato
 
-            // Plugin di esempio (didattici). L'utente può modificarne il codice nel
+            // Plugin di esempio (didattici). L'utente puÃ² modificarne il codice nel
             // textarea; "Ripristina" ricarica questi sorgenti. Sono anche la doc viva
             // del contratto `transform(voxels, api)`.
             const BUILTIN_PLUGINS = [
@@ -8625,7 +8744,7 @@
                     if (typeof buildModel === 'function') buildModel(false, true);
                     let msg = (typeof t === 'function' ? t('plugins.done') : 'Fatto') + ': ' + out.length + ' voxel';
                     if (dropped) msg += ' (' + dropped + ' scartati non validi)';
-                    if (logs && logs.length) msg += ' — ' + logs.join(' | ');
+                    if (logs && logs.length) msg += ' â ' + logs.join(' | ');
                     setStatus(msg, 'ok');
                 }
 
@@ -8658,7 +8777,7 @@
                         voxels: JSON.parse(JSON.stringify(src.voxels || [])),
                         metadata: JSON.parse(JSON.stringify(src.metadata || {}))
                     };
-                    setStatus(typeof t === 'function' ? t('plugins.running') : 'Esecuzione…', null);
+                    setStatus(typeof t === 'function' ? t('plugins.running') : 'Esecuzioneâ¦', null);
                     runBtn.disabled = true;
                     const done = () => { runBtn.disabled = false; };
 
@@ -8709,17 +8828,17 @@
                 runBtn.addEventListener('click', run);
             })();
 
-            /* ===== WAVE3: Pannello Proprietà oggetto attivo (pannello destro) ======
-             * Mostra e modifica le proprietà dell'oggetto ATTIVO: nome, visibilità e
-             * transform (posizione X/Y/Z, rotazione Y a step di 90°, scala).
+            /* ===== WAVE3: Pannello ProprietÃ  oggetto attivo (pannello destro) ======
+             * Mostra e modifica le proprietÃ  dell'oggetto ATTIVO: nome, visibilitÃ  e
+             * transform (posizione X/Y/Z, rotazione Y a step di 90Â°, scala).
              *
-             * Nota architetturale importante: l'oggetto attivo è SEMPRE a transform
-             * identità (editing/raycast/gizmo/rig lavorano in coordinate voxel dirette).
-             * Perciò i campi transform qui rappresentano una trasformazione da APPLICARE
+             * Nota architetturale importante: l'oggetto attivo Ã¨ SEMPRE a transform
+             * identitÃ  (editing/raycast/gizmo/rig lavorano in coordinate voxel dirette).
+             * PerciÃ² i campi transform qui rappresentano una trasformazione da APPLICARE
              * (bake) all'oggetto: modificarli aggiorna obj.transform e su "Applica" viene
-             * cotto nei voxel (riuso bakeTransform), poi resettato a identità.
-             * Limite noto (già presente nel modello): coordinate intere → posizione/scala
-             * arrotondate e rotazione snappata al multiplo di 90° più vicino. */
+             * cotto nei voxel (riuso bakeTransform), poi resettato a identitÃ .
+             * Limite noto (giÃ  presente nel modello): coordinate intere â posizione/scala
+             * arrotondate e rotazione snappata al multiplo di 90Â° piÃ¹ vicino. */
             function renderProperties() {
                 const panel = document.getElementById('propertiesPanel');
                 if (!panel) return;
@@ -8752,14 +8871,14 @@
                         '<label style="flex:1; font-size:11px; color:var(--text-muted);">Z<input type="number" id="propPosZ" step="1" value="0" style="width:100%; padding:5px; font-size:12px;"></label>' +
                     '</div>' +
                     '<div class="control-row">' +
-                        '<label data-i18n="properties.rotation">Rotazione Y (90°)</label>' +
+                        '<label data-i18n="properties.rotation">Rotazione Y (90Â°)</label>' +
                         '<input type="number" id="propRotY" step="90" value="0" style="width:80px; padding:5px; font-size:12px;">' +
                     '</div>' +
                     '<div class="control-row">' +
                         '<label data-i18n="properties.scale">Scala</label>' +
                         '<input type="number" id="propScale" step="1" min="1" value="1" style="width:80px; padding:5px; font-size:12px;">' +
                     '</div>' +
-                    '<div class="screens-section-note" data-i18n="properties.liveNote">Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta nei voxel (coordinate intere, rotazione a 90°).</div>' +
+                    '<div class="screens-section-note" data-i18n="properties.liveNote">Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta nei voxel (coordinate intere, rotazione a 90Â°).</div>' +
                     '<div class="screens-section-note" style="text-align:center;">' + voxCount + ' voxel</div>';
 
                 // Popola i valori.
@@ -8773,12 +8892,12 @@
                 document.getElementById('propRotY').value = rotDeg;
                 document.getElementById('propScale').value = (t.scale === undefined) ? 1 : t.scale;
 
-                // Nome → applicazione immediata (aggiorna anche l'outliner).
+                // Nome â applicazione immediata (aggiorna anche l'outliner).
                 if (nameEl) nameEl.addEventListener('change', () => {
                     const v = nameEl.value.trim();
                     if (v) { obj.name = v; if (typeof renderObjectsList === 'function') renderObjectsList(); }
                 });
-                // Visibilità → immediata.
+                // VisibilitÃ  â immediata.
                 if (visEl) visEl.addEventListener('change', () => {
                     obj.visible = !!visEl.checked;
                     if (typeof buildModel === 'function') buildModel(false);
@@ -8786,7 +8905,7 @@
                 });
 
                 // Legge i valori correnti dei campi transform (grezzi, non arrotondati:
-                // l'anteprima live è fluida; l'arrotondamento avviene solo al bake).
+                // l'anteprima live Ã¨ fluida; l'arrotondamento avviene solo al bake).
                 function readFields() {
                     const px = parseFloat(document.getElementById('propPosX').value) || 0;
                     const py = parseFloat(document.getElementById('propPosY').value) || 0;
@@ -8799,20 +8918,20 @@
 
                 const posIds = ['propPosX', 'propPosY', 'propPosZ', 'propRotY', 'propScale'];
 
-                // input → anteprima LIVE (fluida, visiva, non distruttiva): la trasformazione
-                // è mostrata su modelPivot senza toccare i voxel (vedi setLiveTransform).
+                // input â anteprima LIVE (fluida, visiva, non distruttiva): la trasformazione
+                // Ã¨ mostrata su modelPivot senza toccare i voxel (vedi setLiveTransform).
                 posIds.forEach(id => {
                     const el = document.getElementById(id);
                     if (!el) return;
                     el.addEventListener('input', () => {
                         if (typeof setLiveTransform === 'function') setLiveTransform(readFields());
                     });
-                    // change (blur/invio) → COMMIT: cuoce la trasformazione nei voxel una
+                    // change (blur/invio) â COMMIT: cuoce la trasformazione nei voxel una
                     // sola volta, azzera l'anteprima e ricostruisce. Una voce di undo.
                     el.addEventListener('change', () => {
                         const t = readFields();
                         if (typeof clearLiveTransform === 'function') clearLiveTransform();
-                        // Niente da cuocere se è l'identità (evita voci di undo inutili).
+                        // Niente da cuocere se Ã¨ l'identitÃ  (evita voci di undo inutili).
                         if (typeof isIdentityTransform === 'function' && isIdentityTransform(
                             { position: { x: Math.round(t.position.x), y: Math.round(t.position.y), z: Math.round(t.position.z) },
                               rotationY: t.rotationY, scale: t.scale })) {
@@ -8835,7 +8954,7 @@
                 if (typeof applyI18n === 'function') applyI18n(panel);
             }
 
-            // Aggancia il render delle proprietà a ogni cambio di oggetto attivo, avvolgendo
+            // Aggancia il render delle proprietÃ  a ogni cambio di oggetto attivo, avvolgendo
             // le funzioni esistenti senza toccarle (04-objects.js resta invariato).
             (function hookProperties() {
                 if (typeof selectActiveObjectAndRefresh === 'function') {
@@ -8883,7 +9002,7 @@
                         menu.classList.toggle('open', willOpen);
                     });
                     // Un clic su una voce del menu lo richiude (i listener reali dei pulsanti
-                    // partono comunque perché sono attaccati per id).
+                    // partono comunque perchÃ© sono attaccati per id).
                     menu.querySelectorAll('.menu-item').forEach(item => {
                         item.addEventListener('click', () => menu.classList.remove('open'));
                     });
@@ -9010,7 +9129,7 @@
                     colorInput.addEventListener('input', () => set(colorInput.value));
                 }
 
-                // Stato iniziale dal valore già applicato da initAccent() (17-theme.js).
+                // Stato iniziale dal valore giÃ  applicato da initAccent() (17-theme.js).
                 let cur = '#475569';
                 try { cur = localStorage.getItem('voxelai-accent') || cur; } catch (e) { }
                 sync(cur);
@@ -9040,7 +9159,7 @@
                 });
                 window.addEventListener('mousemove', (e) => {
                     if (!dragging) return;
-                    // Il pannello è ancorato a destra: la larghezza cresce verso sinistra.
+                    // Il pannello Ã¨ ancorato a destra: la larghezza cresce verso sinistra.
                     const w = Math.max(260, Math.min(window.innerWidth - 50, window.innerWidth - e.clientX));
                     document.documentElement.style.setProperty('--rightpanel-width', w + 'px');
                     if (typeof resizeCanvas === 'function') resizeCanvas();
@@ -9348,7 +9467,7 @@
                     const s = document.createElement('div');
                     s.className = 'swatch';
                     s.style.backgroundColor = c;
-                    s.title = c + ' — clic per usarlo come colore attivo';
+                    s.title = c + ' â clic per usarlo come colore attivo';
                     s.addEventListener('click', () => setActiveColor(c));
                     paletteEl.appendChild(s);
                 });
@@ -9527,6 +9646,7 @@
             const packGridSelect = document.getElementById('packGridSelect');
             const packEnforcePalette = document.getElementById('packEnforcePalette');
             const packModular = document.getElementById('packModular');
+            const packModularHint = document.getElementById('packModularHint');
             const packEstimate = document.getElementById('packEstimate');
             const packStartBtn = document.getElementById('packStartBtn');
             const packCancelBtn = document.getElementById('packCancelBtn');
@@ -9538,6 +9658,8 @@
             const packCoherence = document.getElementById('packCoherence');
             const packLoadAllBtn = document.getElementById('packLoadAllBtn');
             const packExportAllBtn = document.getElementById('packExportAllBtn');
+            const packExportFormat = document.getElementById('packExportFormat');
+            const packExportVox = document.getElementById('packExportVox');
             const genModeSwitch = document.getElementById('genModeSwitch');
             const genModeSingle = document.getElementById('genModeSingle');
             const genModePack = document.getElementById('genModePack');
@@ -9556,6 +9678,7 @@
             // nella lista non va ridisegnato (vedi F5 in packRenderStatus).
             function packJobStateKey(job) {
                 return [job.status, job.duration || '', job.error || '',
+                        (job.modular ? (job.modular.ok ? 'M1' : 'M0') : ''),
                         job.id === packActiveJobId ? 'A' : ''].join('~');
             }
 
@@ -9610,7 +9733,7 @@
                 const del = document.createElement('button');
                 del.className = 'pack-row-btn danger';
                 del.type = 'button';
-                del.textContent = '−';
+                del.textContent = 'â';
                 del.title = (typeof t === 'function') ? t('pack.removeObjTitle') : 'Rimuovi questo oggetto';
                 del.addEventListener('click', () => {
                     row.remove();
@@ -9644,6 +9767,20 @@
             }
 
             if (packAddObjBtn) packAddObjBtn.addEventListener('click', () => packAddObjectRow());
+
+            // Blocchi modulari: mostra la spiegazione e propone una griglia da tile.
+            // Griglie enormi per un blocco che si ripete sono sprecate: 32 e' il
+            // classico formato dei tileset voxel.
+            if (packModular) {
+                packModular.addEventListener('change', () => {
+                    const on = packModular.checked;
+                    if (packModularHint) packModularHint.style.display = on ? '' : 'none';
+                    if (on && packGridSelect) {
+                        const cur = packGridSelect.value;
+                        if (cur === 'auto' || parseInt(cur, 10) > 64) packGridSelect.value = '32x32x32';
+                    }
+                });
+            }
 
             // --- Riferimenti di stile -------------------------------------------
             if (packAddRefBtn && packRefInput) {
@@ -9683,7 +9820,7 @@
                     label.title = ref.name;
                     const rm = document.createElement('button');
                     rm.type = 'button';
-                    rm.textContent = '×';
+                    rm.textContent = 'Ã';
                     rm.addEventListener('click', () => {
                         packReferences.splice(idx, 1);
                         packRenderRefs();
@@ -9697,7 +9834,7 @@
                         ? ((typeof t === 'function') ? t('pack.refsHintLoaded', { n: packReferences.length })
                             : `${packReferences.length} riferimento(i): palette e stile verranno estratti da questi file.`)
                         : ((typeof t === 'function') ? t('pack.refsHint')
-                            : 'Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.');
+                            : 'Nessun riferimento: lo stile del primo asset generato guiderÃ  tutti gli altri.');
                 }
             }
 
@@ -9713,7 +9850,7 @@
                 const mins = Math.max(1, Math.round(total * 45 / 60));
                 packEstimate.textContent = (typeof t === 'function')
                     ? t('pack.estimate', { total: total, mins: mins })
-                    : `${total} asset da generare — circa ${mins} minuti (uno alla volta, per non farsi limitare dall'API).`;
+                    : `${total} asset da generare â circa ${mins} minuti (uno alla volta, per non farsi limitare dall'API).`;
             }
             if (packVariants) packVariants.addEventListener('change', packUpdateEstimate);
 
@@ -9745,7 +9882,7 @@
                     if (total > 12) {
                         const msg = (typeof t === 'function')
                             ? t('pack.confirmBig', { total: total })
-                            : `Stai per generare ${total} asset. Può richiedere molto tempo. Procedere?`;
+                            : `Stai per generare ${total} asset. PuÃ² richiedere molto tempo. Procedere?`;
                         if (!confirm(msg)) return;
                     }
 
@@ -9763,7 +9900,7 @@
                                 references: packReferences.map(r => r.data),
                                 model: packModelSelect ? packModelSelect.value : null,
                                 gridSize: packGridSelect ? packGridSelect.value : 'auto',
-                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true,
+                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : false,
                                 modular: packModular ? packModular.checked : false
                             })
                         });
@@ -9789,7 +9926,7 @@
                 packCancelBtn.addEventListener('click', async () => {
                     if (!packRunId) return;
                     if (!confirm((typeof t === 'function') ? t('pack.confirmCancel')
-                        : 'Annullare il pack? Gli asset già pronti restano disponibili.')) return;
+                        : 'Annullare il pack? Gli asset giÃ  pronti restano disponibili.')) return;
                     try {
                         const res = await fetch(packApi('/api/pack/cancel'), {
                             method: 'POST',
@@ -9884,14 +10021,14 @@
                 }
                 if (packProgressText) {
                     let txt = `${done}/${total}`;
-                    if (c.running) txt += ' · ' + ((typeof t === 'function') ? t('pack.inProgress') : 'in corso');
-                    if (errs) txt += ` · ${errs} ` + ((typeof t === 'function') ? t('pack.errors') : 'errori');
+                    if (c.running) txt += ' Â· ' + ((typeof t === 'function') ? t('pack.inProgress') : 'in corso');
+                    if (errs) txt += ` Â· ${errs} ` + ((typeof t === 'function') ? t('pack.errors') : 'errori');
                     if (run.etaSeconds != null && run.etaSeconds > 0 && run.status === 'running') {
                         const m = Math.ceil(run.etaSeconds / 60);
-                        txt += ' · ~' + m + ((typeof t === 'function') ? t('pack.minShort') : ' min');
+                        txt += ' Â· ~' + m + ((typeof t === 'function') ? t('pack.minShort') : ' min');
                     }
                     if (run.status === 'cancelled') {
-                        txt += ' · ' + ((typeof t === 'function') ? t('pack.cancelled') : 'annullato');
+                        txt += ' Â· ' + ((typeof t === 'function') ? t('pack.cancelled') : 'annullato');
                     }
                     packProgressText.textContent = txt;
                 }
@@ -9973,22 +10110,34 @@
 
                 const meta = document.createElement('span');
                 meta.className = 'pack-item-meta';
-                if (job.status === 'done') meta.textContent = job.duration ? Math.round(job.duration) + 's' : '✓';
+                if (job.status === 'done') meta.textContent = job.duration ? Math.round(job.duration) + 's' : 'â';
                 else if (job.status === 'error') meta.textContent = '!';
-                else if (job.status === 'running') meta.textContent = '…';
-                else if (job.status === 'cancelled') meta.textContent = '–';
-                else meta.textContent = '·';
+                else if (job.status === 'running') meta.textContent = 'â¦';
+                else if (job.status === 'cancelled') meta.textContent = 'â';
+                else meta.textContent = 'Â·';
                 btn.appendChild(meta);
 
+                // Blocchi modulari: se la verifica ha trovato problemi, segnalalo
+                // sull'elemento stesso. Scoprire nel level builder che un tile non
+                // combacia e' molto peggio che leggerlo qui.
+                if (job.modular && !job.modular.ok && job.status === 'done') {
+                    btn.classList.add('is-warn');
+                    meta.textContent = '!';
+                    meta.style.color = 'var(--danger)';
+                }
+
                 if (job.status === 'done') {
-                    btn.title = (typeof t === 'function') ? t('pack.clickToView')
-                        : 'Clicca per vedere questo modello nella griglia';
+                    const warn = (job.modular && !job.modular.ok)
+                        ? ('\n\nATTENZIONE modularita:\n- ' + (job.modular.issues || []).join('\n- '))
+                        : '';
+                    btn.title = ((typeof t === 'function') ? t('pack.clickToView')
+                        : 'Clicca per vedere questo modello nella griglia') + warn;
                     btn.addEventListener('click', () => packLoadJob(job.id));
                 } else if (job.status === 'error') {
-                    btn.title = (job.error || '') + ' — ' + ((typeof t === 'function') ? t('pack.clickToRetry') : 'clicca per riprovare');
+                    btn.title = (job.error || '') + ' â ' + ((typeof t === 'function') ? t('pack.clickToRetry') : 'clicca per riprovare');
                     btn.addEventListener('click', () => packRetryJob(job.id));
                 } else {
-                    btn.title = job.label + ' — ' + job.status;
+                    btn.title = job.label + ' â ' + job.status;
                 }
                 return btn;
             }
@@ -10131,51 +10280,93 @@
                             if (rr.ok) report = await rr.json();
                         } catch (e) { /* il report e' un extra */ }
 
+                        // Formato scelto dall'utente. Il JSON viene SEMPRE incluso in
+                        // ogni caso: e' il formato nativo, l'unico ricaricabile
+                        // nell'app senza perdere palette, ops e metadati.
+                        const fmt = packExportFormat ? packExportFormat.value : 'glb';
+                        const wantGlb = (fmt === 'glb' || fmt === 'both');
+                        const wantObj = (fmt === 'obj' || fmt === 'both');
+                        const wantVox = packExportVox ? packExportVox.checked : true;
+
                         const files = [];
                         const manifest = {
                             format: 'voxelai-pack',
                             version: 1,
                             generatedAt: new Date().toISOString(),
                             assetCount: data.count,
+                            formats: { json: true, glb: wantGlb, obj: wantObj, vox: wantVox },
                             assets: [],
                             coherence: report || undefined
                         };
 
-                        data.assets.forEach(a => {
+                        const failures = [];
+                        // for..of (non forEach): il GLB e' asincrono e va atteso.
+                        // Gli asset si esportano in SEQUENZA per non tenere in memoria
+                        // N mesh temporanei contemporaneamente.
+                        let done = 0;
+                        for (const a of data.assets) {
                             const model = a.model || {};
-                            const voxels = (typeof expandOps === 'function')
-                                ? (expandOps(JSON.parse(JSON.stringify(model))).voxels || [])
-                                : (model.voxels || []);
+                            const expanded = (typeof expandOps === 'function')
+                                ? expandOps(JSON.parse(JSON.stringify(model)))
+                                : model;
+                            const voxels = (expanded && expanded.voxels) || model.voxels || [];
                             const dir = a.label + '/';
+
+                            // Avanzamento: un pack da 15 asset con GLB richiede qualche
+                            // secondo, meglio dirlo che sembrare bloccati.
+                            done++;
+                            packExportAllBtn.textContent = ((typeof t === 'function')
+                                ? t('pack.exporting') : 'Preparazione ZIP...') + ' ' + done + '/' + data.assets.length;
 
                             files.push({ name: dir + a.label + '.json', data: JSON.stringify(model, null, 2) });
 
                             // .vox per MagicaVoxel: lo standard de-facto del mondo voxel
-                            try {
-                                if (typeof encodeVox === 'function' && voxels.length) {
-                                    files.push({ name: dir + a.label + '.vox', data: encodeVox(voxels) });
-                                }
-                            } catch (e) { /* un formato in meno, non un export fallito */ }
+                            if (wantVox) {
+                                try {
+                                    if (typeof encodeVox === 'function' && voxels.length) {
+                                        files.push({ name: dir + a.label + '.vox', data: encodeVox(voxels) });
+                                    }
+                                } catch (e) { failures.push(a.label + ' (.vox)'); }
+                            }
 
-                            // OBJ + MTL (Blender e qualunque altro DCC)
-                            try {
-                                if (typeof buildObjText === 'function' && voxels.length) {
-                                    files.push({ name: dir + a.label + '.obj', data: buildObjText(a.label + '.mtl', voxels) });
-                                    files.push({ name: dir + a.label + '.mtl', data: buildMtlText(voxels) });
-                                }
-                            } catch (e) { /* idem */ }
+                            // OBJ + MTL: sempre in coppia, il .mtl porta i colori.
+                            if (wantObj) {
+                                try {
+                                    if (typeof buildObjText === 'function' && voxels.length) {
+                                        files.push({ name: dir + a.label + '.obj', data: buildObjText(a.label + '.mtl', voxels) });
+                                        files.push({ name: dir + a.label + '.mtl', data: buildMtlText(voxels) });
+                                    }
+                                } catch (e) { failures.push(a.label + ' (.obj)'); }
+                            }
+
+                            // GLB: asincrono, va atteso asset per asset.
+                            if (wantGlb && voxels.length && typeof buildGlbForModel === 'function') {
+                                try {
+                                    const bytes = await buildGlbForModel(expanded);
+                                    if (bytes && bytes.length) {
+                                        files.push({ name: dir + a.label + '.glb', data: bytes });
+                                    }
+                                } catch (e) { failures.push(a.label + ' (.glb)'); }
+                            }
 
                             manifest.assets.push({
                                 label: a.label, object: a.objectName, variant: a.variant,
                                 voxels: voxels.length,
                                 gridSize: (model.metadata && model.metadata.grid_size) || null
                             });
-                        });
+                        }
+                        if (failures.length) manifest.exportWarnings = failures;
 
                         files.push({ name: 'pack.json', data: JSON.stringify(manifest, null, 2) });
 
                         const stamp = new Date().toISOString().slice(0, 10);
                         downloadBlob(createZipBlob(files), 'VoxelAI_Pack_' + stamp + '.zip');
+                        // Uno ZIP a cui manca un formato deve dirlo: scoprirlo dopo,
+                        // aprendo l'archivio, e' peggio.
+                        if (failures.length) {
+                            alert(((typeof t === 'function') ? t('pack.exportPartial')
+                                : 'Alcuni formati non sono stati generati: ') + failures.join(', '));
+                        }
                     } catch (err) {
                         alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore: ') + err.message);
                     } finally {
@@ -10212,25 +10403,69 @@
 
 /**
  * VoxelAIArtist - Importazione e Voxelizzazione GLB/GLTF
- * Utilizza THREE.Raycaster per scansionare il modello su 3 assi ortogonali,
- * ricavando il guscio esterno (shell) e campionando i colori dalle texture.
+ *
+ * PERCHE' NON SI USA PIU' IL RAYCASTING
+ * -------------------------------------
+ * La versione precedente lanciava raggi dai 6 lati della bounding box e
+ * convertiva ogni `hit.point` in una coordinata voxel. Sul modello di prova ha
+ * prodotto voxel con X da -940 a 1003 e Y fino a 6192 su una griglia dichiarata
+ * 63x64x29: ZERO voxel dentro la griglia, quindi la vista appariva vuota pur
+ * mostrando palette e conteggio corretti.
+ *
+ * Le cause, tutte intrinseche all'approccio a raggi in three r128:
+ *
+ *  1. `Box3.setFromObject()` chiama `computeBoundingBox()`, che include TUTTI i
+ *     morph target (ogni fotogramma di ogni blend shape). Su un modello con
+ *     morph la box usata per calcolare la scala e' enormemente piu' grande del
+ *     modello visibile: la scala nasce gia' sbagliata.
+ *  2. `intersectObject(scene, true)` colpisce QUALUNQUE oggetto: Line, Points,
+ *     Sprite, helper degli scheletri. Per una Line il punto restituito e' quello
+ *     piu' vicino SUL RAGGIO (non sul segmento), con soglia di 1 unita' di
+ *     mondo: puo' cadere ovunque lungo la direzione del raggio.
+ *  3. Per una SkinnedMesh, `Mesh.raycast()` in r128 usa la geometria in posa di
+ *     riposo mentre la bounding box e' quella trasformata: i due non concordano.
+ *
+ * Nessuno si risolve con un filtro: il raggio e' lo strumento sbagliato. Qui si
+ * rasterizzano direttamente i TRIANGOLI, come farebbe una GPU.
+ *
+ * COME FUNZIONA ORA
+ * -----------------
+ *  1. Raccoglie solo i nodi `isMesh` (Line/Points/Sprite esclusi per costruzione).
+ *  2. Calcola la bounding box dai VERTICI REALI trasformati in world space,
+ *     senza morph target: e' la box di cio' che si vede davvero.
+ *  3. Per ogni triangolo campiona la superficie e riempie le celle, prendendo il
+ *     colore da texture (UV baricentriche) / vertex color / materiale.
+ *  4. Opzionalmente riempie l'interno con un flood fill dall'esterno.
+ *  5. Riduce la palette a un numero gestibile di colori (median cut).
+ *
+ * Le coordinate sono clampate alla griglia per costruzione: e' impossibile che
+ * un voxel finisca fuori, qualunque cosa contenga il file.
  */
 
-window.importGlbFormat = function (file) {
+/**
+ * Punto d'ingresso: legge un file GLB/GLTF e ne restituisce il modello voxel.
+ * `options` = { maxGridSize, fillInterior, maxColors }
+ */
+window.importGlbFormat = function (file, options) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = function (e) {
             const buffer = e.target.result;
-            const loader = new THREE.GLTFLoader();
+            let loader;
+            try {
+                loader = new THREE.GLTFLoader();
+            } catch (err) {
+                reject(new Error("GLTFLoader non disponibile: " + err.message));
+                return;
+            }
             loader.parse(buffer, '', async (gltf) => {
                 try {
-                    const result = await voxelizeScene(gltf.scene);
-                    resolve(result);
+                    resolve(await voxelizeScene(gltf.scene, options));
                 } catch (err) {
                     reject(err);
                 }
             }, (err) => {
-                reject(new Error("Errore nel parsing del GLB: " + err.message));
+                reject(new Error("Errore nel parsing del GLB: " + ((err && err.message) || err)));
             });
         };
         reader.onerror = () => reject(new Error("Impossibile leggere il file"));
@@ -10238,190 +10473,478 @@ window.importGlbFormat = function (file) {
     });
 };
 
-async function voxelizeScene(gltfScene, maxGridSize = 64) {
+// ---------------------------------------------------------------------------
+// Campionamento colori da texture
+// ---------------------------------------------------------------------------
+
+function makeTextureSampler() {
+    const cache = new Map();
+
+    function canvasFor(map) {
+        if (cache.has(map.uuid)) return cache.get(map.uuid);
+        let entry = null;
+        try {
+            const img = map.image;
+            const w = img && (img.width || img.videoWidth);
+            const h = img && (img.height || img.videoHeight);
+            if (w && h) {
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, w, h);
+                    // Legge l'intera immagine UNA volta sola: una getImageData per
+                    // ogni voxel sarebbe un trasferimento GPU->CPU per campione.
+                    entry = {
+                        data: ctx.getImageData(0, 0, w, h).data,
+                        w: w, h: h, flipY: map.flipY !== false
+                    };
+                }
+            }
+        } catch (e) {
+            entry = null;   // texture cross-origin o non decodificabile
+        }
+        cache.set(map.uuid, entry);
+        return entry;
+    }
+
+    /** Colore [r,g,b] in 0..1 alle coordinate UV, oppure null. */
+    return function sample(map, u, v) {
+        if (!map) return null;
+        const tex = canvasFor(map);
+        if (!tex) return null;
+        // Ripetizione: porta le UV in [0,1) come il wrapping della GPU.
+        let tu = u - Math.floor(u);
+        let tv = v - Math.floor(v);
+        if (tex.flipY) tv = 1 - tv;
+        let px = Math.floor(tu * tex.w);
+        let py = Math.floor(tv * tex.h);
+        if (px < 0) px = 0; if (px >= tex.w) px = tex.w - 1;
+        if (py < 0) py = 0; if (py >= tex.h) py = tex.h - 1;
+        const i = (py * tex.w + px) * 4;
+        if (tex.data[i + 3] < 16) return null;   // pixel trasparente
+        return [tex.data[i] / 255, tex.data[i + 1] / 255, tex.data[i + 2] / 255];
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Riduzione della palette (median cut)
+// ---------------------------------------------------------------------------
+
+/**
+ * Voxelizzare una mesh con texture produce centinaia di colori quasi identici
+ * (un caso reale: 226 colori per 8392 voxel), inutilizzabili come palette voxel.
+ * Il median cut divide ripetutamente l'insieme lungo il canale con la variazione
+ * maggiore e usa la media pesata di ogni gruppo: e' l'algoritmo classico della
+ * quantizzazione, molto piu' fedele di un arrotondamento dei bit.
+ *
+ * `counts` = Map("r,g,b" -> occorrenze). Ritorna Map(colore_orig -> [r,g,b]).
+ */
+function reducePalette(counts, maxColors) {
+    const entries = [];
+    counts.forEach((n, key) => {
+        const p = key.split(',');
+        entries.push({ r: +p[0], g: +p[1], b: +p[2], n: n, key: key });
+    });
+    if (entries.length <= maxColors) {
+        const same = new Map();
+        entries.forEach(e => same.set(e.key, [e.r, e.g, e.b]));
+        return same;
+    }
+
+    let buckets = [entries];
+    while (buckets.length < maxColors) {
+        // Divide il gruppo con l'estensione cromatica maggiore: e' quello che
+        // introdurrebbe l'errore piu' grande se lasciato intero.
+        let target = -1, bestSpread = -1, bestChan = 0;
+        for (let i = 0; i < buckets.length; i++) {
+            const b = buckets[i];
+            if (b.length < 2) continue;
+            for (let c = 0; c < 3; c++) {
+                const ch = c === 0 ? 'r' : (c === 1 ? 'g' : 'b');
+                let lo = 255, hi = 0;
+                for (const e of b) { if (e[ch] < lo) lo = e[ch]; if (e[ch] > hi) hi = e[ch]; }
+                const spread = hi - lo;
+                if (spread > bestSpread) { bestSpread = spread; target = i; bestChan = c; }
+            }
+        }
+        if (target < 0 || bestSpread <= 0) break;   // non e' piu' divisibile
+        const ch = bestChan === 0 ? 'r' : (bestChan === 1 ? 'g' : 'b');
+        const b = buckets[target].slice().sort((x, y) => x[ch] - y[ch]);
+        const mid = Math.floor(b.length / 2);
+        buckets.splice(target, 1, b.slice(0, mid), b.slice(mid));
+    }
+
+    // Ogni gruppo diventa la sua media pesata sul numero di voxel: i colori
+    // dominanti tirano il rappresentante verso di se'.
+    const map = new Map();
+    for (const b of buckets) {
+        let sr = 0, sg = 0, sb = 0, sn = 0;
+        for (const e of b) { sr += e.r * e.n; sg += e.g * e.n; sb += e.b * e.n; sn += e.n; }
+        if (!sn) continue;
+        const rep = [Math.round(sr / sn), Math.round(sg / sn), Math.round(sb / sn)];
+        for (const e of b) map.set(e.key, rep);
+    }
+    return map;
+}
+
+function rgbToHexStr(r, g, b) {
+    const h = n => {
+        const s = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+        return s.length === 1 ? '0' + s : s;
+    };
+    return ('#' + h(r) + h(g) + h(b)).toUpperCase();
+}
+
+// Chiavi palette corte e sempre valide: a..z, poi a1, b1, ...
+function paletteKeyFor(n) {
+    const letter = String.fromCharCode(97 + (n % 26));
+    const round = Math.floor(n / 26);
+    return round ? letter + round : letter;
+}
+
+// ---------------------------------------------------------------------------
+// Voxelizzazione
+// ---------------------------------------------------------------------------
+
+async function voxelizeScene(gltfScene, options) {
+    options = options || {};
+    const maxGridSize = Math.max(8, Math.min(256, options.maxGridSize || 64));
+    const fillInterior = options.fillInterior !== false;   // default: pieno
+    const maxColors = Math.max(2, Math.min(256, options.maxColors || 64));
+
     const overlay = document.getElementById('importOverlay');
     const progBar = document.getElementById('importProgressBar');
     const progText = document.getElementById('importProgressText');
-    
+    const setProg = (pct, txt) => {
+        if (progBar) progBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        if (progText && txt) progText.textContent = txt;
+    };
+    const breathe = () => new Promise(r => setTimeout(r, 0));
+
     if (overlay) overlay.style.display = 'flex';
-    if (progBar) progBar.style.width = '0%';
-    if (progText) progText.textContent = 'Calcolo dimensioni...';
+    setProg(0, 'Analisi del modello...');
 
     try {
-        // Permette alla UI di aggiornarsi
-        await new Promise(r => setTimeout(r, 10));
-
-        // Forziamo DoubleSide su tutti i materiali e aggiorniamo la matrice PRIMA di calcolare la Bounding Box
-        gltfScene.traverse(child => {
-            if (child.isMesh && child.material) {
-                if (Array.isArray(child.material)) {
-                    child.material.forEach(m => { if (m) m.side = THREE.DoubleSide; });
-                } else {
-                    child.material.side = THREE.DoubleSide;
-                }
-            }
-        });
+        await breathe();
         gltfScene.updateMatrixWorld(true);
 
-        // 1. Calcola la Bounding Box totale
-        const box = new THREE.Box3().setFromObject(gltfScene);
-        if (box.isEmpty()) {
-            throw new Error("Il modello GLB è vuoto");
-        }
+        // --- 1. Raccogli SOLO le mesh -------------------------------------
+        // Line, Points, Sprite e Bone sono esclusi per costruzione: erano una
+        // delle sorgenti di punti fuori scala nella versione a raggi.
+        const meshes = [];
+        gltfScene.traverse(o => {
+            if (o.isMesh && o.geometry && o.geometry.attributes && o.geometry.attributes.position) {
+                meshes.push(o);
+            }
+        });
+        if (!meshes.length) throw new Error("Il modello non contiene mesh visibili.");
 
-        const size = new THREE.Vector3();
-        box.getSize(size);
+        // --- 2. Triangoli in world space ----------------------------------
+        // I vertici vengono dagli attributi REALI (niente morph target, che
+        // gonfiavano la bounding box) e sono trasformati con matrixWorld.
+        const tris = [];
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;   // riassegnati in 2b
+        const tmp = new THREE.Vector3();
 
-        // 2. Determina la scala per far stare il modello nella griglia massima
-        const maxDim = Math.max(size.x, size.y, size.z);
-        if (maxDim === 0) {
-            throw new Error("Il modello ha dimensione 0");
-        }
+        for (const mesh of meshes) {
+            const geo = mesh.geometry;
+            const pos = geo.attributes.position;
+            const uvAttr = geo.attributes.uv;
+            const colAttr = geo.attributes.color;
+            const index = geo.index;
+            const count = index ? index.count : pos.count;
+            const isSkinned = !!(mesh.isSkinnedMesh && typeof mesh.boneTransform === 'function');
 
-        const scale = (maxGridSize - 2) / maxDim; // Margine di 1 voxel per lato
-        const W = Math.ceil(size.x * scale) + 2;
-        const H = Math.ceil(size.y * scale) + 2;
-        const D = Math.ceil(size.z * scale) + 2;
-
-        function worldToVoxel(pt) {
-            const vx = Math.round((pt.x - box.min.x) * scale) + 1;
-            const vy = Math.round((pt.y - box.min.y) * scale) + 1;
-            const vz = Math.round((pt.z - box.min.z) * scale) + 1;
-            return { x: vx, y: vy, z: vz };
-        }
-
-        // 3. Sistema di caching per il campionamento Texture
-        const textureCanvasCache = new Map();
-
-        function getTexturePixel(map, u, v) {
-            if (!map || !map.image) return null;
-            if (!textureCanvasCache.has(map.uuid)) {
-                const img = map.image;
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                if (ctx) {
-                    if (map.flipY) {
-                        ctx.translate(0, img.height);
-                        ctx.scale(1, -1);
-                    }
-                    ctx.drawImage(img, 0, 0);
-                    textureCanvasCache.set(map.uuid, { ctx, w: img.width, h: img.height });
-                } else {
-                    textureCanvasCache.set(map.uuid, null);
+            // Cache dei vertici trasformati: un vertice e' condiviso da piu'
+            // triangoli, ritrasformarlo ogni volta e' spreco puro.
+            const cacheV = new Map();
+            const worldVertex = (i) => {
+                let v = cacheV.get(i);
+                if (v) return v;
+                tmp.fromBufferAttribute(pos, i);
+                if (isSkinned) {
+                    try { mesh.boneTransform(i, tmp); } catch (e) { /* resta la posa di riposo */ }
                 }
-            }
-            const cache = textureCanvasCache.get(map.uuid);
-            if (!cache) return null;
-            let tx = u;
-            let ty = map.flipY ? v : (1.0 - v);
-            tx = tx - Math.floor(tx);
-            ty = ty - Math.floor(ty);
-            if (tx < 0) tx += 1;
-            if (ty < 0) ty += 1;
-            const px = Math.floor(tx * cache.w);
-            const py = Math.floor(ty * cache.h);
-            try {
-                const pixel = cache.ctx.getImageData(px, py, 1, 1).data;
-                if (pixel[3] < 10) return null;
-                return new THREE.Color(pixel[0]/255, pixel[1]/255, pixel[2]/255);
-            } catch(e) {
-                return null;
-            }
-        }
+                tmp.applyMatrix4(mesh.matrixWorld);
+                v = { x: tmp.x, y: tmp.y, z: tmp.z };
+                cacheV.set(i, v);
+                if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+                if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+                if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+                return v;
+            };
 
-        function sampleColor(intersect) {
-            let color = new THREE.Color(0x888888);
-            const mat = intersect.object.material;
-            if (mat) {
-                const m = Array.isArray(mat) ? mat[intersect.face?.materialIndex || 0] : mat;
-                if (m) {
-                    if (m.color) color.copy(m.color);
-                    if (m.map && intersect.uv) {
-                        const texColor = getTexturePixel(m.map, intersect.uv.x, intersect.uv.y);
-                        if (texColor) color.copy(texColor);
+            // Materiale per gruppo (multi-material): serve a sapere quale texture
+            // usare per ciascun triangolo.
+            const groups = (geo.groups && geo.groups.length) ? geo.groups : null;
+            const matFor = (triStart) => {
+                const mm = mesh.material;
+                if (!groups) return Array.isArray(mm) ? mm[0] : mm;
+                for (const g of groups) {
+                    if (triStart >= g.start && triStart < g.start + g.count) {
+                        return Array.isArray(mm) ? mm[g.materialIndex] : mm;
                     }
                 }
+                return Array.isArray(mm) ? mm[0] : mm;
+            };
+
+            for (let i = 0; i + 2 < count; i += 3) {
+                const a = index ? index.getX(i) : i;
+                const b = index ? index.getX(i + 1) : i + 1;
+                const c = index ? index.getX(i + 2) : i + 2;
+                const tri = {
+                    a: worldVertex(a), b: worldVertex(b), c: worldVertex(c),
+                    mat: matFor(i)
+                };
+                if (uvAttr) {
+                    tri.uv = [
+                        [uvAttr.getX(a), uvAttr.getY(a)],
+                        [uvAttr.getX(b), uvAttr.getY(b)],
+                        [uvAttr.getX(c), uvAttr.getY(c)]
+                    ];
+                }
+                if (colAttr) {
+                    tri.vc = [
+                        [colAttr.getX(a), colAttr.getY(a), colAttr.getZ(a)],
+                        [colAttr.getX(b), colAttr.getY(b), colAttr.getZ(b)],
+                        [colAttr.getX(c), colAttr.getY(c), colAttr.getZ(c)]
+                    ];
+                }
+                tris.push(tri);
             }
-            return '#' + color.getHexString();
         }
 
-        const voxelSet = new Map();
-        const raycaster = new THREE.Raycaster();
+        if (!tris.length) throw new Error("Nessun triangolo trovato nel modello.");
 
-        // 4. Raycasting lungo i 3 assi ortogonali (async chunks)
-        const step = 1.0 / scale;
-        
-        // Calcoliamo i passi totali stimati per la progress bar
-        const stepsX = Math.ceil((box.max.x - box.min.x) / step);
-        const stepsY = Math.ceil((box.max.y - box.min.y) / step);
-        const stepsZ = Math.ceil((box.max.z - box.min.z) / step);
-        const totalRays = (stepsX * stepsZ) * 2 + (stepsX * stepsY) * 2 + (stepsY * stepsZ) * 2;
-        let raysProcessed = 0;
-
-        async function castRaysAsync(axis1, axis2, rayDir, min1, max1, min2, max2, rayOriginBase, name) {
-            if (progText) progText.textContent = `Scansione ${name}...`;
-            let countSinceYield = 0;
-            for (let a = min1; a <= max1; a += step) {
-                for (let b = min2; b <= max2; b += step) {
-                    const origin = new THREE.Vector3();
-                    origin[axis1] = a;
-                    origin[axis2] = b;
-                    origin[rayDir.axis] = rayOriginBase;
-                    
-                    raycaster.set(origin, rayDir.vec);
-                    const hits = raycaster.intersectObject(gltfScene, true);
-                    
-                    for (let hit of hits) {
-                        const v = worldToVoxel(hit.point);
-                        const key = `${v.x},${v.y},${v.z}`;
-                        if (!voxelSet.has(key)) {
-                            voxelSet.set(key, sampleColor(hit));
+        // --- 2b. Scarta i nodi ISOLATI lontanissimi -----------------------
+        // Molti GLB contengono nodi sperduti (helper, riferimenti, pezzi
+        // dimenticati a migliaia di unita' dall'origine). Se entrano nella
+        // bounding box, la griglia finisce per inquadrare lo spazio VUOTO fra il
+        // modello e quel nodo: il modello reale si riduce a due voxel.
+        // Criterio: si tiene il gruppo di triangoli attorno alla MEDIANA, e si
+        // scartano quelli oltre 8 volte la dimensione mediana dell'insieme.
+        // La mediana e' robusta: pochi outlier non la spostano.
+        if (tris.length > 8) {
+            const cx = [], cy = [], cz = [];
+            for (const t of tris) {
+                cx.push((t.a.x + t.b.x + t.c.x) / 3);
+                cy.push((t.a.y + t.b.y + t.c.y) / 3);
+                cz.push((t.a.z + t.b.z + t.c.z) / 3);
+            }
+            const med = (arr) => { const s2 = arr.slice().sort((p, q) => p - q); return s2[s2.length >> 1]; };
+            const mx = med(cx), my = med(cy), mz = med(cz);
+            // Scala di riferimento: distanza mediana dal centro (non il massimo,
+            // che sarebbe dettato proprio dall'outlier che vogliamo escludere).
+            const dists = [];
+            for (let i = 0; i < tris.length; i++) {
+                dists.push(Math.abs(cx[i] - mx) + Math.abs(cy[i] - my) + Math.abs(cz[i] - mz));
+            }
+            const medDist = med(dists);
+            if (medDist > 0) {
+                const limit = medDist * 8;
+                const kept = [];
+                for (let i = 0; i < tris.length; i++) {
+                    if (dists[i] <= limit) kept.push(tris[i]);
+                }
+                // Si applica solo se resta la stragrande maggioranza del modello:
+                // se scartasse meta' della mesh, il criterio non e' affidabile.
+                if (kept.length >= tris.length * 0.8 && kept.length < tris.length) {
+                    console.warn('[import-glb] scartati ' + (tris.length - kept.length) +
+                        ' triangoli isolati lontani dal modello');
+                    tris.length = 0;
+                    Array.prototype.push.apply(tris, kept);
+                    // Ricalcola la bounding box sui soli triangoli tenuti.
+                    minX = minY = minZ = Infinity;
+                    maxX = maxY = maxZ = -Infinity;
+                    for (const t of tris) {
+                        for (const v of [t.a, t.b, t.c]) {
+                            if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+                            if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+                            if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
                         }
                     }
-                    raysProcessed++;
-                    countSinceYield++;
-                    if (countSinceYield > 100) { // Yield ogni 100 raggi (bilanciamento UI / velocità)
-                        countSinceYield = 0;
-                        if (progBar) progBar.style.width = Math.min(100, Math.round((raysProcessed / totalRays) * 100)) + '%';
-                        await new Promise(r => setTimeout(r, 0));
-                    }
                 }
             }
         }
 
-        await castRaysAsync('x', 'z', { axis: 'y', vec: new THREE.Vector3(0, -1, 0) }, box.min.x, box.max.x, box.min.z, box.max.z, box.max.y + step, 'Dall\'alto');
-        await castRaysAsync('x', 'y', { axis: 'z', vec: new THREE.Vector3(0, 0, -1) }, box.min.x, box.max.x, box.min.y, box.max.y, box.max.z + step, 'Di fronte');
-        await castRaysAsync('y', 'z', { axis: 'x', vec: new THREE.Vector3(-1, 0, 0) }, box.min.y, box.max.y, box.min.z, box.max.z, box.max.x + step, 'Da destra');
-        await castRaysAsync('x', 'z', { axis: 'y', vec: new THREE.Vector3(0, 1, 0) }, box.min.x, box.max.x, box.min.z, box.max.z, box.min.y - step, 'Dal basso');
-        await castRaysAsync('x', 'y', { axis: 'z', vec: new THREE.Vector3(0, 0, 1) }, box.min.x, box.max.x, box.min.y, box.max.y, box.min.z - step, 'Da dietro');
-        await castRaysAsync('y', 'z', { axis: 'x', vec: new THREE.Vector3(1, 0, 0) }, box.min.y, box.max.y, box.min.z, box.max.z, box.min.x - step, 'Da sinistra');
+        const sx = maxX - minX, sy = maxY - minY, sz = maxZ - minZ;
+        const maxDim = Math.max(sx, sy, sz);
+        if (!(maxDim > 0)) throw new Error("Il modello ha dimensione nulla.");
 
-        if (progText) progText.textContent = 'Rendering e culling scena 3D...';
-        if (progBar) progBar.style.width = '100%';
-        await new Promise(r => setTimeout(r, 20));
+        // --- 3. Griglia ----------------------------------------------------
+        const scale = (maxGridSize - 1) / maxDim;
+        const W = Math.max(1, Math.round(sx * scale) + 1);
+        const H = Math.max(1, Math.round(sy * scale) + 1);
+        const D = Math.max(1, Math.round(sz * scale) + 1);
 
-        // 5. Costruzione del payload (utilizziamo i colori HEX direttamente)
-        const voxels = [];
-        const palette = {};
+        // Da world a cella. Il clamp e' la garanzia STRUTTURALE che nessun voxel
+        // possa finire fuori dalla griglia, qualunque cosa contenga il file: e'
+        // esattamente cio' che mancava alla versione a raggi.
+        const gx = (x) => { const v = Math.round((x - minX) * scale); return v < 0 ? 0 : (v >= W ? W - 1 : v); };
+        const gy = (y) => { const v = Math.round((y - minY) * scale); return v < 0 ? 0 : (v >= H ? H - 1 : v); };
+        const gz = (z) => { const v = Math.round((z - minZ) * scale); return v < 0 ? 0 : (v >= D ? D - 1 : v); };
 
-        voxelSet.forEach((hex, key) => {
-            const [x, y, z] = key.split(',').map(Number);
-            const uppercaseHex = hex.toUpperCase();
-            palette[uppercaseHex] = uppercaseHex;
-            voxels.push({ x, y, z, color: uppercaseHex });
+        const sampleTex = makeTextureSampler();
+        const cells = new Map();          // "x,y,z" -> [r,g,b] in 0..255
+
+        function colorAt(tri, w0, w1, w2) {
+            // Priorita': texture > vertex color > colore del materiale.
+            const mat = tri.mat;
+            if (tri.uv && mat && mat.map) {
+                const u = tri.uv[0][0] * w0 + tri.uv[1][0] * w1 + tri.uv[2][0] * w2;
+                const v = tri.uv[0][1] * w0 + tri.uv[1][1] * w1 + tri.uv[2][1] * w2;
+                const t = sampleTex(mat.map, u, v);
+                if (t) return [t[0] * 255, t[1] * 255, t[2] * 255];
+            }
+            if (tri.vc) {
+                return [
+                    (tri.vc[0][0] * w0 + tri.vc[1][0] * w1 + tri.vc[2][0] * w2) * 255,
+                    (tri.vc[0][1] * w0 + tri.vc[1][1] * w1 + tri.vc[2][1] * w2) * 255,
+                    (tri.vc[0][2] * w0 + tri.vc[1][2] * w1 + tri.vc[2][2] * w2) * 255
+                ];
+            }
+            if (mat && mat.color) return [mat.color.r * 255, mat.color.g * 255, mat.color.b * 255];
+            return [136, 136, 136];
+        }
+
+        // --- 4. Rasterizzazione dei triangoli ------------------------------
+        // Campionamento baricentrico con passo inferiore a mezza cella: la
+        // superficie resta senza buchi. Piu' semplice del test SAT triangolo/AABB
+        // e, con questa densita', equivalente nel risultato.
+        setProg(5, 'Voxelizzazione superficie...');
+        const cellWorld = 1 / scale;
+        let processed = 0;
+
+        for (const tri of tris) {
+            const A = tri.a, B = tri.b, C = tri.c;
+            const ab = Math.sqrt((B.x - A.x) * (B.x - A.x) + (B.y - A.y) * (B.y - A.y) + (B.z - A.z) * (B.z - A.z)) / cellWorld;
+            const ac = Math.sqrt((C.x - A.x) * (C.x - A.x) + (C.y - A.y) * (C.y - A.y) + (C.z - A.z) * (C.z - A.z)) / cellWorld;
+            // x2 = mezza cella per campione. Tetto a 512 per non esplodere su un
+            // triangolo gigante (una parete unica in una scena grande).
+            const steps = Math.max(1, Math.min(512, Math.ceil(Math.max(ab, ac) * 2)));
+
+            for (let i = 0; i <= steps; i++) {
+                for (let j = 0; j <= steps - i; j++) {
+                    const w1 = i / steps, w2 = j / steps, w0 = 1 - w1 - w2;
+                    if (w0 < -1e-9) continue;
+                    const px = A.x * w0 + B.x * w1 + C.x * w2;
+                    const py = A.y * w0 + B.y * w1 + C.y * w2;
+                    const pz = A.z * w0 + B.z * w1 + C.z * w2;
+                    const key = gx(px) + ',' + gy(py) + ',' + gz(pz);
+                    if (!cells.has(key)) cells.set(key, colorAt(tri, w0, w1, w2));
+                }
+            }
+
+            processed++;
+            if ((processed & 255) === 0) {
+                setProg(5 + (processed / tris.length) * 65,
+                    'Voxelizzazione superficie... ' + processed + '/' + tris.length);
+                await breathe();
+            }
+        }
+
+        if (!cells.size) throw new Error("La voxelizzazione non ha prodotto voxel.");
+
+        // --- 5. Riempimento interno ----------------------------------------
+        // Flood fill dall'ESTERNO: tutto cio' che il flood non raggiunge sta
+        // dentro il guscio. Piu' robusto del test di parita', che sbaglia sulle
+        // mesh non chiuse o con facce doppie.
+        if (fillInterior && W * H * D <= 8000000) {
+            setProg(72, 'Riempimento interno...');
+            await breathe();
+            const idx = (x, y, z) => (z * H + y) * W + x;
+            const solid = new Uint8Array(W * H * D);
+            cells.forEach((_c, key) => {
+                const p = key.split(',');
+                solid[idx(+p[0], +p[1], +p[2])] = 1;
+            });
+
+            const outside = new Uint8Array(W * H * D);
+            const stack = [];
+            const seed = (x, y, z) => {
+                const k = idx(x, y, z);
+                if (!solid[k] && !outside[k]) { outside[k] = 1; stack.push(x, y, z); }
+            };
+            // Semina dalle sole facce della griglia (non da tutto il volume).
+            for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) { seed(x, y, 0); seed(x, y, D - 1); }
+            for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) { seed(x, 0, z); seed(x, H - 1, z); }
+            for (let y = 0; y < H; y++) for (let z = 0; z < D; z++) { seed(0, y, z); seed(W - 1, y, z); }
+
+            while (stack.length) {
+                const z = stack.pop(), y = stack.pop(), x = stack.pop();
+                // Vicini calcolati sulle COORDINATE, non sull'indice lineare: un
+                // +1 su x=W-1 "girerebbe" sulla riga successiva.
+                for (let n = 0; n < 6; n++) {
+                    let nx = x, ny = y, nz = z;
+                    if (n === 0) nx++; else if (n === 1) nx--;
+                    else if (n === 2) ny++; else if (n === 3) ny--;
+                    else if (n === 4) nz++; else nz--;
+                    if (nx < 0 || ny < 0 || nz < 0 || nx >= W || ny >= H || nz >= D) continue;
+                    const nk = idx(nx, ny, nz);
+                    if (!solid[nk] && !outside[nk]) { outside[nk] = 1; stack.push(nx, ny, nz); }
+                }
+            }
+
+            // Le celle non raggiunte dall'esterno e non gia' piene sono interne:
+            // ereditano il colore del voxel di superficie piu' vicino sopra.
+            for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) {
+                let lastColor = null;
+                for (let y = H - 1; y >= 0; y--) {
+                    const k = idx(x, y, z);
+                    const key = x + ',' + y + ',' + z;
+                    if (solid[k]) { lastColor = cells.get(key) || lastColor; continue; }
+                    if (!outside[k]) cells.set(key, lastColor || [136, 136, 136]);
+                }
+            }
+        }
+
+        // --- 6. Palette ------------------------------------------------------
+        setProg(85, 'Riduzione palette...');
+        await breathe();
+        const counts = new Map();
+        cells.forEach(rgb => {
+            const key = Math.round(rgb[0]) + ',' + Math.round(rgb[1]) + ',' + Math.round(rgb[2]);
+            counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        const remap = reducePalette(counts, maxColors);
+
+        // --- 7. Payload nel formato compatto ---------------------------------
+        // Raggruppa per colore in ops "set": lo stesso formato dei modelli
+        // generati, quindi ricaricabile e modificabile come tutti gli altri.
+        setProg(93, 'Costruzione modello...');
+        await breathe();
+        const byColor = new Map();
+        cells.forEach((rgb, key) => {
+            const ck = Math.round(rgb[0]) + ',' + Math.round(rgb[1]) + ',' + Math.round(rgb[2]);
+            const rep = remap.get(ck) || [rgb[0], rgb[1], rgb[2]];
+            const hex = rgbToHexStr(rep[0], rep[1], rep[2]);
+            let list = byColor.get(hex);
+            if (!list) { list = []; byColor.set(hex, list); }
+            const p = key.split(',');
+            list.push(+p[0], +p[1], +p[2]);
         });
 
-        console.log(`[import-glb] Voxelizzazione completata: ${voxels.length} voxel generati.`);
+        const palette = {};
+        const ops = [];
+        let n = 0;
+        byColor.forEach((coords, hex) => {
+            const key = paletteKeyFor(n++);
+            palette[key] = hex;
+            ops.push(['set', key].concat(coords));
+        });
 
+        console.log('[import-glb] ' + cells.size + ' voxel, ' + byColor.size +
+            ' colori, griglia ' + W + 'x' + H + 'x' + D +
+            ' (da ' + tris.length + ' triangoli)');
+
+        setProg(100, 'Completato');
         return {
-            metadata: {
-                name: "Imported_GLB",
-                grid_size: [W, H, D]
-            },
+            metadata: { name: 'Imported_GLB', grid_size: [W, H, D] },
             palette: palette,
-            voxels: voxels
+            ops: ops
         };
     } finally {
         if (overlay) overlay.style.display = 'none';
