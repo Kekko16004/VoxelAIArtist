@@ -309,5 +309,11 @@
   "pack.modularHint": "Chaque bloc remplira toute la grille avec des faces planes et des détails creusés vers l'intérieur, sans laisser d'espace entre eux. Le résultat est vérifié automatiquement.",
   "pack.enforcePaletteHint": "À activer uniquement si les objets partagent le même matériau. Avec des matériaux différents, le métal risque de prendre les couleurs de la terre.",
   "pack.modularOk": "Bloc modulaire conforme",
-  "pack.modularWarn": "Ce bloc ne s'emboîte pas correctement"
+  "pack.modularWarn": "Ce bloc ne s'emboîte pas correctement",
+  "pack.exportFormat": "Format 3D",
+  "pack.formatGlb": "GLB (Unity, Godot, Blender)",
+  "pack.formatObj": "OBJ + MTL (Blender, 3ds Max)",
+  "pack.formatBoth": "Les deux",
+  "pack.formatVox": "Inclure aussi .vox (MagicaVoxel)",
+  "pack.exportPartial": "Certains formats n'ont pas été générés : "
 }
