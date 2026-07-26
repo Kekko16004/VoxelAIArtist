@@ -309,5 +309,11 @@
   "pack.modularHint": "Jeder Block füllt das gesamte Raster mit flachen Flächen und nach innen gearbeiteten Details – nebeneinandergestellt entstehen keine Lücken. Das Ergebnis wird automatisch geprüft.",
   "pack.enforcePaletteHint": "Nur aktivieren, wenn die Objekte dasselbe Material teilen. Bei unterschiedlichen Materialien kann Metall die Farben der Erde übernehmen.",
   "pack.modularOk": "Modularer Block konform",
-  "pack.modularWarn": "Dieser Block rastet nicht korrekt ein"
+  "pack.modularWarn": "Dieser Block rastet nicht korrekt ein",
+  "pack.exportFormat": "3D-Format",
+  "pack.formatGlb": "GLB (Unity, Godot, Blender)",
+  "pack.formatObj": "OBJ + MTL (Blender, 3ds Max)",
+  "pack.formatBoth": "Beide",
+  "pack.formatVox": "Auch .vox einschließen (MagicaVoxel)",
+  "pack.exportPartial": "Einige Formate wurden nicht generiert: "
 }
