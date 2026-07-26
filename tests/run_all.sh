@@ -107,9 +107,9 @@ for f in sorted(glob.glob('ui/locales/*.json')):
         continue
     d = json.load(open(f, encoding='utf-8'))
     n = len([k for k in d if k.startswith(('pack.', 'genMode.'))])
-    assert n == 59, '%s ha %d chiavi pack/genMode invece di 59' % (f, n)
+    assert n == 65, '%s ha %d chiavi pack/genMode invece di 65' % (f, n)
     langs += 1
-print('%d lingue, 59 chiavi pack/genMode ciascuna' % langs)
+print('%d lingue, 65 chiavi pack/genMode ciascuna' % langs)
 "
 
 echo ""
