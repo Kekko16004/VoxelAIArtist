@@ -303,5 +303,11 @@
   "pack.coherenceOutliers": "Some assets are out of scale with the rest of the pack.",
   "pack.savedPacks": "Saved packs",
   "pack.savedPacksTitle": "Reopen a previously generated pack",
-  "pack.noSavedPacks": "No saved packs."
+  "pack.noSavedPacks": "No saved packs.",
+  "pack.modular": "Modular tiles (snap)",
+  "pack.modularTitle": "Blocks that fill the entire grid with flat faces: they interlock automatically with the level builder's grid snap",
+  "pack.modularHint": "Each block will fill the whole grid with flat faces and inward-carved details, so placing them side by side leaves no gaps. The result is verified automatically.",
+  "pack.enforcePaletteHint": "Enable only if objects share the same material. With different materials, metal may pick up the colours of earth.",
+  "pack.modularOk": "Modular block compliant",
+  "pack.modularWarn": "This block does not interlock correctly"
 }
