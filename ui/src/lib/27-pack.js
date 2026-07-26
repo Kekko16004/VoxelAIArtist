@@ -16,6 +16,8 @@
             const packModelSelect = document.getElementById('packModelSelect');
             const packGridSelect = document.getElementById('packGridSelect');
             const packEnforcePalette = document.getElementById('packEnforcePalette');
+            const packModular = document.getElementById('packModular');
+            const packModularHint = document.getElementById('packModularHint');
             const packEstimate = document.getElementById('packEstimate');
             const packStartBtn = document.getElementById('packStartBtn');
             const packCancelBtn = document.getElementById('packCancelBtn');
@@ -45,6 +47,7 @@
             // nella lista non va ridisegnato (vedi F5 in packRenderStatus).
             function packJobStateKey(job) {
                 return [job.status, job.duration || '', job.error || '',
+                        (job.modular ? (job.modular.ok ? 'M1' : 'M0') : ''),
                         job.id === packActiveJobId ? 'A' : ''].join('~');
             }
 
@@ -133,6 +136,20 @@
             }
 
             if (packAddObjBtn) packAddObjBtn.addEventListener('click', () => packAddObjectRow());
+
+            // Blocchi modulari: mostra la spiegazione e propone una griglia da tile.
+            // Griglie enormi per un blocco che si ripete sono sprecate: 32 e' il
+            // classico formato dei tileset voxel.
+            if (packModular) {
+                packModular.addEventListener('change', () => {
+                    const on = packModular.checked;
+                    if (packModularHint) packModularHint.style.display = on ? '' : 'none';
+                    if (on && packGridSelect) {
+                        const cur = packGridSelect.value;
+                        if (cur === 'auto' || parseInt(cur, 10) > 64) packGridSelect.value = '32x32x32';
+                    }
+                });
+            }
 
             // --- Riferimenti di stile -------------------------------------------
             if (packAddRefBtn && packRefInput) {
@@ -252,7 +269,8 @@
                                 references: packReferences.map(r => r.data),
                                 model: packModelSelect ? packModelSelect.value : null,
                                 gridSize: packGridSelect ? packGridSelect.value : 'auto',
-                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true
+                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : false,
+                                modular: packModular ? packModular.checked : false
                             })
                         });
                         const data = await res.json();
@@ -468,9 +486,21 @@
                 else meta.textContent = '·';
                 btn.appendChild(meta);
 
+                // Blocchi modulari: se la verifica ha trovato problemi, segnalalo
+                // sull'elemento stesso. Scoprire nel level builder che un tile non
+                // combacia e' molto peggio che leggerlo qui.
+                if (job.modular && !job.modular.ok && job.status === 'done') {
+                    btn.classList.add('is-warn');
+                    meta.textContent = '!';
+                    meta.style.color = 'var(--danger)';
+                }
+
                 if (job.status === 'done') {
-                    btn.title = (typeof t === 'function') ? t('pack.clickToView')
-                        : 'Clicca per vedere questo modello nella griglia';
+                    const warn = (job.modular && !job.modular.ok)
+                        ? ('\n\nATTENZIONE modularita:\n- ' + (job.modular.issues || []).join('\n- '))
+                        : '';
+                    btn.title = ((typeof t === 'function') ? t('pack.clickToView')
+                        : 'Clicca per vedere questo modello nella griglia') + warn;
                     btn.addEventListener('click', () => packLoadJob(job.id));
                 } else if (job.status === 'error') {
                     btn.title = (job.error || '') + ' — ' + ((typeof t === 'function') ? t('pack.clickToRetry') : 'clicca per riprovare');
