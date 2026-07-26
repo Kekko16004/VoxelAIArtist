@@ -2250,8 +2250,26 @@
                 <div id="packCoherence" style="display:none; font-size:10px; line-height:1.45;
                     padding:6px 8px; border-radius:var(--radius-sm); background:var(--inset-bg);
                     color:var(--text-secondary);"></div>
+                <!-- Scelta del formato 3D dell'export. Il JSON c'e' SEMPRE in tutti i
+                     casi: e' il formato nativo, l'unico che si puo' ricaricare
+                     nell'app senza perdere nulla. -->
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px;
+                        color:var(--text-secondary);" data-i18n="pack.exportFormat">Formato 3D</label>
+                    <select id="packExportFormat" class="field-strong"
+                        style="font-size:10.5px; padding:5px; width:100%;">
+                        <option value="glb" data-i18n="pack.formatGlb">GLB (Unity, Godot, Blender)</option>
+                        <option value="obj" data-i18n="pack.formatObj">OBJ + MTL (Blender, 3ds Max)</option>
+                        <option value="both" data-i18n="pack.formatBoth">Entrambi</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:10.5px;
+                        color:var(--text-secondary); cursor:pointer;">
+                        <input type="checkbox" id="packExportVox" checked style="margin:0;">
+                        <span data-i18n="pack.formatVox">Includi anche .vox (MagicaVoxel)</span>
+                    </label>
+                </div>
                 <button id="packExportAllBtn" class="btn btn-secondary"
-                    style="font-size:10.5px; padding:6px;" title="Scarica ogni asset pronto come file JSON"
+                    style="font-size:10.5px; padding:6px;" title="Scarica tutto il pack in un unico archivio ZIP"
                     data-i18n-title="pack.exportZipTitle" data-i18n="pack.exportZip">Esporta pack (ZIP)</button>
             </div>
         </div>
