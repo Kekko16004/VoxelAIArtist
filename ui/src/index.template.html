@@ -1785,6 +1785,50 @@
                     <input type="file" id="fileInput" accept=".json,.voxelai,.vox,.schem,.schematic,.glb,.gltf" style="display: none;">
                 </div>
 
+                <!-- ===== OPZIONI DI VOXELIZZAZIONE GLB/GLTF =====
+                     Valgono quando si importa un modello poligonale: la
+                     risoluzione decide quanti voxel per lato, il riempimento
+                     produce un solido invece di un guscio cavo, e il numero di
+                     colori riduce la palette (una mesh con texture ne produce
+                     centinaia, inutilizzabili come palette voxel). -->
+                <details class="glass" style="padding:10px 12px; margin-top:8px;">
+                    <summary style="cursor:pointer; font-size:11px; text-transform:uppercase;
+                        letter-spacing:0.5px; color:var(--text-secondary);"
+                        data-i18n="glb.options">Opzioni importazione GLB</summary>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+                        <div class="control-row">
+                            <label data-i18n="glb.resolution">Risoluzione</label>
+                            <select id="glbGridSize" class="field-strong"
+                                style="padding:5px; font-size:11px; width:130px;">
+                                <option value="32">32 (veloce)</option>
+                                <option value="64" selected>64 (consigliata)</option>
+                                <option value="96">96 (dettagliata)</option>
+                                <option value="128">128 (lenta)</option>
+                            </select>
+                        </div>
+                        <div class="control-row">
+                            <label title="Riempie l'interno invece di lasciare un guscio cavo"
+                                data-i18n-title="glb.fillTitle" data-i18n="glb.fill">Modello pieno</label>
+                            <label class="switch">
+                                <input type="checkbox" id="glbFillInterior" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="control-row">
+                            <label title="Una mesh con texture produce centinaia di colori quasi identici"
+                                data-i18n-title="glb.colorsTitle" data-i18n="glb.colors">Colori palette</label>
+                            <select id="glbMaxColors" class="field-strong"
+                                style="padding:5px; font-size:11px; width:130px;">
+                                <option value="16">16</option>
+                                <option value="32">32</option>
+                                <option value="64" selected>64</option>
+                                <option value="128">128</option>
+                                <option value="256">256</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
+
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; margin-bottom: 8px;">
                     <div style="display: flex; gap: 8px;">
                         <button id="togglePasteBtn" class="btn btn-secondary"
