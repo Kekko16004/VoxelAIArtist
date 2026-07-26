@@ -90,8 +90,28 @@
                         alert("Il modulo import-glb.js non è stato caricato.");
                         return;
                     }
-                    importGlbFormat(file).then(parsed => {
-                        if (!parsed || !Array.isArray(parsed.voxels)) return;
+                    // Opzioni lette dalla UI (con default sensati se i campi non
+                    // esistono ancora): risoluzione, riempimento e colori palette.
+                    const _gEl = document.getElementById('glbGridSize');
+                    const _fEl = document.getElementById('glbFillInterior');
+                    const _cEl = document.getElementById('glbMaxColors');
+                    importGlbFormat(file, {
+                        maxGridSize: _gEl ? parseInt(_gEl.value, 10) : 64,
+                        fillInterior: _fEl ? _fEl.checked : true,
+                        maxColors: _cEl ? parseInt(_cEl.value, 10) : 64
+                    }).then(parsed => {
+                        // Il voxelizzatore restituisce il formato COMPATTO
+                        // (palette + ops), come i modelli generati: accettiamo sia
+                        // quello sia il vecchio formato con `voxels` gia' espansi.
+                        // Senza questo controllo l'import falliva in SILENZIO,
+                        // perche' il ramo `voxels` non c'era piu'.
+                        if (!parsed) return;
+                        const hasOps = Array.isArray(parsed.ops) && parsed.ops.length;
+                        const hasVox = Array.isArray(parsed.voxels) && parsed.voxels.length;
+                        if (!hasOps && !hasVox) {
+                            alert('Il modello importato non contiene voxel.');
+                            return;
+                        }
                         if (!parsed.metadata) parsed.metadata = {};
                         if (!parsed.metadata.name) parsed.metadata.name = file.name.replace(/\.[^/.]+$/, "");
                         const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
