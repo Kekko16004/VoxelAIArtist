@@ -1068,6 +1068,13 @@
 
         /* Pannello risultati: vive NELLA VIEWPORT a lato della griglia (non nella
            sidebar), cosi' l'utente vede gli asset caricare mentre lavora. */
+        /* Il pannello dei risultati sta SOPRA il canvas 3D, quindi segue la regola
+           di .canvas-hud: fondo OPACO, NIENTE backdrop-filter. Un blur sopra un
+           canvas WebGL che si ridisegna costringe Chromium/QtWebEngine a
+           ricampionare lo sfondo a ogni frame -> il pannello lampeggia (sparisce e
+           riappare). E' esattamente il difetto segnalato dall'utente.
+           `contain` e `will-change` isolano il layer e lo tengono composto sulla
+           GPU, evitando ridisegni della UI quando la scena 3D cambia. */
         #packResultsPanel {
             position: absolute;
             top: 12px;
@@ -1078,12 +1085,12 @@
             flex-direction: column;
             border-radius: var(--radius-md);
             border: 1px solid var(--glass-border);
-            background: var(--glass-bg);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            background: var(--hud-bg);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
             z-index: 60;
             overflow: hidden;
+            contain: layout paint;
+            will-change: transform;
         }
         #packResultsPanel.open { display: flex; }
         .pack-panel-head {
@@ -1149,6 +1156,9 @@
             background: var(--hover-bg);
         }
         .pack-item.is-error { color: var(--danger); cursor: pointer; }
+        /* Blocco generato ma NON conforme allo snap: si puo' aprire, ma va
+           rigenerato se serve davvero modulare. */
+        .pack-item.is-warn { border-color: var(--danger); }
         .pack-item-label {
             flex: 1;
             min-width: 0;
@@ -1424,6 +1434,7 @@
             }
         }
 
+        /* Anche il loader copre il canvas: niente blur (vedi #packResultsPanel). */
         .loader-overlay {
             position: absolute;
             top: 0;
@@ -1435,7 +1446,6 @@
             justify-content: center;
             z-index: 10;
             background: var(--overlay-scrim);
-            backdrop-filter: blur(12px);
             transition: all 0.3s ease;
         }
 
@@ -1922,13 +1932,32 @@
                             </select>
                         </div>
                         <div class="control-row">
-                            <label title="Rimappa i colori di ogni asset sulla palette condivisa del pack"
-                                data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
+                            <label title="Blocchi che riempiono tutta la griglia con facce piane: si incastrano da soli con lo snap del level builder"
+                                data-i18n-title="pack.modularTitle" data-i18n="pack.modular">Blocchi modulari (snap)</label>
                             <label class="switch">
-                                <input type="checkbox" id="packEnforcePalette" checked>
+                                <input type="checkbox" id="packModular">
                                 <span class="slider"></span>
                             </label>
                         </div>
+                        <p class="hint-text" id="packModularHint" style="margin: 0; display: none;"
+                            data-i18n="pack.modularHint">
+                            Ogni blocco riempir� tutta la griglia con facce piane e dettagli
+                            incisi verso l'interno, cos� affiancandoli non restano fessure.
+                            Il risultato viene verificato automaticamente.
+                        </p>
+                        <div class="control-row">
+                            <label title="Rimappa i colori di ogni asset sulla palette condivisa. Lascialo SPENTO se gli oggetti sono di materiali diversi (ferro, pietra, terra)."
+                                data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packEnforcePalette">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p class="hint-text" style="margin: 0;" data-i18n="pack.enforcePaletteHint">
+                            Attivala solo se gli oggetti condividono lo stesso materiale.
+                            Con materiali diversi il ferro rischia di prendere i colori
+                            della terra.
+                        </p>
 
                         <!-- Stima del lavoro: evita la sorpresa di 40 minuti di coda -->
                         <p class="hint-text" id="packEstimate" style="margin: 0;"></p>
@@ -2221,8 +2250,26 @@
                 <div id="packCoherence" style="display:none; font-size:10px; line-height:1.45;
                     padding:6px 8px; border-radius:var(--radius-sm); background:var(--inset-bg);
                     color:var(--text-secondary);"></div>
+                <!-- Scelta del formato 3D dell'export. Il JSON c'e' SEMPRE in tutti i
+                     casi: e' il formato nativo, l'unico che si puo' ricaricare
+                     nell'app senza perdere nulla. -->
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <label style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px;
+                        color:var(--text-secondary);" data-i18n="pack.exportFormat">Formato 3D</label>
+                    <select id="packExportFormat" class="field-strong"
+                        style="font-size:10.5px; padding:5px; width:100%;">
+                        <option value="glb" data-i18n="pack.formatGlb">GLB (Unity, Godot, Blender)</option>
+                        <option value="obj" data-i18n="pack.formatObj">OBJ + MTL (Blender, 3ds Max)</option>
+                        <option value="both" data-i18n="pack.formatBoth">Entrambi</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:10.5px;
+                        color:var(--text-secondary); cursor:pointer;">
+                        <input type="checkbox" id="packExportVox" checked style="margin:0;">
+                        <span data-i18n="pack.formatVox">Includi anche .vox (MagicaVoxel)</span>
+                    </label>
+                </div>
                 <button id="packExportAllBtn" class="btn btn-secondary"
-                    style="font-size:10.5px; padding:6px;" title="Scarica ogni asset pronto come file JSON"
+                    style="font-size:10.5px; padding:6px;" title="Scarica tutto il pack in un unico archivio ZIP"
                     data-i18n-title="pack.exportZipTitle" data-i18n="pack.exportZip">Esporta pack (ZIP)</button>
             </div>
         </div>

@@ -1,6 +1,19 @@
             const canvas = document.getElementById('canvas3d');
-            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
+            // alpha:false -> il canvas e' OPACO. Con alpha:true Chromium/QtWebEngine
+            // deve fondere il layer WebGL con la pagina sottostante a OGNI frame, e
+            // gli overlay sopra il canvas (pannelli, HUD) vengono ricomposti insieme:
+            // e' una delle cause del lampeggio della UI. La scena disegna gia' il
+            // proprio sfondo opaco (scene.background, allineato al tema), quindi la
+            // trasparenza del canvas non serviva a nulla.
+            // powerPreference: su portatili con doppia GPU evita che il compositor
+            // rimbalzi fra integrata e discreta, altro classico innesco di flicker.
+            const renderer = new THREE.WebGLRenderer({
+                canvas, antialias: true, alpha: false,
+                powerPreference: 'high-performance', stencil: false
+            });
+            // Il devicePixelRatio grezzo su schermi 4K quadruplica i pixel da
+            // disegnare: cap a 2 come fanno tutti gli editor 3D web.
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
             renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 
             const scene = new THREE.Scene();

@@ -64,6 +64,11 @@ run "UI modalita' pack (Node)" node tests/test_pack_ui.mjs
 #     budget adattivo per le griglie grandi.
 run "Pack: ancoraggio, report, persistenza" python3 tests/test_pack_extras.py
 
+# 4b-bis. Blocchi modulari per level builder + palette non invasiva.
+#         Un blocco di ferro non deve prendere i colori della terra, e i tile
+#         devono riempire la griglia o nel level builder restano fessure.
+run "Blocchi modulari e palette" python3 tests/test_modular.py
+
 # 4c. Renderer incrementale: deve produrre lo STESSO stato del rebuild completo.
 run "Rendering incrementale (Node)" node tests/test_incremental.mjs
 
@@ -102,9 +107,9 @@ for f in sorted(glob.glob('ui/locales/*.json')):
         continue
     d = json.load(open(f, encoding='utf-8'))
     n = len([k for k in d if k.startswith(('pack.', 'genMode.'))])
-    assert n == 53, '%s ha %d chiavi pack/genMode invece di 53' % (f, n)
+    assert n == 65, '%s ha %d chiavi pack/genMode invece di 65' % (f, n)
     langs += 1
-print('%d lingue, 53 chiavi pack/genMode ciascuna' % langs)
+print('%d lingue, 65 chiavi pack/genMode ciascuna' % langs)
 "
 
 echo ""

@@ -44,11 +44,14 @@ const mk=id=>{ const e=new El('div'); e.id=id; registry[id]=e; return e; };
 [ 'packRefInput','packAddRefBtn','packRefList','packRefHint','packObjectList','packAddObjBtn',
   'packVariants','packModelSelect','packGridSelect','packEnforcePalette','packEstimate',
   'packStartBtn','packCancelBtn','packResultsPanel','packResultsList','packProgressText',
+  'packExportFormat','packExportVox','packModular','packModularHint','packCoherence',
   'packProgressBar','packPanelClose','packLoadAllBtn','packExportAllBtn','genModeSwitch',
   'genModeSingle','genModePack' ].forEach(mk);
 registry.packVariants.value='3';
 registry.packGridSelect.value='48x48x48';
-registry.packEnforcePalette.checked=true;
+registry.packEnforcePalette.checked=false;
+registry.packExportFormat.value='glb';
+registry.packExportVox.checked=true;
 // due seg-btn dentro genModeSwitch
 ['single','pack'].forEach((m,i)=>{ const b=new El('button'); b.className='seg-btn'+(i===0?' active':'');
   b.dataset.genmode=m; registry.genModeSwitch.appendChild(b); });
@@ -78,6 +81,8 @@ global.createZipBlob=(files)=>{ zipCalls.push(files); return {__zip:true}; };
 global.downloadBlob=(blob,name)=>blobDownloads.push(name);
 global.expandOps=(d)=>({...d, voxels:(d&&d.voxels)||[{x:0,y:0,z:0,color:'#FF0000'}]});
 global.encodeVox=()=>new Uint8Array([1,2,3]);
+let glbCalls=0;
+global.buildGlbForModel=async(m)=>{ glbCalls++; return new Uint8Array([0x67,0x6C,0x54,0x46]); };
 global.buildObjText=()=>'# obj';
 global.buildMtlText=()=>'# mtl';
 global.t=(k,v)=>{ let s=k; if(v) Object.keys(v).forEach(x=>s+=':'+v[x]); return s; };
@@ -146,7 +151,10 @@ ok(startedBody!==null,'richiesta di start inviata');
 ok(JSON.stringify(startedBody.objects)===JSON.stringify(['Vaso fiori','Auricolare bluetooth']),'objects corretti nel payload');
 ok(startedBody.variants===3,'variants=3');
 ok(startedBody.gridSize==='48x48x48','gridSize propagata');
-ok(startedBody.enforcePalette===true,'enforcePalette propagato');
+// La forzatura palette e' ora SPENTA di default: con materiali diversi (ferro,
+// pietra, terra) imporre la palette del primo asset colorava tutto di verde.
+ok(startedBody.enforcePalette===false,'enforcePalette spento di default (materiali diversi)');
+ok(startedBody.modular===false,'flag modular propagato');
 ok(registry.packResultsPanel.classList.contains('open'),'pannello risultati aperto');
 
 console.log('=== 8. rendering della lista ===');
@@ -202,6 +210,45 @@ ok(zipFiles.includes('pack.json'),'manifest pack.json incluso');
 ok(zipFiles.some(n=>n.startsWith('Vaso_Fiori_1/')),'cartella per asset ('+zipFiles.slice(0,4).join(', ')+')');
 ok(zipFiles.some(n=>n.endsWith('.json')&&n!=='pack.json'),'JSON del modello incluso');
 ok(blobDownloads.length===1&&/\.zip$/.test(blobDownloads[0]),'un solo download .zip: '+blobDownloads[0]);
+
+console.log('=== 12b. scelta del formato: GLB ===');
+zipCalls=[]; blobDownloads=[]; glbCalls=0;
+registry.packExportFormat.value='glb';
+registry.packExportVox.checked=false;
+await registry.packExportAllBtn.dispatch('click');
+await new Promise(r=>realSetTimeout(r,80));
+let names=(zipCalls[0]||[]).map(f=>f.name);
+ok(names.some(n=>n.endsWith('.glb')),'GLB incluso ('+names.filter(n=>/\.(glb|obj|vox)$/.test(n)).join(', ')+')');
+ok(!names.some(n=>n.endsWith('.obj')),'OBJ escluso quando si sceglie GLB');
+ok(!names.some(n=>n.endsWith('.vox')),'.vox escluso quando la spunta e off');
+ok(names.filter(n=>n.endsWith('.json')).length>=2,'JSON SEMPRE presente (modelli + manifest)');
+ok(glbCalls===2,'buildGlbForModel chiamato per ogni asset ('+glbCalls+')');
+
+console.log('=== 12c. scelta del formato: OBJ+MTL ===');
+zipCalls=[]; glbCalls=0;
+registry.packExportFormat.value='obj';
+await registry.packExportAllBtn.dispatch('click');
+await new Promise(r=>realSetTimeout(r,80));
+names=(zipCalls[0]||[]).map(f=>f.name);
+ok(names.some(n=>n.endsWith('.obj')) && names.some(n=>n.endsWith('.mtl')),'OBJ e MTL insieme');
+ok(!names.some(n=>n.endsWith('.glb')),'GLB escluso quando si sceglie OBJ');
+ok(glbCalls===0,'nessuna generazione GLB sprecata');
+ok(names.filter(n=>n.endsWith('.json')).length>=2,'JSON sempre presente anche in OBJ');
+
+console.log('=== 12d. entrambi + .vox ===');
+zipCalls=[];
+registry.packExportFormat.value='both';
+registry.packExportVox.checked=true;
+await registry.packExportAllBtn.dispatch('click');
+await new Promise(r=>realSetTimeout(r,80));
+names=(zipCalls[0]||[]).map(f=>f.name);
+ok(names.some(n=>n.endsWith('.glb')) && names.some(n=>n.endsWith('.obj')),'entrambi i formati 3D');
+ok(names.some(n=>n.endsWith('.vox')),'.vox incluso con la spunta attiva');
+const man=(zipCalls[0]||[]).find(f=>f.name==='pack.json');
+ok(!!man,'manifest presente');
+const mj=JSON.parse(man.data);
+ok(mj.formats && mj.formats.json===true && mj.formats.glb===true && mj.formats.obj===true,
+   'il manifest registra i formati inclusi: '+JSON.stringify(mj.formats));
 
 console.log('=== 13. sotto-navigazione Singolo/Pack ===');
 const segs=registry.genModeSwitch.querySelectorAll('.seg-btn');

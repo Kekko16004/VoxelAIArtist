@@ -303,5 +303,11 @@
   "pack.coherenceOutliers": "Alguns assets estão fora de escala em relação ao resto do pack.",
   "pack.savedPacks": "Packs guardados",
   "pack.savedPacksTitle": "Reabrir um pack gerado anteriormente",
-  "pack.noSavedPacks": "Nenhum pack guardado."
+  "pack.noSavedPacks": "Nenhum pack guardado.",
+  "pack.modular": "Blocos modulares (snap)",
+  "pack.modularTitle": "Blocos que preenchem toda a grelha com faces planas: encaixam sozinhos com o snap do level builder",
+  "pack.modularHint": "Cada bloco preencherá toda a grelha com faces planas e detalhes esculpidos para dentro, sem deixar frestas ao colocá-los lado a lado. O resultado é verificado automaticamente.",
+  "pack.enforcePaletteHint": "Ative só se os objetos partilharem o mesmo material. Com materiais diferentes, o metal pode assumir as cores da terra.",
+  "pack.modularOk": "Bloco modular conforme",
+  "pack.modularWarn": "Este bloco não encaixa corretamente"
 }

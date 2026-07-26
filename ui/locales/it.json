@@ -303,5 +303,17 @@
   "pack.coherenceOutliers": "Alcuni asset sono fuori scala rispetto al resto del pack.",
   "pack.savedPacks": "Pack salvati",
   "pack.savedPacksTitle": "Riapri un pack generato in precedenza",
-  "pack.noSavedPacks": "Nessun pack salvato."
+  "pack.noSavedPacks": "Nessun pack salvato.",
+  "pack.modular": "Blocchi modulari (snap)",
+  "pack.modularTitle": "Blocchi che riempiono tutta la griglia con facce piane: si incastrano da soli con lo snap del level builder",
+  "pack.modularHint": "Ogni blocco riempirà tutta la griglia con facce piane e dettagli incisi verso l'interno, così affiancandoli non restano fessure. Il risultato viene verificato automaticamente.",
+  "pack.enforcePaletteHint": "Attivala solo se gli oggetti condividono lo stesso materiale. Con materiali diversi il ferro rischia di prendere i colori della terra.",
+  "pack.modularOk": "Blocco modulare conforme",
+  "pack.modularWarn": "Questo blocco non si incastra correttamente",
+  "pack.exportFormat": "Formato 3D",
+  "pack.formatGlb": "GLB (Unity, Godot, Blender)",
+  "pack.formatObj": "OBJ + MTL (Blender, 3ds Max)",
+  "pack.formatBoth": "Entrambi",
+  "pack.formatVox": "Includi anche .vox (MagicaVoxel)",
+  "pack.exportPartial": "Alcuni formati non sono stati generati: "
 }
