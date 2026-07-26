@@ -1,0 +1,81 @@
+### MODALITÀ BLOCCHI MODULARI (TILE PER LEVEL BUILDER)
+
+Stai generando un **blocco modulare** destinato a un editor di livelli con snap
+automatico su griglia. Non è un oggetto decorativo: è un **tassello** che l'utente
+affiancherà ad altri per costruire mondi. Se i bordi non combaciano, il blocco è
+inutilizzabile.
+
+Queste regole hanno **priorità assoluta** su qualunque altra indicazione:
+
+#### 1. INGOMBRO ESATTO, NON APPROSSIMATO
+
+Il blocco deve occupare **ESATTAMENTE** tutta la griglia dichiarata in
+`metadata.grid_size`, da `0` a `W-1` su X, da `0` a `H-1` su Y, da `0` a `D-1` su Z.
+
+- Nessun voxel fuori da questo intervallo.
+- Nessun margine vuoto ai bordi: se la griglia è 16x16x16, esiste almeno un voxel
+  a `x=0` e almeno uno a `x=15`, e lo stesso per Y e Z.
+- Non centrare l'oggetto lasciando aria intorno: **l'aria ai bordi rompe lo snap.**
+
+#### 2. LE SEI FACCE ESTERNE SONO PIANE E COMPLETE
+
+Le facce che toccheranno i blocchi vicini devono essere superfici **piatte e
+piene**, senza buchi e senza sporgenze:
+
+- Faccia inferiore (`y=0`): **completamente piena**, tutti i voxel presenti.
+- Facce laterali (`x=0`, `x=W-1`, `z=0`, `z=D-1`): piene per tutta l'altezza
+  occupata dal blocco.
+- Faccia superiore (`y=H-1`): piena se il blocco è "solido" (terra, pietra,
+  ferro); può essere aperta solo se il blocco rappresenta esplicitamente qualcosa
+  di cavo o aperto.
+
+**Nessun dettaglio deve sporgere oltre i bordi della griglia.** Maniglie, bordi
+decorativi, rivetti: tutto va *scavato verso l'interno* con `del`, mai aggiunto
+verso l'esterno.
+
+#### 3. IL DETTAGLIO STA DENTRO, NON FUORI
+
+È esattamente ciò che rende un tileset bello *e* funzionante:
+
+- Usa `del` per incidere solchi, fughe fra i mattoni, pannellature, bulloni.
+- Usa variazioni di colore sulla superficie per suggerire materiale e usura.
+- Puoi rientrare di 1-2 voxel dalla faccia per creare rilievi, ma la **cornice
+  perimetrale della faccia deve restare piena**, così il blocco accostato non
+  mostra fessure.
+
+#### 4. SIMMETRIA DI ACCOSTAMENTO
+
+Il blocco verrà affiancato a se stesso e ad altri blocchi in tutte le direzioni:
+
+- Il bordo sinistro (`x=0`) e quello destro (`x=W-1`) devono essere
+  **visivamente compatibili**: affiancando due copie del blocco, la giunzione non
+  deve mostrare un salto evidente.
+- Stessa cosa per il fronte (`z=0`) e il retro (`z=D-1`).
+- Se il blocco ha un motivo ripetuto (mattoni, assi, piastrelle), fai in modo che
+  il motivo continui attraverso la giunzione.
+
+#### 5. IL MATERIALE È QUELLO CHIESTO
+
+Ogni blocco della lista è un materiale **diverso e riconoscibile**:
+
+- Un blocco di **ferro** è grigio metallico con riflessi chiari e ombre scure.
+- Un blocco di **pietra** è grigio neutro/bluastro, irregolare.
+- Un blocco di **terra** è marrone, eventualmente con erba verde solo in cima.
+- Un blocco di **legno** è marrone caldo con venature.
+
+**NON portare i colori di un materiale su un altro.** Se un blocco precedente era
+di terra, il blocco di ferro non deve avere niente di verde o marrone. Ciò che
+resta costante fra i blocchi è **lo stile** (spessore dei solchi, dimensione del
+dettaglio, forza del contrasto), non la tinta del materiale.
+
+#### 6. STRUTTURA CONSIGLIATA DELLE OPS
+
+```
+1. ["fill", 0,0,0, W-1,H-1,D-1, "base"]      // riempi TUTTA la griglia
+2. variazioni di colore sulla superficie      // rect/fill sottili sulle facce
+3. ["del", ...]                               // incidi solchi e dettagli
+4. dettagli finali con set/line               // bulloni, venature
+```
+
+Partire da un `fill` totale è il modo più sicuro di garantire i punti 1 e 2:
+si toglie materiale, non si aggiunge.
