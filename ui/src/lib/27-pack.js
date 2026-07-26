@@ -29,6 +29,8 @@
             const packCoherence = document.getElementById('packCoherence');
             const packLoadAllBtn = document.getElementById('packLoadAllBtn');
             const packExportAllBtn = document.getElementById('packExportAllBtn');
+            const packExportFormat = document.getElementById('packExportFormat');
+            const packExportVox = document.getElementById('packExportVox');
             const genModeSwitch = document.getElementById('genModeSwitch');
             const genModeSingle = document.getElementById('genModeSingle');
             const genModePack = document.getElementById('genModePack');
@@ -649,51 +651,93 @@
                             if (rr.ok) report = await rr.json();
                         } catch (e) { /* il report e' un extra */ }
 
+                        // Formato scelto dall'utente. Il JSON viene SEMPRE incluso in
+                        // ogni caso: e' il formato nativo, l'unico ricaricabile
+                        // nell'app senza perdere palette, ops e metadati.
+                        const fmt = packExportFormat ? packExportFormat.value : 'glb';
+                        const wantGlb = (fmt === 'glb' || fmt === 'both');
+                        const wantObj = (fmt === 'obj' || fmt === 'both');
+                        const wantVox = packExportVox ? packExportVox.checked : true;
+
                         const files = [];
                         const manifest = {
                             format: 'voxelai-pack',
                             version: 1,
                             generatedAt: new Date().toISOString(),
                             assetCount: data.count,
+                            formats: { json: true, glb: wantGlb, obj: wantObj, vox: wantVox },
                             assets: [],
                             coherence: report || undefined
                         };
 
-                        data.assets.forEach(a => {
+                        const failures = [];
+                        // for..of (non forEach): il GLB e' asincrono e va atteso.
+                        // Gli asset si esportano in SEQUENZA per non tenere in memoria
+                        // N mesh temporanei contemporaneamente.
+                        let done = 0;
+                        for (const a of data.assets) {
                             const model = a.model || {};
-                            const voxels = (typeof expandOps === 'function')
-                                ? (expandOps(JSON.parse(JSON.stringify(model))).voxels || [])
-                                : (model.voxels || []);
+                            const expanded = (typeof expandOps === 'function')
+                                ? expandOps(JSON.parse(JSON.stringify(model)))
+                                : model;
+                            const voxels = (expanded && expanded.voxels) || model.voxels || [];
                             const dir = a.label + '/';
+
+                            // Avanzamento: un pack da 15 asset con GLB richiede qualche
+                            // secondo, meglio dirlo che sembrare bloccati.
+                            done++;
+                            packExportAllBtn.textContent = ((typeof t === 'function')
+                                ? t('pack.exporting') : 'Preparazione ZIP...') + ' ' + done + '/' + data.assets.length;
 
                             files.push({ name: dir + a.label + '.json', data: JSON.stringify(model, null, 2) });
 
                             // .vox per MagicaVoxel: lo standard de-facto del mondo voxel
-                            try {
-                                if (typeof encodeVox === 'function' && voxels.length) {
-                                    files.push({ name: dir + a.label + '.vox', data: encodeVox(voxels) });
-                                }
-                            } catch (e) { /* un formato in meno, non un export fallito */ }
+                            if (wantVox) {
+                                try {
+                                    if (typeof encodeVox === 'function' && voxels.length) {
+                                        files.push({ name: dir + a.label + '.vox', data: encodeVox(voxels) });
+                                    }
+                                } catch (e) { failures.push(a.label + ' (.vox)'); }
+                            }
 
-                            // OBJ + MTL (Blender e qualunque altro DCC)
-                            try {
-                                if (typeof buildObjText === 'function' && voxels.length) {
-                                    files.push({ name: dir + a.label + '.obj', data: buildObjText(a.label + '.mtl', voxels) });
-                                    files.push({ name: dir + a.label + '.mtl', data: buildMtlText(voxels) });
-                                }
-                            } catch (e) { /* idem */ }
+                            // OBJ + MTL: sempre in coppia, il .mtl porta i colori.
+                            if (wantObj) {
+                                try {
+                                    if (typeof buildObjText === 'function' && voxels.length) {
+                                        files.push({ name: dir + a.label + '.obj', data: buildObjText(a.label + '.mtl', voxels) });
+                                        files.push({ name: dir + a.label + '.mtl', data: buildMtlText(voxels) });
+                                    }
+                                } catch (e) { failures.push(a.label + ' (.obj)'); }
+                            }
+
+                            // GLB: asincrono, va atteso asset per asset.
+                            if (wantGlb && voxels.length && typeof buildGlbForModel === 'function') {
+                                try {
+                                    const bytes = await buildGlbForModel(expanded);
+                                    if (bytes && bytes.length) {
+                                        files.push({ name: dir + a.label + '.glb', data: bytes });
+                                    }
+                                } catch (e) { failures.push(a.label + ' (.glb)'); }
+                            }
 
                             manifest.assets.push({
                                 label: a.label, object: a.objectName, variant: a.variant,
                                 voxels: voxels.length,
                                 gridSize: (model.metadata && model.metadata.grid_size) || null
                             });
-                        });
+                        }
+                        if (failures.length) manifest.exportWarnings = failures;
 
                         files.push({ name: 'pack.json', data: JSON.stringify(manifest, null, 2) });
 
                         const stamp = new Date().toISOString().slice(0, 10);
                         downloadBlob(createZipBlob(files), 'VoxelAI_Pack_' + stamp + '.zip');
+                        // Uno ZIP a cui manca un formato deve dirlo: scoprirlo dopo,
+                        // aprendo l'archivio, e' peggio.
+                        if (failures.length) {
+                            alert(((typeof t === 'function') ? t('pack.exportPartial')
+                                : 'Alcuni formati non sono stati generati: ') + failures.join(', '));
+                        }
                     } catch (err) {
                         alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore: ') + err.message);
                     } finally {
