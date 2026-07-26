@@ -309,5 +309,11 @@
   "pack.modularHint": "Cada bloco preencherá toda a grelha com faces planas e detalhes esculpidos para dentro, sem deixar frestas ao colocá-los lado a lado. O resultado é verificado automaticamente.",
   "pack.enforcePaletteHint": "Ative só se os objetos partilharem o mesmo material. Com materiais diferentes, o metal pode assumir as cores da terra.",
   "pack.modularOk": "Bloco modular conforme",
-  "pack.modularWarn": "Este bloco não encaixa corretamente"
+  "pack.modularWarn": "Este bloco não encaixa corretamente",
+  "pack.exportFormat": "Formato 3D",
+  "pack.formatGlb": "GLB (Unity, Godot, Blender)",
+  "pack.formatObj": "OBJ + MTL (Blender, 3ds Max)",
+  "pack.formatBoth": "Ambos",
+  "pack.formatVox": "Incluir também .vox (MagicaVoxel)",
+  "pack.exportPartial": "Alguns formatos não foram gerados: "
 }
