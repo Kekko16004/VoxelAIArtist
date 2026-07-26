@@ -298,6 +298,13 @@ def build_pack_prompt(object_name, variant, style_contract, options):
     if pack_rules:
         parts.append(pack_rules)
 
+    # MODALITA' BLOCCHI MODULARI: regole che hanno priorita' su tutto il resto,
+    # quindi vanno DOPO (i modelli seguono meglio le istruzioni vicine alla fine).
+    if (options or {}).get("modular"):
+        modular_rules = _read_prompt_file("prompt-modular.txt", "")
+        if modular_rules:
+            parts.append(modular_rules)
+
     parts.append(
         "### ASSET DA GENERARE ORA\n\n"
         f"SOGGETTO: {object_name}\n"
@@ -668,6 +675,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "variants": variants,
                     "enforce_palette": body.get("enforcePalette", True),
                     "normalize": body.get("normalize", True),
+                    "modular": body.get("modular", False),
                 }
                 run = PACK_MANAGER.create_run(objects, variants, references, options)
                 print(f"[pack] avviato {run.id}: {len(run.jobs)} job "
