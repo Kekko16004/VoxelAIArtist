@@ -15,8 +15,17 @@
                     colorGroups[c].push(v.x, v.y, v.z);
                 });
 
+                let paletteIndex = 0;
                 for (const c in colorGroups) {
-                    const key = String.fromCharCode(nextChar++);
+                    let key;
+                    if (paletteIndex < 26) {
+                        key = String.fromCharCode(97 + paletteIndex); // 'a'..'z'
+                    } else if (paletteIndex < 52) {
+                        key = String.fromCharCode(65 + (paletteIndex - 26)); // 'A'..'Z'
+                    } else {
+                        key = 'c' + (paletteIndex - 52); // 'c0', 'c1', 'c2'...
+                    }
+                    paletteIndex++;
                     palette[key] = c;
                     // op structure: ["set", key, x1,y1,z1, x2,y2,z2, ...]
                     ops.push(["set", key, ...colorGroups[c]]);

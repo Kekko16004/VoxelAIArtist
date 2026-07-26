@@ -79,6 +79,7 @@ Gli `ops` vengono applicati in ORDINE: quelli successivi sovrascrivono i precede
 
 ### LINEE GUIDA DI DESIGN (SOLIDITÀ, SPESSORE, DETTAGLIO)
 
+- TEXTURE, DETTAGLIO E RUMORE CROMATICO (REGOLA CRITICA): EVITA ASSOLUTAMENTE di creare grandi superfici, facciate o "quadrati" piatti e monocolore! Usa una moltitudine di comandi `set`, `line` o piccoli `rect` per aggiungere texture, gradienti, venature, graffi, crepe o rumore (noise) cromatico. Le superfici devono apparire super dettagliate, realistiche e "vissute", MAI composte da un blocco di colore solido omogeneo. Stratifica sempre i colori!
 - ALTO DETTAGLIO: modello ricco e riconoscibile. Non essere pigro, non fare abbozzi filiformi. Se l'utente chiede "molto dettagliato", aumenta griglia e numero di comandi, ma di base devi semprefare roba di qualità assoluta.
 - SPESSORE E VOLUME: niente elementi spessi un solo voxel salvo dettagli intenzionali. Corpi, manici, aste, colonne devono avere spessore reale (almeno 2x2 o 3x3). Usa `fill`.
 - SOLIDO E RIEMPITO: gli oggetti sono pieni, non gusci vuoti né voxel sparsi. Usa `fill` per i volumi principali se serve. 

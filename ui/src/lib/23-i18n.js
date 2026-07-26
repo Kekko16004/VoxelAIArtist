@@ -25,7 +25,8 @@
             function i18nUrl(file) {
                 const base = (typeof __API_BASE__ !== 'undefined' && __API_BASE__) ? __API_BASE__ : '';
                 const slash = (base && !base.endsWith('/')) ? '/' : '';
-                return `${base}${slash}locales/${file}`;
+                const uiPrefix = (base && !base.endsWith('/ui')) ? 'ui/' : '';
+                return `${base}${slash}${uiPrefix}locales/${file}`;
             }
 
             function interpolate(str, vars) {

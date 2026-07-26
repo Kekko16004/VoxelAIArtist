@@ -29,5 +29,6 @@
   "lib/28-incremental.js",
   "lib/29-zip.js",
   "lib/27-pack.js",
+  "lib/30-import-glb.js",
   "lib/18-bootstrap-tail.js"
 ]

@@ -231,6 +231,25 @@ ambiente), non un piccolo oggetto. Regole aggiuntive vincolanti:
    proporzioni credibili (una porta alta ~2/3 del piano terra).
 """
 
+MODULAR_ASSET_RULE = """
+
+[MODALITA' ASSET MODULARE / BLOCCO COMPONIBILE - ISTRUZIONI TASSATIVE]
+Questo modello è un ASSET MODULARE COMPONIBILE (blocco, parete, pavimento, o modulo di costruzione).
+Devi rispettare tassativamente queste regole di costruzione per garantire la perfetta modularità:
+
+1. RIEMPIMENTO ED ESTENSIONE COMPLETA SUI BORDI (0..MAX):
+   Se l'oggetto è un blocco o tile (es. Blocco Terra, Blocco Ferro, Blocco Pietra, Parete, Pavimento), DEVE riempire interamente l'area X e Z della griglia da x=0 fino all'ultimo voxel x=X_MAX e da z=0 a z=Z_MAX. NON lasciare mai margini vuoti, rientranze o spazi fluttuanti ai bordi laterali: le 4 pareti laterali esterne devono essere PIATTE E PARALLELE agli assi della griglia.
+
+2. INCASTRO E CONTINUITÀ PERFETTA SENZA SPAZI:
+   Affiancando due moduli adiacenti in griglia (es. posizione 0 e posizione 64), le facce laterali devono combaciare al 100% SENZA ALCUN VUOTO O FESSURA tra un blocco e l'altro.
+
+3. AUTONOMIA CROMATICA E MATERIALI:
+   Usa esclusivamente la palette e i colori idonei al MATERIALE SPECIFICO dell'oggetto (es. Ferro = grigio/scuro metallico, Pietra = grigio roccia, Marmo = bianco/grigio, Basalto = scuro/nero, Terra = marrone/verde). NON aggiungere coperture di erba o vegetazione verde a blocchi che non siano di terra o natura!
+
+4. SUPERFICI ULTRA DETTAGLIATE (NO QUADRATI PIATTI):
+   EVITA ASSOLUTAMENTE grandi facciate piatte e monocolore o "quadrati di colore uniforme" (che sembrano errori di texture o zone non colorate). Usa texture avanzate, gradienti, crepe, sfumature e pattern dettagliati servendoti di comandi `set` e `line` e colori multipli della palette. Il blocco deve apparire realistico, ruvido e ricco di microdettagli su tutte le facce visibili.
+"""
+
 
 def _apply_grid_rule(prompt_text, grid_size):
     """Aggiunge la regola tassativa sulla griglia, se non e' 'auto'."""
@@ -350,6 +369,8 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def translate_path(self, path):
+        if path.startswith('/locales/'):
+            path = '/ui' + path
         translated = super().translate_path(path)
         rel = os.path.relpath(translated, os.getcwd())
         return os.path.join(BASE_DIR, rel)
@@ -769,6 +790,9 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 # genera un oggetto piccolo anche su una griglia enorme.
                 if payload.get("bigStructure"):
                     final_prompt += BIG_STRUCTURE_RULE
+
+                if payload.get("modular"):
+                    final_prompt += MODULAR_ASSET_RULE
 
                 if grid_size != "auto":
                     dims = grid_size.split('x')

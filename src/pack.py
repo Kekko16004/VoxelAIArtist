@@ -346,7 +346,7 @@ def _palette_role(hexc):
     return "colore base"
 
 
-def build_style_contract(style, grid_override=None, detail_override=None, extra_notes=None):
+def build_style_contract(style, grid_override=None, detail_override=None, extra_notes=None, modular=False, enforce_palette=True):
     """
     Trasforma il dizionario di `distill_style` in un blocco di testo compatto da
     iniettare nel prompt. Se `style` e' vuoto (nessun riferimento e nessuna
@@ -369,7 +369,7 @@ def build_style_contract(style, grid_override=None, detail_override=None, extra_
         )
 
     palette = (style or {}).get("palette") or []
-    if palette:
+    if palette and enforce_palette:
         lines.append(
             f"- PALETTE CONDIVISA ({len(palette)} colori). Usa SOLO questi valori "
             "come voci di 'palette' nel JSON. Non introdurre nuovi colori: se un "
@@ -377,6 +377,14 @@ def build_style_contract(style, grid_override=None, detail_override=None, extra_
         )
         for hexc in palette:
             lines.append(f"    {hexc}   ({_palette_role(hexc)})")
+    elif not enforce_palette:
+        lines.append(
+            "- PALETTE INDIPENDENTE E REALE PER MATERIALE: Ogni oggetto deve utilizzare "
+            "esclusivamente i propri colori naturali e realistici idonei al MATERIALE SPECIFICO "
+            "richiesto nel nome (es. Ferro -> toni grigi/metallici, Pietra -> grigio roccia, "
+            "Marmo -> bianco/grigio, Basalto -> scuro/nero, Terra -> marrone/verde). "
+            "NON applicare la palette o l'erba/verde di un altro blocco su oggetti in metallo, pietra o marmo!"
+        )
 
     detail = detail_override or (style or {}).get("detail")
     avg_voxels = (style or {}).get("avg_voxels") or 0
@@ -403,6 +411,18 @@ def build_style_contract(style, grid_override=None, detail_override=None, extra_
         "plausibile rispetto agli altri oggetti del pack; nessun elemento "
         "fluttuante staccato dal corpo principale."
     )
+    lines.append(
+        "- SUPERFICI ULTRA DETTAGLIATE: EVITA ASSOLUTAMENTE grandi facciate piatte e monocolore "
+        "(niente 'quadrati' o 'rettangoli' di colore uniforme e vuoti). Usa comandi `set` e `line` per aggiungere "
+        "texture, rumore, crepe, venature, sfumature e dettagli realistici su ogni superficie."
+    )
+
+    if modular:
+        lines.append(
+            "- ASSET MODULARI COMPONIBILI: Tutti gli elementi devono avere bordi esterni dritti, "
+            "piatti e allineati alla griglia (riempiendo interamente da x=0 a x=X_MAX e z=0 a z=Z_MAX) "
+            "per consentire l'incastro perfetto e l'affiancamento continuo senza vuoti o fessure."
+        )
 
     if extra_notes:
         lines.append("- Note aggiuntive dell'utente: " + str(extra_notes).strip())
@@ -621,9 +641,9 @@ def _translate_model(model_data, dx, dy, dz):
     return model_data
 
 
-def normalize_asset(model_data, grid_size=None):
+def normalize_asset(model_data, grid_size=None, is_modular=False):
     """
-    ANCORAGGIO (idea #4). Centra l'asset sugli assi X/Z e lo appoggia a y=0.
+    ANCORAGGIO (idea #4). Centra l'asset sugli assi X/Z (o allinea a 0,0 se modulare) e lo appoggia a y=0.
 
     Perche' serve: un pack va importato in un motore di gioco e messo in scena.
     Se ogni asset ha un'origine diversa (uno parte da y=5, un altro e' spostato
@@ -650,10 +670,16 @@ def normalize_asset(model_data, grid_size=None):
     except (TypeError, ValueError, IndexError):
         gw, gh, gd = max(32, sx), max(32, sy), max(32, sz)
 
-    # Centro su X/Z, appoggio a y=0.
-    dx = (gw - sx) // 2 - minx
-    dz = (gd - sz) // 2 - minz
-    dy = -miny
+    if is_modular or (sx >= gw - 4 and sz >= gd - 4):
+        # Per asset modulari/blocchi che riempiono la griglia: allinea a x=0, z=0
+        dx = -minx
+        dz = -minz
+        dy = -miny
+    else:
+        # Centro su X/Z, appoggio a y=0 per modelli singoli decorativi.
+        dx = (gw - sx) // 2 - minx
+        dz = (gd - sz) // 2 - minz
+        dy = -miny
 
     _translate_model(model_data, dx, dy, dz)
     report["moved"] = (dx, dy, dz)
@@ -673,19 +699,33 @@ SIZE_HINTS = {
 }
 
 
+def parse_modular_hint(name):
+    """
+    Ritorna (clean_name, is_modular: bool).
+    Riconosce ':modulare' nel nome dell'oggetto (es. 'Parete :modulare' o 'Parete :grande :modulare').
+    """
+    if not isinstance(name, str):
+        return (name or "").strip(), False
+    if ":modulare" in name.lower():
+        clean = re.sub(r":modulare\b", "", name, flags=re.IGNORECASE).strip()
+        return clean, True
+    return name.strip(), False
+
+
 def parse_size_hint(name):
     """
     Estrae una taglia dichiarata dal nome oggetto: "Armadio :grande" -> ("Armadio",
     "grande"). Senza suffisso ritorna (nome, None): niente magie, la normalizzazione
     di scala si applica solo se l'utente l'ha chiesta esplicitamente.
     """
-    if not isinstance(name, str) or ":" not in name:
-        return (name or "").strip(), None
-    head, _, tail = name.rpartition(":")
+    clean_name, _ = parse_modular_hint(name)
+    if not isinstance(clean_name, str) or ":" not in clean_name:
+        return (clean_name or "").strip(), None
+    head, _, tail = clean_name.rpartition(":")
     tag = tail.strip().lower()
     if tag in SIZE_HINTS:
         return head.strip(), tag
-    return name.strip(), None
+    return clean_name.strip(), None
 
 
 def pack_coherence_report(assets):
@@ -1045,11 +1085,19 @@ class PackManager(object):
             conc = DEFAULT_CONCURRENCY
         options["concurrency"] = max(1, min(MAX_CONCURRENCY, conc))
 
+        # Normalizzazione opzioni camelCase/snake_case
+        enforce_pal = bool(options.get("enforce_palette", options.get("enforcePalette", True)))
+        options["enforce_palette"] = enforce_pal
+        options["enforcePalette"] = enforce_pal
+
+        is_mod = bool(options.get("modular"))
         style = distill_style(references or [])
         contract = build_style_contract(
             style,
             grid_override=_parse_grid(options.get("grid_size")),
             extra_notes=options.get("notes"),
+            modular=is_mod,
+            enforce_palette=enforce_pal,
         )
 
         run_id = uuid.uuid4().hex[:12]
@@ -1141,8 +1189,9 @@ class PackManager(object):
         return None
 
     def _effective_contract(self, run):
-        """Contratto attivo: l'ancora ha la precedenza se non c'erano riferimenti."""
-        if run.anchor_contract and not (run.style.get("palette")):
+        """Contratto attivo: l'ancora ha la precedenza SOLO SE enforce_palette e' True e non c'erano riferimenti."""
+        enforce_pal = bool(run.options.get("enforce_palette", run.options.get("enforcePalette", True)))
+        if enforce_pal and run.anchor_contract and not (run.style.get("palette")):
             return run.anchor_contract
         return run.base_contract
 
@@ -1187,11 +1236,10 @@ class PackManager(object):
                     raise ValueError("Risposta AI priva di voxel/ops utilizzabili.")
 
                 # VINCOLO CROMATICO (non semplice auspicio nel prompt): rimappa
-                # i colori sulla palette del pack. Senza questo, "usa solo questi
-                # colori" resta una richiesta che l'LLM disattende regolarmente e
-                # il pack esce con N palette diverse.
+                # i colori sulla palette del pack solo se enforce_palette e' attivo.
                 palette_report = None
-                if run.options.get("enforce_palette", True):
+                enforce_pal = bool(run.options.get("enforce_palette", run.options.get("enforcePalette", True)))
+                if enforce_pal:
                     target_palette = (run.style.get("palette")
                                       or (run.anchor_style or {}).get("palette"))
                     if target_palette:
@@ -1200,12 +1248,12 @@ class PackManager(object):
                         except Exception:
                             palette_report = None  # mai bloccare un job per questo
 
-                # ANCORAGGIO (#4): centra su XZ e appoggia a y=0, cosi' il pack si
-                # importa in un motore di gioco senza riposizionare a mano ogni pezzo.
+                # ANCORAGGIO (#4): centra su XZ (o allinea a 0,0 se modulare) e appoggia a y=0.
                 if run.options.get("normalize", True):
                     try:
+                        is_mod = bool(run.options.get("modular")) or parse_modular_hint(job.object_name)[1]
                         data, _anchor_report = normalize_asset(
-                            data, _parse_grid(run.options.get("grid_size")))
+                            data, _parse_grid(run.options.get("grid_size")), is_modular=is_mod)
                     except Exception:
                         pass  # l'ancoraggio e' un miglioramento, mai un blocco
 

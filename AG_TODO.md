@@ -43,5 +43,12 @@
 - [x] fix resizeobserver loop error (100%)
 - [x] apply 01-codice.patch & push (100%)
 - [x] apply 02-pulizia.patch & push (100%)
-
-
+- [x] plan implementation (100%)
+- [x] fix desktop i18n url path (100%)
+- [x] fix webgl canvas opaque & resize flicker (100%)
+- [x] add modular asset toggle single & pack ui (100%)
+- [x] add modular prompt rules python backend (100%)
+- [x] build ui & run tests (100%)
+- [x] fix enforce_palette option key & anchor leak (100%)
+- [x] strengthen modular full-grid rule & flush alignment (100%)
+- [x] rebuild & test (100%)

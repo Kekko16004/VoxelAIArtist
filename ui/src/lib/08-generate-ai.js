@@ -87,6 +87,15 @@
                 });
             }
 
+            const toggleModular = document.getElementById('toggleModular');
+            const modularHint = document.getElementById('modularHint');
+            if (toggleModular) {
+                toggleModular.addEventListener('change', () => {
+                    const on = toggleModular.checked;
+                    if (modularHint) modularHint.style.display = on ? '' : 'none';
+                });
+            }
+
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
@@ -114,6 +123,7 @@
                         gridSize: gridSelect.value,
                         mode: modeSelect.value,
                         bigStructure: toggleBigStructure ? toggleBigStructure.checked : false,
+                        modular: toggleModular ? toggleModular.checked : false,
                         currentModel: getSavePayload(),
                         image: selectedImageBase64
                     })

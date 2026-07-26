@@ -27,6 +27,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <style>
         /*
@@ -1753,6 +1754,20 @@
                             La generazione è più lenta e il modello più pesante da visualizzare.
                         </p>
 
+                        <div class="control-row">
+                            <label title="Genera pezzi componibili (es. pareti, pavimenti, blocchi con bordi combacianti)"
+                                data-i18n-title="generate.modularTitle"
+                                data-i18n="generate.modular">Asset modulare / componibile</label>
+                            <label class="switch">
+                                <input type="checkbox" id="toggleModular">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p class="hint-text" id="modularHint" style="margin: 0; display: none;"
+                            data-i18n="generate.modularHint">
+                            L'IA allineerà i bordi alla griglia in modo che il modello sia componibile e affiancabile.
+                        </p>
+
                         <button class="btn btn-primary" id="generateBtn"
                             style="width: 100%; font-size: 12px; padding: 10px;" data-i18n="generate.generateBtn">Genera Modello</button>
                     </div>
@@ -1766,8 +1781,8 @@
                         <polyline points="17 8 12 3 7 8"></polyline>
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                    <p data-i18n="dropzone.hint">Trascina il JSON/VoxelAI o clicca qui</p>
-                    <input type="file" id="fileInput" accept=".json,.voxelai,.vox,.schem,.schematic" style="display: none;">
+                    <p data-i18n="dropzone.hint">Trascina il JSON/GLB o clicca qui</p>
+                    <input type="file" id="fileInput" accept=".json,.voxelai,.vox,.schem,.schematic,.glb,.gltf" style="display: none;">
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; margin-bottom: 8px;">
@@ -1881,8 +1896,8 @@
                                 <span data-i18n="pack.addObj">+ Aggiungi oggetto</span>
                             </button>
                             <p class="hint-text" style="margin: 0;" data-i18n="pack.sizeHintLabel">
-                                Suggerimento: aggiungi :piccolo, :medio, :grande o :enorme dopo il nome
-                                per definire la scala relativa
+                                Suggerimento: aggiungi :piccolo, :medio, :grande, :enorme o :modulare dopo il nome
+                                per definire la scala o la modularità
                             </p>
                         </div>
 
@@ -1926,6 +1941,14 @@
                                 data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
                             <label class="switch">
                                 <input type="checkbox" id="packEnforcePalette" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="control-row">
+                            <label title="Rende gli asset del pack componibili con bordi allineati e modulari"
+                                data-i18n-title="pack.modularTitle" data-i18n="pack.modular">Genera asset modulari</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packModular">
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -2357,6 +2380,17 @@
     </aside>
 
     </div><!-- /.workspace -->
+
+    <!-- ===== Modale Importazione GLB ===== -->
+    <div id="importOverlay" style="display:none; position:fixed; inset:0; z-index:90; align-items:center; justify-content:center; background:var(--overlay-scrim); flex-direction:column; gap:16px;">
+        <div class="glass" style="width:min(400px, 90%); padding:24px; border-radius:var(--radius-lg); text-align:center; display:flex; flex-direction:column; gap:16px;">
+            <div style="font-size:16px; font-weight:600; color:var(--text-primary);" data-i18n="import.progressTitle">Voxelizzazione in corso...</div>
+            <div style="width: 100%; background: var(--input-bg-strong); border-radius: 8px; height: 12px; overflow: hidden; border: 1px solid var(--glass-border);">
+                <div id="importProgressBar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear;"></div>
+            </div>
+            <div id="importProgressText" style="font-size:13px; color:var(--text-secondary);" data-i18n="pack.starting">Avvio...</div>
+        </div>
+    </div>
 
     <!-- ===== Modale Impostazioni ===== -->
     <div id="settingsOverlay"

@@ -16,6 +16,7 @@
             const packModelSelect = document.getElementById('packModelSelect');
             const packGridSelect = document.getElementById('packGridSelect');
             const packEnforcePalette = document.getElementById('packEnforcePalette');
+            const packModular = document.getElementById('packModular');
             const packEstimate = document.getElementById('packEstimate');
             const packStartBtn = document.getElementById('packStartBtn');
             const packCancelBtn = document.getElementById('packCancelBtn');
@@ -252,7 +253,8 @@
                                 references: packReferences.map(r => r.data),
                                 model: packModelSelect ? packModelSelect.value : null,
                                 gridSize: packGridSelect ? packGridSelect.value : 'auto',
-                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true
+                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true,
+                                modular: packModular ? packModular.checked : false
                             })
                         });
                         const data = await res.json();

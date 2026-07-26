@@ -1,5 +1,5 @@
             const canvas = document.getElementById('canvas3d');
-            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 
@@ -214,17 +214,29 @@
                 if (container) {
                     const width = container.clientWidth;
                     const height = container.clientHeight;
+                    if (width <= 0 || height <= 0 || isNaN(width) || isNaN(height)) return;
                     camera.aspect = width / height;
                     camera.updateProjectionMatrix();
                     renderer.setSize(width, height);
+                    if (typeof renderOnDemand === 'function') renderOnDemand();
                 }
             }
-            const resizeObserver = new ResizeObserver(() => {
+            let resizeScheduled = false;
+            function scheduleResize() {
+                if (resizeScheduled) return;
+                resizeScheduled = true;
                 requestAnimationFrame(() => {
+                    resizeScheduled = false;
                     resizeCanvas();
                 });
+            }
+            const resizeObserver = new ResizeObserver(() => {
+                scheduleResize();
             });
-            resizeObserver.observe(document.querySelector('.canvas-container'));
-            window.addEventListener('resize', resizeCanvas);
+            const canvasContainerEl = document.querySelector('.canvas-container');
+            if (canvasContainerEl) {
+                resizeObserver.observe(canvasContainerEl);
+            }
+            window.addEventListener('resize', scheduleResize);
 
             // Initialize UI Elements

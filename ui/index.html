@@ -27,6 +27,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <style>
         /*
@@ -1753,6 +1754,20 @@
                             La generazione è più lenta e il modello più pesante da visualizzare.
                         </p>
 
+                        <div class="control-row">
+                            <label title="Genera pezzi componibili (es. pareti, pavimenti, blocchi con bordi combacianti)"
+                                data-i18n-title="generate.modularTitle"
+                                data-i18n="generate.modular">Asset modulare / componibile</label>
+                            <label class="switch">
+                                <input type="checkbox" id="toggleModular">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <p class="hint-text" id="modularHint" style="margin: 0; display: none;"
+                            data-i18n="generate.modularHint">
+                            L'IA allineerà i bordi alla griglia in modo che il modello sia componibile e affiancabile.
+                        </p>
+
                         <button class="btn btn-primary" id="generateBtn"
                             style="width: 100%; font-size: 12px; padding: 10px;" data-i18n="generate.generateBtn">Genera Modello</button>
                     </div>
@@ -1766,8 +1781,8 @@
                         <polyline points="17 8 12 3 7 8"></polyline>
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
-                    <p data-i18n="dropzone.hint">Trascina il JSON/VoxelAI o clicca qui</p>
-                    <input type="file" id="fileInput" accept=".json,.voxelai,.vox,.schem,.schematic" style="display: none;">
+                    <p data-i18n="dropzone.hint">Trascina il JSON/GLB o clicca qui</p>
+                    <input type="file" id="fileInput" accept=".json,.voxelai,.vox,.schem,.schematic,.glb,.gltf" style="display: none;">
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; margin-bottom: 8px;">
@@ -1881,8 +1896,8 @@
                                 <span data-i18n="pack.addObj">+ Aggiungi oggetto</span>
                             </button>
                             <p class="hint-text" style="margin: 0;" data-i18n="pack.sizeHintLabel">
-                                Suggerimento: aggiungi :piccolo, :medio, :grande o :enorme dopo il nome
-                                per definire la scala relativa
+                                Suggerimento: aggiungi :piccolo, :medio, :grande, :enorme o :modulare dopo il nome
+                                per definire la scala o la modularità
                             </p>
                         </div>
 
@@ -1926,6 +1941,14 @@
                                 data-i18n-title="pack.enforcePaletteTitle" data-i18n="pack.enforcePalette">Forza palette condivisa</label>
                             <label class="switch">
                                 <input type="checkbox" id="packEnforcePalette" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="control-row">
+                            <label title="Rende gli asset del pack componibili con bordi allineati e modulari"
+                                data-i18n-title="pack.modularTitle" data-i18n="pack.modular">Genera asset modulari</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packModular">
                                 <span class="slider"></span>
                             </label>
                         </div>
@@ -2358,6 +2381,17 @@
 
     </div><!-- /.workspace -->
 
+    <!-- ===== Modale Importazione GLB ===== -->
+    <div id="importOverlay" style="display:none; position:fixed; inset:0; z-index:90; align-items:center; justify-content:center; background:var(--overlay-scrim); flex-direction:column; gap:16px;">
+        <div class="glass" style="width:min(400px, 90%); padding:24px; border-radius:var(--radius-lg); text-align:center; display:flex; flex-direction:column; gap:16px;">
+            <div style="font-size:16px; font-weight:600; color:var(--text-primary);" data-i18n="import.progressTitle">Voxelizzazione in corso...</div>
+            <div style="width: 100%; background: var(--input-bg-strong); border-radius: 8px; height: 12px; overflow: hidden; border: 1px solid var(--glass-border);">
+                <div id="importProgressBar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear;"></div>
+            </div>
+            <div id="importProgressText" style="font-size:13px; color:var(--text-secondary);" data-i18n="pack.starting">Avvio...</div>
+        </div>
+    </div>
+
     <!-- ===== Modale Impostazioni ===== -->
     <div id="settingsOverlay"
          style="display:none; position:fixed; inset:0; z-index:60; align-items:center; justify-content:center; background:var(--overlay-scrim);">
@@ -2492,7 +2526,7 @@
 
             // Three.js Setup
             const canvas = document.getElementById('canvas3d');
-            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 
@@ -2707,18 +2741,30 @@
                 if (container) {
                     const width = container.clientWidth;
                     const height = container.clientHeight;
+                    if (width <= 0 || height <= 0 || isNaN(width) || isNaN(height)) return;
                     camera.aspect = width / height;
                     camera.updateProjectionMatrix();
                     renderer.setSize(width, height);
+                    if (typeof renderOnDemand === 'function') renderOnDemand();
                 }
             }
-            const resizeObserver = new ResizeObserver(() => {
+            let resizeScheduled = false;
+            function scheduleResize() {
+                if (resizeScheduled) return;
+                resizeScheduled = true;
                 requestAnimationFrame(() => {
+                    resizeScheduled = false;
                     resizeCanvas();
                 });
+            }
+            const resizeObserver = new ResizeObserver(() => {
+                scheduleResize();
             });
-            resizeObserver.observe(document.querySelector('.canvas-container'));
-            window.addEventListener('resize', resizeCanvas);
+            const canvasContainerEl = document.querySelector('.canvas-container');
+            if (canvasContainerEl) {
+                resizeObserver.observe(canvasContainerEl);
+            }
+            window.addEventListener('resize', scheduleResize);
 
             // Initialize UI Elements
             const dropzone = document.getElementById('dropzone');
@@ -2806,6 +2852,27 @@
                     breader.readAsArrayBuffer(file);
                     return;
                 }
+                
+                // Formati poligonali (GLB/GLTF): inviamo al voxelizer
+                if (nameLc.endsWith('.glb') || nameLc.endsWith('.gltf')) {
+                    if (typeof importGlbFormat !== 'function') {
+                        alert("Il modulo import-glb.js non è stato caricato.");
+                        return;
+                    }
+                    importGlbFormat(file).then(parsed => {
+                        if (!parsed || !Array.isArray(parsed.voxels)) return;
+                        if (!parsed.metadata) parsed.metadata = {};
+                        if (!parsed.metadata.name) parsed.metadata.name = file.name.replace(/\.[^/.]+$/, "");
+                        const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
+                        if (hasContent) appendSceneFromParsed(parsed);
+                        else loadSceneFromParsed(parsed);
+                        buildModel();
+                    }).catch(err => {
+                        alert('Errore importazione GLB: ' + err.message);
+                    });
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
@@ -2986,14 +3053,23 @@
             function expandOps(data) {
                 if (!data || typeof data !== 'object') return data;
                 const ops = data.ops;
-                if (!ops || !Array.isArray(ops)) {
+                if (!ops || !Array.isArray(ops) || ops.length === 0) {
                     if (!Array.isArray(data.voxels)) data.voxels = [];
                     return data;
                 }
                 const palette = data.palette || {};
                 const resolveColor = (key) => {
                     if (typeof key === 'string' && key.startsWith('#')) return key.toUpperCase();
-                    const col = palette[key];
+                    let col = palette[key];
+                    if (!col && typeof key === 'string') {
+                        const normKey = key.normalize ? key.normalize('NFC') : key;
+                        for (const k in palette) {
+                            if (k === normKey || (k.normalize && k.normalize('NFC') === normKey)) {
+                                col = palette[k];
+                                break;
+                            }
+                        }
+                    }
                     return (typeof col === 'string' && col) ? col.toUpperCase() : '#CCCCCC';
                 };
                 const grid = new Map();
@@ -3123,23 +3199,35 @@
                 return { metadata: data.metadata || {}, voxels };
             }
 
-            // Occlusion Culling Algorithm (high optimization for large 128x128 models)
+            // Occlusion Culling Algorithm — compact numeric key (avoids 32-bit signed overflow)
             function computeVisibility(voxels) {
+                if (!voxels || !voxels.length) return voxels;
+                // Usa moltiplicatori numeri primi grandi ma sicuri per non avere collisioni
+                // senza traboccare int32. MAX coord per asse <= 4095, offset 1 per negativi.
+                const OFF = 1;
+                const MX = 4097, MY = 4097;
                 const set = new Set();
-                voxels.forEach(v => set.add(`${v.x},${v.y},${v.z}`));
-
-                return voxels.filter(v => {
-                    // If voxel is surrounded on all 6 sides, it is fully hidden
-                    const neighbors = [
-                        `${v.x + 1},${v.y},${v.z}`,
-                        `${v.x - 1},${v.y},${v.z}`,
-                        `${v.x},${v.y + 1},${v.z}`,
-                        `${v.x},${v.y - 1},${v.z}`,
-                        `${v.x},${v.y},${v.z + 1}`,
-                        `${v.x},${v.y},${v.z - 1}`
-                    ];
-                    return neighbors.some(n => !set.has(n));
-                });
+                const len = voxels.length;
+                for (let i = 0; i < len; i++) {
+                    const v = voxels[i];
+                    set.add((v.x + OFF) + (v.y + OFF) * MX + (v.z + OFF) * MX * MY);
+                }
+                const visible = [];
+                for (let i = 0; i < len; i++) {
+                    const v = voxels[i];
+                    const ox = v.x + OFF;
+                    const oy = v.y + OFF;
+                    const oz = v.z + OFF;
+                    if (!set.has((ox+1) + oy*MX + oz*MX*MY) ||
+                        !set.has((ox-1) + oy*MX + oz*MX*MY) ||
+                        !set.has(ox + (oy+1)*MX + oz*MX*MY) ||
+                        !set.has(ox + (oy-1)*MX + oz*MX*MY) ||
+                        !set.has(ox + oy*MX + (oz+1)*MX*MY) ||
+                        !set.has(ox + oy*MX + (oz-1)*MX*MY)) {
+                        visible.push(v);
+                    }
+                }
+                return visible;
             }
 
             // Render Model from currentModelData
@@ -4005,8 +4093,17 @@
                     colorGroups[c].push(v.x, v.y, v.z);
                 });
 
+                let paletteIndex = 0;
                 for (const c in colorGroups) {
-                    const key = String.fromCharCode(nextChar++);
+                    let key;
+                    if (paletteIndex < 26) {
+                        key = String.fromCharCode(97 + paletteIndex); // 'a'..'z'
+                    } else if (paletteIndex < 52) {
+                        key = String.fromCharCode(65 + (paletteIndex - 26)); // 'A'..'Z'
+                    } else {
+                        key = 'c' + (paletteIndex - 52); // 'c0', 'c1', 'c2'...
+                    }
+                    paletteIndex++;
                     palette[key] = c;
                     // op structure: ["set", key, x1,y1,z1, x2,y2,z2, ...]
                     ops.push(["set", key, ...colorGroups[c]]);
@@ -4161,6 +4258,15 @@
                 });
             }
 
+            const toggleModular = document.getElementById('toggleModular');
+            const modularHint = document.getElementById('modularHint');
+            if (toggleModular) {
+                toggleModular.addEventListener('change', () => {
+                    const on = toggleModular.checked;
+                    if (modularHint) modularHint.style.display = on ? '' : 'none';
+                });
+            }
+
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
@@ -4188,6 +4294,7 @@
                         gridSize: gridSelect.value,
                         mode: modeSelect.value,
                         bigStructure: toggleBigStructure ? toggleBigStructure.checked : false,
+                        modular: toggleModular ? toggleModular.checked : false,
                         currentModel: getSavePayload(),
                         image: selectedImageBase64
                     })
@@ -8192,7 +8299,8 @@
             function i18nUrl(file) {
                 const base = (typeof __API_BASE__ !== 'undefined' && __API_BASE__) ? __API_BASE__ : '';
                 const slash = (base && !base.endsWith('/')) ? '/' : '';
-                return `${base}${slash}locales/${file}`;
+                const uiPrefix = (base && !base.endsWith('/ui')) ? 'ui/' : '';
+                return `${base}${slash}${uiPrefix}locales/${file}`;
             }
 
             function interpolate(str, vars) {
@@ -9418,6 +9526,7 @@
             const packModelSelect = document.getElementById('packModelSelect');
             const packGridSelect = document.getElementById('packGridSelect');
             const packEnforcePalette = document.getElementById('packEnforcePalette');
+            const packModular = document.getElementById('packModular');
             const packEstimate = document.getElementById('packEstimate');
             const packStartBtn = document.getElementById('packStartBtn');
             const packCancelBtn = document.getElementById('packCancelBtn');
@@ -9654,7 +9763,8 @@
                                 references: packReferences.map(r => r.data),
                                 model: packModelSelect ? packModelSelect.value : null,
                                 gridSize: packGridSelect ? packGridSelect.value : 'auto',
-                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true
+                                enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true,
+                                modular: packModular ? packModular.checked : false
                             })
                         });
                         const data = await res.json();
@@ -10099,6 +10209,224 @@
             packFillModels();
             packUpdateEstimate();
             packResume();
+
+/**
+ * VoxelAIArtist - Importazione e Voxelizzazione GLB/GLTF
+ * Utilizza THREE.Raycaster per scansionare il modello su 3 assi ortogonali,
+ * ricavando il guscio esterno (shell) e campionando i colori dalle texture.
+ */
+
+window.importGlbFormat = function (file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const buffer = e.target.result;
+            const loader = new THREE.GLTFLoader();
+            loader.parse(buffer, '', async (gltf) => {
+                try {
+                    const result = await voxelizeScene(gltf.scene);
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                }
+            }, (err) => {
+                reject(new Error("Errore nel parsing del GLB: " + err.message));
+            });
+        };
+        reader.onerror = () => reject(new Error("Impossibile leggere il file"));
+        reader.readAsArrayBuffer(file);
+    });
+};
+
+async function voxelizeScene(gltfScene, maxGridSize = 64) {
+    const overlay = document.getElementById('importOverlay');
+    const progBar = document.getElementById('importProgressBar');
+    const progText = document.getElementById('importProgressText');
+    
+    if (overlay) overlay.style.display = 'flex';
+    if (progBar) progBar.style.width = '0%';
+    if (progText) progText.textContent = 'Calcolo dimensioni...';
+
+    try {
+        // Permette alla UI di aggiornarsi
+        await new Promise(r => setTimeout(r, 10));
+
+        // Forziamo DoubleSide su tutti i materiali e aggiorniamo la matrice PRIMA di calcolare la Bounding Box
+        gltfScene.traverse(child => {
+            if (child.isMesh && child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => { if (m) m.side = THREE.DoubleSide; });
+                } else {
+                    child.material.side = THREE.DoubleSide;
+                }
+            }
+        });
+        gltfScene.updateMatrixWorld(true);
+
+        // 1. Calcola la Bounding Box totale
+        const box = new THREE.Box3().setFromObject(gltfScene);
+        if (box.isEmpty()) {
+            throw new Error("Il modello GLB è vuoto");
+        }
+
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        // 2. Determina la scala per far stare il modello nella griglia massima
+        const maxDim = Math.max(size.x, size.y, size.z);
+        if (maxDim === 0) {
+            throw new Error("Il modello ha dimensione 0");
+        }
+
+        const scale = (maxGridSize - 2) / maxDim; // Margine di 1 voxel per lato
+        const W = Math.ceil(size.x * scale) + 2;
+        const H = Math.ceil(size.y * scale) + 2;
+        const D = Math.ceil(size.z * scale) + 2;
+
+        function worldToVoxel(pt) {
+            const vx = Math.round((pt.x - box.min.x) * scale) + 1;
+            const vy = Math.round((pt.y - box.min.y) * scale) + 1;
+            const vz = Math.round((pt.z - box.min.z) * scale) + 1;
+            return { x: vx, y: vy, z: vz };
+        }
+
+        // 3. Sistema di caching per il campionamento Texture
+        const textureCanvasCache = new Map();
+
+        function getTexturePixel(map, u, v) {
+            if (!map || !map.image) return null;
+            if (!textureCanvasCache.has(map.uuid)) {
+                const img = map.image;
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (ctx) {
+                    if (map.flipY) {
+                        ctx.translate(0, img.height);
+                        ctx.scale(1, -1);
+                    }
+                    ctx.drawImage(img, 0, 0);
+                    textureCanvasCache.set(map.uuid, { ctx, w: img.width, h: img.height });
+                } else {
+                    textureCanvasCache.set(map.uuid, null);
+                }
+            }
+            const cache = textureCanvasCache.get(map.uuid);
+            if (!cache) return null;
+            let tx = u;
+            let ty = map.flipY ? v : (1.0 - v);
+            tx = tx - Math.floor(tx);
+            ty = ty - Math.floor(ty);
+            if (tx < 0) tx += 1;
+            if (ty < 0) ty += 1;
+            const px = Math.floor(tx * cache.w);
+            const py = Math.floor(ty * cache.h);
+            try {
+                const pixel = cache.ctx.getImageData(px, py, 1, 1).data;
+                if (pixel[3] < 10) return null;
+                return new THREE.Color(pixel[0]/255, pixel[1]/255, pixel[2]/255);
+            } catch(e) {
+                return null;
+            }
+        }
+
+        function sampleColor(intersect) {
+            let color = new THREE.Color(0x888888);
+            const mat = intersect.object.material;
+            if (mat) {
+                const m = Array.isArray(mat) ? mat[intersect.face?.materialIndex || 0] : mat;
+                if (m) {
+                    if (m.color) color.copy(m.color);
+                    if (m.map && intersect.uv) {
+                        const texColor = getTexturePixel(m.map, intersect.uv.x, intersect.uv.y);
+                        if (texColor) color.copy(texColor);
+                    }
+                }
+            }
+            return '#' + color.getHexString();
+        }
+
+        const voxelSet = new Map();
+        const raycaster = new THREE.Raycaster();
+
+        // 4. Raycasting lungo i 3 assi ortogonali (async chunks)
+        const step = 1.0 / scale;
+        
+        // Calcoliamo i passi totali stimati per la progress bar
+        const stepsX = Math.ceil((box.max.x - box.min.x) / step);
+        const stepsY = Math.ceil((box.max.y - box.min.y) / step);
+        const stepsZ = Math.ceil((box.max.z - box.min.z) / step);
+        const totalRays = (stepsX * stepsZ) * 2 + (stepsX * stepsY) * 2 + (stepsY * stepsZ) * 2;
+        let raysProcessed = 0;
+
+        async function castRaysAsync(axis1, axis2, rayDir, min1, max1, min2, max2, rayOriginBase, name) {
+            if (progText) progText.textContent = `Scansione ${name}...`;
+            let countSinceYield = 0;
+            for (let a = min1; a <= max1; a += step) {
+                for (let b = min2; b <= max2; b += step) {
+                    const origin = new THREE.Vector3();
+                    origin[axis1] = a;
+                    origin[axis2] = b;
+                    origin[rayDir.axis] = rayOriginBase;
+                    
+                    raycaster.set(origin, rayDir.vec);
+                    const hits = raycaster.intersectObject(gltfScene, true);
+                    
+                    for (let hit of hits) {
+                        const v = worldToVoxel(hit.point);
+                        const key = `${v.x},${v.y},${v.z}`;
+                        if (!voxelSet.has(key)) {
+                            voxelSet.set(key, sampleColor(hit));
+                        }
+                    }
+                    raysProcessed++;
+                    countSinceYield++;
+                    if (countSinceYield > 100) { // Yield ogni 100 raggi (bilanciamento UI / velocità)
+                        countSinceYield = 0;
+                        if (progBar) progBar.style.width = Math.min(100, Math.round((raysProcessed / totalRays) * 100)) + '%';
+                        await new Promise(r => setTimeout(r, 0));
+                    }
+                }
+            }
+        }
+
+        await castRaysAsync('x', 'z', { axis: 'y', vec: new THREE.Vector3(0, -1, 0) }, box.min.x, box.max.x, box.min.z, box.max.z, box.max.y + step, 'Dall\'alto');
+        await castRaysAsync('x', 'y', { axis: 'z', vec: new THREE.Vector3(0, 0, -1) }, box.min.x, box.max.x, box.min.y, box.max.y, box.max.z + step, 'Di fronte');
+        await castRaysAsync('y', 'z', { axis: 'x', vec: new THREE.Vector3(-1, 0, 0) }, box.min.y, box.max.y, box.min.z, box.max.z, box.max.x + step, 'Da destra');
+        await castRaysAsync('x', 'z', { axis: 'y', vec: new THREE.Vector3(0, 1, 0) }, box.min.x, box.max.x, box.min.z, box.max.z, box.min.y - step, 'Dal basso');
+        await castRaysAsync('x', 'y', { axis: 'z', vec: new THREE.Vector3(0, 0, 1) }, box.min.x, box.max.x, box.min.y, box.max.y, box.min.z - step, 'Da dietro');
+        await castRaysAsync('y', 'z', { axis: 'x', vec: new THREE.Vector3(1, 0, 0) }, box.min.y, box.max.y, box.min.z, box.max.z, box.min.x - step, 'Da sinistra');
+
+        if (progText) progText.textContent = 'Rendering e culling scena 3D...';
+        if (progBar) progBar.style.width = '100%';
+        await new Promise(r => setTimeout(r, 20));
+
+        // 5. Costruzione del payload (utilizziamo i colori HEX direttamente)
+        const voxels = [];
+        const palette = {};
+
+        voxelSet.forEach((hex, key) => {
+            const [x, y, z] = key.split(',').map(Number);
+            const uppercaseHex = hex.toUpperCase();
+            palette[uppercaseHex] = uppercaseHex;
+            voxels.push({ x, y, z, color: uppercaseHex });
+        });
+
+        console.log(`[import-glb] Voxelizzazione completata: ${voxels.length} voxel generati.`);
+
+        return {
+            metadata: {
+                name: "Imported_GLB",
+                grid_size: [W, H, D]
+            },
+            palette: palette,
+            voxels: voxels
+        };
+    } finally {
+        if (overlay) overlay.style.display = 'none';
+    }
+}
 
             const clock = new THREE.Clock();
 

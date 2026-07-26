@@ -1,14 +1,23 @@
             function expandOps(data) {
                 if (!data || typeof data !== 'object') return data;
                 const ops = data.ops;
-                if (!ops || !Array.isArray(ops)) {
+                if (!ops || !Array.isArray(ops) || ops.length === 0) {
                     if (!Array.isArray(data.voxels)) data.voxels = [];
                     return data;
                 }
                 const palette = data.palette || {};
                 const resolveColor = (key) => {
                     if (typeof key === 'string' && key.startsWith('#')) return key.toUpperCase();
-                    const col = palette[key];
+                    let col = palette[key];
+                    if (!col && typeof key === 'string') {
+                        const normKey = key.normalize ? key.normalize('NFC') : key;
+                        for (const k in palette) {
+                            if (k === normKey || (k.normalize && k.normalize('NFC') === normKey)) {
+                                col = palette[k];
+                                break;
+                            }
+                        }
+                    }
                     return (typeof col === 'string' && col) ? col.toUpperCase() : '#CCCCCC';
                 };
                 const grid = new Map();
@@ -138,23 +147,35 @@
                 return { metadata: data.metadata || {}, voxels };
             }
 
-            // Occlusion Culling Algorithm (high optimization for large 128x128 models)
+            // Occlusion Culling Algorithm — compact numeric key (avoids 32-bit signed overflow)
             function computeVisibility(voxels) {
+                if (!voxels || !voxels.length) return voxels;
+                // Usa moltiplicatori numeri primi grandi ma sicuri per non avere collisioni
+                // senza traboccare int32. MAX coord per asse <= 4095, offset 1 per negativi.
+                const OFF = 1;
+                const MX = 4097, MY = 4097;
                 const set = new Set();
-                voxels.forEach(v => set.add(`${v.x},${v.y},${v.z}`));
-
-                return voxels.filter(v => {
-                    // If voxel is surrounded on all 6 sides, it is fully hidden
-                    const neighbors = [
-                        `${v.x + 1},${v.y},${v.z}`,
-                        `${v.x - 1},${v.y},${v.z}`,
-                        `${v.x},${v.y + 1},${v.z}`,
-                        `${v.x},${v.y - 1},${v.z}`,
-                        `${v.x},${v.y},${v.z + 1}`,
-                        `${v.x},${v.y},${v.z - 1}`
-                    ];
-                    return neighbors.some(n => !set.has(n));
-                });
+                const len = voxels.length;
+                for (let i = 0; i < len; i++) {
+                    const v = voxels[i];
+                    set.add((v.x + OFF) + (v.y + OFF) * MX + (v.z + OFF) * MX * MY);
+                }
+                const visible = [];
+                for (let i = 0; i < len; i++) {
+                    const v = voxels[i];
+                    const ox = v.x + OFF;
+                    const oy = v.y + OFF;
+                    const oz = v.z + OFF;
+                    if (!set.has((ox+1) + oy*MX + oz*MX*MY) ||
+                        !set.has((ox-1) + oy*MX + oz*MX*MY) ||
+                        !set.has(ox + (oy+1)*MX + oz*MX*MY) ||
+                        !set.has(ox + (oy-1)*MX + oz*MX*MY) ||
+                        !set.has(ox + oy*MX + (oz+1)*MX*MY) ||
+                        !set.has(ox + oy*MX + (oz-1)*MX*MY)) {
+                        visible.push(v);
+                    }
+                }
+                return visible;
             }
 
             // Render Model from currentModelData

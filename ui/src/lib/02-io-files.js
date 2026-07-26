@@ -83,6 +83,27 @@
                     breader.readAsArrayBuffer(file);
                     return;
                 }
+                
+                // Formati poligonali (GLB/GLTF): inviamo al voxelizer
+                if (nameLc.endsWith('.glb') || nameLc.endsWith('.gltf')) {
+                    if (typeof importGlbFormat !== 'function') {
+                        alert("Il modulo import-glb.js non è stato caricato.");
+                        return;
+                    }
+                    importGlbFormat(file).then(parsed => {
+                        if (!parsed || !Array.isArray(parsed.voxels)) return;
+                        if (!parsed.metadata) parsed.metadata = {};
+                        if (!parsed.metadata.name) parsed.metadata.name = file.name.replace(/\.[^/.]+$/, "");
+                        const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
+                        if (hasContent) appendSceneFromParsed(parsed);
+                        else loadSceneFromParsed(parsed);
+                        buildModel();
+                    }).catch(err => {
+                        alert('Errore importazione GLB: ' + err.message);
+                    });
+                    return;
+                }
+
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
