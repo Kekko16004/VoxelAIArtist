@@ -303,5 +303,11 @@
   "pack.coherenceOutliers": "Einige Assets sind im Verhältnis zum Rest des Packs außer Maßstab.",
   "pack.savedPacks": "Gespeicherte Packs",
   "pack.savedPacksTitle": "Ein zuvor generiertes Pack erneut öffnen",
-  "pack.noSavedPacks": "Keine gespeicherten Packs."
+  "pack.noSavedPacks": "Keine gespeicherten Packs.",
+  "pack.modular": "Modulare Kacheln (Snap)",
+  "pack.modularTitle": "Blöcke, die das gesamte Raster mit flachen Flächen füllen: sie rasten dank Grid-Snap im Level Builder automatisch ein",
+  "pack.modularHint": "Jeder Block füllt das gesamte Raster mit flachen Flächen und nach innen gearbeiteten Details – nebeneinandergestellt entstehen keine Lücken. Das Ergebnis wird automatisch geprüft.",
+  "pack.enforcePaletteHint": "Nur aktivieren, wenn die Objekte dasselbe Material teilen. Bei unterschiedlichen Materialien kann Metall die Farben der Erde übernehmen.",
+  "pack.modularOk": "Modularer Block konform",
+  "pack.modularWarn": "Dieser Block rastet nicht korrekt ein"
 }
