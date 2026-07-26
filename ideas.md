@@ -118,15 +118,25 @@ Dalla ricerca, i formati non negoziabili per chi sviluppa giochi sono:
 Godot 4 nativo, Three.js) e **`.fbx`** (pipeline Unity/Unreal per personaggi).
 
 **Cosa è stato fatto**: il bottone "Esporta pack (ZIP)" produce un unico archivio
-con una cartella per asset (`.json` + `.vox` + `.obj` + `.mtl`) e un `pack.json`
-di manifest che include il report di coerenza. Lo scrittore ZIP
-(`ui/src/lib/29-zip.js`, modalità *store*) è scritto a mano in ~140 righe **senza
-dipendenze esterne**: nessuno script da CDN, quindi funziona anche offline.
-Validato in modo incrociato con `unzip` di sistema e con `zipfile` di Python,
-inclusi contenuti binari e nomi file con accenti.
+con una cartella per asset e un `pack.json` di manifest che include il report di
+coerenza. Lo scrittore ZIP (`ui/src/lib/29-zip.js`, modalità *store*) è scritto a
+mano in ~140 righe **senza dipendenze esterne**: nessuno script da CDN, quindi
+funziona anche offline. Validato in modo incrociato con `unzip` di sistema e con
+`zipfile` di Python, inclusi contenuti binari e nomi file con accenti.
 
-Resta da fare: GLB per-asset dentro lo ZIP (l'esportatore GLB è asincrono e
-richiede un giro in più) e `.fbx`.
+**Formato selezionabile** (terzo round): un menu a tendina permette di scegliere
+**GLB**, **OBJ + MTL** o **entrambi**, più una spunta per includere il `.vox`.
+Il **JSON è sempre presente** in ogni combinazione: è il formato nativo, l'unico
+che si può ricaricare nell'app senza perdere palette, ops e metadati.
+Il GLB richiedeva lavoro in più perché `GLTFExporter.parse` è asincrono a
+callback: `buildGlbForModel()` lo avvolge in una Promise e gli asset vengono
+esportati in sequenza, distruggendo ogni mesh temporaneo subito dopo (senza
+`dispose`, un pack da 15 asset lascerebbe 15 geometrie sulla GPU). Se un singolo
+formato fallisce, l'utente viene avvisato e il fatto finisce in
+`exportWarnings` dentro il manifest, invece di consegnare uno ZIP monco in
+silenzio.
+
+Resta da fare: `.fbx` (richiede un esportatore che Three.js non fornisce).
 
 ---
 
@@ -240,7 +250,7 @@ prodotto.
 | 2 | Igiene repo e credenziali | ✅ fatto | **revoca del token: spetta a te** |
 | 3 | Tetto sull'espansione voxel | ✅ fatto | ora adattivo alla griglia |
 | 4 | Normalizzazione scala del pack | ✅ fatto | ancoraggio + taglie + report outlier |
-| 5 | Export pack in ZIP | ✅ fatto | `.vox`/OBJ/MTL + manifest, zero dipendenze |
+| 5 | Export pack in ZIP | ✅ fatto | GLB / OBJ+MTL / .vox a scelta, JSON sempre incluso |
 | 6 | Immagine di riferimento | ⏸️ sospesa | su tua indicazione |
 | 7 | CORS e superficie del server | ⬜ parziale | crash `Content-Length` risolti |
 | 8 | Rendering incrementale | ✅ fatto | prerequisito delle griglie grandi |
