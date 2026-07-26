@@ -371,9 +371,15 @@ def build_style_contract(style, grid_override=None, detail_override=None, extra_
     palette = (style or {}).get("palette") or []
     if palette:
         lines.append(
-            f"- PALETTE CONDIVISA ({len(palette)} colori). Usa SOLO questi valori "
-            "come voci di 'palette' nel JSON. Non introdurre nuovi colori: se un "
-            "colore serve e non c'e', scegli il piu' vicino fra questi."
+            f"- PALETTE DI RIFERIMENTO ({len(palette)} colori). Questa e' la "
+            "gamma cromatica del pack: usala come guida per la SATURAZIONE, il "
+            "contrasto e il trattamento delle ombre.\n"
+            "  IMPORTANTE: se il soggetto che stai generando e' fatto di un "
+            "materiale DIVERSO (es. ferro/pietra quando qui sotto vedi colori di "
+            "terra ed erba), NON forzare questi colori sul tuo oggetto: un blocco "
+            "di ferro deve restare grigio metallico. Usa i colori giusti per il "
+            "TUO materiale, mantenendo lo stesso livello di saturazione e lo "
+            "stesso modo di rendere luci e ombre."
         )
         for hexc in palette:
             lines.append(f"    {hexc}   ({_palette_role(hexc)})")
@@ -398,10 +404,17 @@ def build_style_contract(style, grid_override=None, detail_override=None, extra_
         )
 
     lines.append(
-        "- Regole di coerenza non negoziabili: stesso spessore di outline; "
-        "oggetto centrato sull'asse XZ e appoggiato a y=0; scala relativa "
-        "plausibile rispetto agli altri oggetti del pack; nessun elemento "
-        "fluttuante staccato dal corpo principale."
+        "- Regole di coerenza non negoziabili (valgono SEMPRE, anche fra soggetti "
+        "e materiali diversi): stesso spessore di outline; stessa dimensione del "
+        "dettaglio piu' piccolo; stesso modo di rendere ombre e luci; oggetto "
+        "centrato sull'asse XZ e appoggiato a y=0; scala relativa plausibile "
+        "rispetto agli altri oggetti del pack; nessun elemento fluttuante "
+        "staccato dal corpo principale."
+    )
+    lines.append(
+        "- Cosa NON deve essere condiviso: il SOGGETTO e il MATERIALE. Ogni "
+        "oggetto della lista e' una cosa a se': generane la forma corretta per "
+        "cio' che ti viene chiesto, non una variante dell'oggetto precedente."
     )
 
     if extra_notes:
@@ -425,7 +438,71 @@ def _color_distance(a, b):
     return 2 * (ar - br) ** 2 + 4 * (ag - bg) ** 2 + 3 * (ab - bb) ** 2
 
 
-def enforce_palette(model_data, palette, tolerance=None):
+# Quando NON rimappare un colore sulla palette del pack.
+#
+# Prima usavo solo la distanza RGB, ma i dati mostrano che non basta: misurata
+# sui casi reali, "grigio scuro vs verde" dista 20.251 mentre "verde chiaro vs
+# verde scuro" dista 4.924 -> qualunque soglia unica sbaglia uno dei due casi.
+#
+# Il criterio giusto e' PERCETTIVO, non metrico: un grigio (saturazione ~0.00)
+# non e' mai "una sfumatura" di un verde saturo (0.56), per quanto vicini siano
+# i numeri RGB. Quindi decidiamo su tre segnali:
+#   1. saturazione molto diversa -> materiali diversi (ferro vs terra);
+#   2. tinta molto diversa       -> materiali diversi (verde vs marrone);
+#   3. distanza molto grande     -> materiali diversi comunque.
+# Se nessuno scatta, e' una sfumatura dello stesso materiale e va allineata.
+SATURATION_GAP = 0.22     # oltre questo divario di saturazione: materiale diverso
+HUE_GAP_DEGREES = 45      # oltre questo divario di tinta: materiale diverso
+DEFAULT_PALETTE_TOLERANCE = 60000   # distanza RGB pesata oltre cui non si rimappa
+
+
+def _hue(hex_color):
+    """Tinta in gradi 0-360, oppure None per i grigi (nessuna tinta definita)."""
+    try:
+        r = int(hex_color[1:3], 16) / 255.0
+        g = int(hex_color[3:5], 16) / 255.0
+        b = int(hex_color[5:7], 16) / 255.0
+    except (ValueError, IndexError):
+        return None
+    mx, mn = max(r, g, b), min(r, g, b)
+    d = mx - mn
+    if d < 1e-6:
+        return None
+    if mx == r:
+        h = ((g - b) / d) % 6
+    elif mx == g:
+        h = (b - r) / d + 2
+    else:
+        h = (r - g) / d + 4
+    return h * 60.0
+
+
+def _same_material(a, b, tolerance=None):
+    """
+    True se `a` puo' essere considerato una sfumatura di `b` (stesso materiale),
+    quindi rimappabile. False se sono materiali diversi e vanno lasciati stare.
+    """
+    sa, sb = _saturation(a), _saturation(b)
+    if abs(sa - sb) > SATURATION_GAP:
+        return False                      # es. grigio ferro (0.00) vs erba (0.56)
+    ha, hb = _hue(a), _hue(b)
+    if ha is not None and hb is not None:
+        diff = abs(ha - hb)
+        if diff > 180:
+            diff = 360 - diff             # la tinta e' circolare
+        if diff > HUE_GAP_DEGREES:
+            return False                  # es. verde (94) vs marrone (27)
+    elif (ha is None) != (hb is None):
+        # uno e' grigio e l'altro no: stesso materiale solo se il colorato e'
+        # comunque quasi desaturato (allora e' davvero una sfumatura di grigio)
+        if max(sa, sb) > SATURATION_GAP:
+            return False
+    if tolerance is not None and _color_distance(a, b) > tolerance:
+        return False
+    return True
+
+
+def enforce_palette(model_data, palette, tolerance=DEFAULT_PALETTE_TOLERANCE):
     """
     GARANZIA di coerenza cromatica: rimappa ogni colore del modello al piu'
     vicino della palette del pack.
@@ -437,11 +514,16 @@ def enforce_palette(model_data, palette, tolerance=None):
     il pack HA la stessa palette, indipendentemente da quanto l'LLM ha
     obbedito.
 
+    `tolerance` = distanza massima oltre la quale un colore viene LASCIATO STARE.
+    Passare None disattiva la soglia e forza ogni colore sulla palette (comportamento
+    aggressivo: usalo solo quando i soggetti condividono davvero i materiali).
+
     Ritorna (modello_modificato, report) dove report =
-      {"remapped": n_colori_rimappati, "map": {da: a}, "exact": n_colori_giusti}
+      {"remapped": n_colori_rimappati, "map": {da: a}, "exact": n_colori_giusti,
+       "kept": n_colori_lasciati_invariati_perche_troppo_lontani}
     Modifica il dict in place (e lo ritorna) per non duplicare payload grandi.
     """
-    report = {"remapped": 0, "map": {}, "exact": 0}
+    report = {"remapped": 0, "map": {}, "exact": 0, "kept": 0}
     if not isinstance(model_data, dict) or not palette:
         return model_data, report
 
@@ -465,8 +547,11 @@ def enforce_palette(model_data, palette, tolerance=None):
                 best, best_d = cand, d
         # tolerance: se il colore e' troppo lontano da tutta la palette puo'
         # essere lasciato stare (usato per palette parziali/permissive).
-        if tolerance is not None and best_d > tolerance:
+        # Materiale diverso (non una sfumatura)? Lascialo com'e': e' cio' che
+        # impediva a un blocco di ferro di diventare interamente verde terra.
+        if tolerance is not None and not _same_material(hexc, best, tolerance):
             cache[hexc] = hexc
+            report["kept"] += 1
             return hexc
         cache[hexc] = best
         return best
@@ -728,6 +813,113 @@ def pack_coherence_report(assets):
     return {"assets": rows, "median": median, "outliers": outliers}
 
 
+def check_modular_block(model_data, grid_size=None, expand_fn=None):
+    """
+    VERIFICA DI MODULARITA' (blocchi per level builder con snap).
+
+    Il prompt CHIEDE all'AI un blocco che riempie tutta la griglia con facce
+    piane. Ma come per la palette, chiedere non basta: qui misuriamo il
+    risultato. Un blocco che non tocca i bordi lascia fessure quando l'utente
+    lo affianca, ed e' inutilizzabile in un level builder.
+
+    Ritorna un report:
+      {
+        "ok": bool,                 # nessun problema bloccante
+        "grid": [W,H,D],
+        "bounds": [x0,y0,z0,x1,y1,z1],
+        "fillsGrid": bool,          # tocca tutti e 6 i bordi
+        "bottomComplete": float,    # frazione della faccia y=0 effettivamente piena
+        "faces": {"x0":frac, ...},  # completezza di ogni faccia laterale
+        "issues": [str, ...],       # problemi in italiano, pronti da mostrare
+      }
+    `expand_fn` permette di iniettare expand_ops senza creare una dipendenza
+    circolare fra i moduli (main.py passa quella vera).
+    """
+    report = {"ok": False, "grid": None, "bounds": None, "fillsGrid": False,
+              "bottomComplete": 0.0, "faces": {}, "issues": []}
+    if not isinstance(model_data, dict):
+        report["issues"].append("Modello non valido.")
+        return report
+
+    meta = model_data.get("metadata") if isinstance(model_data.get("metadata"), dict) else {}
+    grid = grid_size or meta.get("grid_size")
+    try:
+        gw, gh, gd = int(grid[0]), int(grid[1]), int(grid[2])
+    except (TypeError, ValueError, IndexError):
+        report["issues"].append("Griglia non dichiarata: impossibile verificare la modularita'.")
+        return report
+    report["grid"] = [gw, gh, gd]
+
+    # Serve l'insieme reale delle celle occupate.
+    voxels = model_data.get("voxels")
+    if (not voxels) and expand_fn:
+        try:
+            voxels = (expand_fn(json.loads(json.dumps(model_data))) or {}).get("voxels")
+        except Exception:
+            voxels = None
+    if not voxels:
+        report["issues"].append("Nessun voxel: blocco vuoto.")
+        return report
+
+    occupied = set()
+    for v in voxels:
+        try:
+            occupied.add((int(v["x"]), int(v["y"]), int(v["z"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not occupied:
+        report["issues"].append("Nessun voxel valido.")
+        return report
+
+    xs = [c[0] for c in occupied]; ys = [c[1] for c in occupied]; zs = [c[2] for c in occupied]
+    b = [min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)]
+    report["bounds"] = b
+
+    # --- 1. il blocco tocca tutti i bordi della griglia? ---
+    touches = {
+        "x0": b[0] <= 0, "x1": b[3] >= gw - 1,
+        "y0": b[1] <= 0, "y1": b[4] >= gh - 1,
+        "z0": b[2] <= 0, "z1": b[5] >= gd - 1,
+    }
+    report["fillsGrid"] = all(touches.values())
+    if not report["fillsGrid"]:
+        gaps = [k for k, ok in touches.items() if not ok]
+        report["issues"].append(
+            "Il blocco non arriva ai bordi %s della griglia %dx%dx%d: "
+            "affiancandolo restano fessure." % (", ".join(gaps), gw, gh, gd))
+
+    # --- 2. faccia inferiore piena? (appoggio del blocco) ---
+    bottom = sum(1 for x in range(gw) for z in range(gd) if (x, 0, z) in occupied)
+    report["bottomComplete"] = round(bottom / float(gw * gd), 3) if gw * gd else 0.0
+    if report["bottomComplete"] < 0.95:
+        report["issues"].append(
+            "Faccia inferiore piena solo al %d%%: il blocco non appoggia in modo "
+            "uniforme." % int(report["bottomComplete"] * 100))
+
+    # --- 3. facce laterali: quanto sono complete nella zona occupata? ---
+    h = max(1, b[4] - b[1] + 1)
+    def face_fill(axis, at):
+        if axis == "x":
+            cells = [(at, y, z) for y in range(b[1], b[4] + 1) for z in range(gd)]
+        else:
+            cells = [(x, y, at) for y in range(b[1], b[4] + 1) for x in range(gw)]
+        if not cells:
+            return 0.0
+        return round(sum(1 for c in cells if c in occupied) / float(len(cells)), 3)
+
+    report["faces"] = {"x0": face_fill("x", 0), "x1": face_fill("x", gw - 1),
+                       "z0": face_fill("z", 0), "z1": face_fill("z", gd - 1)}
+    weak = [k for k, v in report["faces"].items() if v < 0.80]
+    if weak:
+        report["issues"].append(
+            "Facce laterali incomplete (%s): la giunzione con il blocco vicino "
+            "mostrera' dei buchi." % ", ".join("%s %d%%" % (k, int(report["faces"][k] * 100))
+                                               for k in weak))
+
+    report["ok"] = not report["issues"]
+    return report
+
+
 def extract_anchor_style(model_data):
     """
     Estrae un dizionario di stile da UN modello appena generato, per usarlo come
@@ -877,7 +1069,7 @@ class PackJob(object):
 
     __slots__ = ("id", "object_name", "variant", "label", "status", "error",
                  "result", "attempts", "queued_at", "started_at", "finished_at",
-                 "palette_remapped")
+                 "palette_remapped", "modular_report")
 
     def __init__(self, job_id, object_name, variant, label):
         self.id = job_id
@@ -889,6 +1081,7 @@ class PackJob(object):
         self.result = None          # dict del modello generato (solo in memoria)
         self.attempts = 0
         self.palette_remapped = 0   # colori rimappati da enforce_palette
+        self.modular_report = None  # esito della verifica blocchi modulari
         self.queued_at = time.time()
         self.started_at = None
         self.finished_at = None
@@ -909,6 +1102,7 @@ class PackJob(object):
             "attempts": self.attempts,
             "duration": round(self.duration(), 1) if self.duration() else None,
             "paletteRemapped": self.palette_remapped,
+            "modular": self.modular_report,
         }
         if include_result:
             d["result"] = self.result
@@ -1200,9 +1394,23 @@ class PackManager(object):
                         except Exception:
                             palette_report = None  # mai bloccare un job per questo
 
+                # VERIFICA MODULARITA': in modalita' blocchi il risultato deve
+                # riempire la griglia e avere facce piane, altrimenti nel level
+                # builder restano fessure. Il report finisce nel job e la UI lo
+                # mostra: meglio dirlo che consegnare un tileset rotto.
+                if run.options.get("modular"):
+                    try:
+                        job.modular_report = check_modular_block(
+                            data, _parse_grid(run.options.get("grid_size")),
+                            expand_fn=run.options.get("expand_fn"))
+                    except Exception:
+                        job.modular_report = None
+
                 # ANCORAGGIO (#4): centra su XZ e appoggia a y=0, cosi' il pack si
                 # importa in un motore di gioco senza riposizionare a mano ogni pezzo.
-                if run.options.get("normalize", True):
+                # In modalita' modulare l'ancoraggio e' controproducente: il blocco
+                # DEVE restare a filo della griglia, non essere ricentrato.
+                if run.options.get("normalize", True) and not run.options.get("modular"):
                     try:
                         data, _anchor_report = normalize_asset(
                             data, _parse_grid(run.options.get("grid_size")))
