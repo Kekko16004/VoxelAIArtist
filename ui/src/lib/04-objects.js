@@ -55,6 +55,8 @@
             // Retro-compatibility: legacy single-object ({voxels}/{ops}) becomes ONE object;
             // extended multi-object ({objects:[...]}) loads them all.
             function loadSceneFromParsed(parsed) {
+                activePartName = null;
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 sceneObjects = [];
                 activeObjectId = null;
                 if (parsed && Array.isArray(parsed.objects)) {
@@ -78,7 +80,7 @@
                     const obj = createObject(data);
                     setActiveObject(obj.id);
                 }
-                // T1 Fase B: rebuild outliner list + render all objects (not just active).
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
             }
 
             // ===== T1 Fase B: modalità editor, rendering multi-oggetto, selezione =====
@@ -363,14 +365,17 @@
 
                             const partDel = document.createElement('span');
                             partDel.textContent = '🗑';
-                            partDel.title = 'Elimina parte';
+                            partDel.title = 'Elimina parte/figlio';
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
                                 if (!confirm('Eliminare la parte "' + partName + '"?')) return;
+                                if (typeof pushHistory === 'function') pushHistory();
                                 obj.data.voxels = obj.data.voxels.filter(v => v.part !== partName);
                                 if (activePartName === partName) activePartName = null;
+                                if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
                                 buildModel(false);
+                                renderObjectsList();
                             });
 
                             partRow.appendChild(partEye);
@@ -387,6 +392,14 @@
                         });
                     }
                 });
+                const delBtn = document.getElementById('objDeleteBtn');
+                if (delBtn) {
+                    if (activePartName) {
+                        delBtn.textContent = '🗑 Elimina figlio: ' + activePartName;
+                    } else {
+                        delBtn.textContent = '🗑 Elimina attivo';
+                    }
+                }
             }
 
             // Rende attivo un oggetto e ridisegna scena/outliner (senza reset camera).
@@ -441,7 +454,18 @@
             function objDelete() {
                 const active = getActiveObject();
                 if (!active) return;
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"? L\'operazione non è annullabile.')) return;
+                if (activePartName) {
+                    if (!confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return;
+                    if (typeof pushHistory === 'function') pushHistory();
+                    active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
+                    activePartName = null;
+                    if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
+                    buildModel(false);
+                    renderObjectsList();
+                    return;
+                }
+                if (!confirm('Eliminare l\'oggetto "' + active.name + '"?')) return;
+                if (typeof pushHistory === 'function') pushHistory();
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
                 if (idx === -1) return;
                 sceneObjects.splice(idx, 1);
@@ -452,7 +476,9 @@
                 } else {
                     setActiveObject(sceneObjects[Math.max(0, idx - 1)].id);
                 }
+                activePartName = null;
                 rig = null;
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 rebuildVoxelMap();
                 buildModel(false);
             }

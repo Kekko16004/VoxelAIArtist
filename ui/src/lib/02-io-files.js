@@ -39,7 +39,10 @@
                 }
             });
 
-            dropzone.addEventListener('click', () => fileInput.click());
+            dropzone.addEventListener('click', () => {
+                fileInput.value = '';
+                fileInput.click();
+            });
             dropzone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropzone.classList.add('dragover');
@@ -57,6 +60,7 @@
                 if (e.target.files.length > 0) {
                     handleFile(e.target.files[0]);
                 }
+                e.target.value = '';
             });
 
             function handleFile(file) {

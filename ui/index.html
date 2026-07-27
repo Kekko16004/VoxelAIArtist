@@ -2867,7 +2867,10 @@
                 }
             });
 
-            dropzone.addEventListener('click', () => fileInput.click());
+            dropzone.addEventListener('click', () => {
+                fileInput.value = '';
+                fileInput.click();
+            });
             dropzone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropzone.classList.add('dragover');
@@ -2885,6 +2888,7 @@
                 if (e.target.files.length > 0) {
                     handleFile(e.target.files[0]);
                 }
+                e.target.value = '';
             });
 
             function handleFile(file) {
@@ -3314,10 +3318,32 @@
             }
 
             // Sync currentModelData.voxels from the voxelMap after edits.
+            // Preserva i campi extra (part, _hidden, ecc.) dai voxel originali.
             function syncVoxelsFromMap() {
+                const extraByKey = new Map();
+                (currentModelData.voxels || []).forEach(v => {
+                    const k = `${v.x},${v.y},${v.z}`;
+                    if (v.part !== undefined || v._hidden !== undefined) {
+                        const extra = {};
+                        if (v.part !== undefined) extra.part = v.part;
+                        if (v._hidden !== undefined) extra._hidden = v._hidden;
+                        extraByKey.set(k, extra);
+                    }
+                });
                 currentModelData.voxels = [...voxelMap.entries()].map(([k, color]) => {
                     const [x, y, z] = k.split(',').map(Number);
-                    return { x, y, z, color };
+                    const base = { x, y, z, color };
+                    const extra = extraByKey.get(k);
+                    if (extra) {
+                        return Object.assign(base, extra);
+                    }
+                    const targetPart = (typeof getTargetPartForVoxel === 'function')
+                        ? getTargetPartForVoxel(x, y, z)
+                        : ((typeof activePartName !== 'undefined' && activePartName) ? activePartName : null);
+                    if (targetPart) {
+                        base.part = targetPart;
+                    }
+                    return base;
                 });
             }
 
@@ -3378,6 +3404,8 @@
             // Retro-compatibility: legacy single-object ({voxels}/{ops}) becomes ONE object;
             // extended multi-object ({objects:[...]}) loads them all.
             function loadSceneFromParsed(parsed) {
+                activePartName = null;
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 sceneObjects = [];
                 activeObjectId = null;
                 if (parsed && Array.isArray(parsed.objects)) {
@@ -3401,7 +3429,7 @@
                     const obj = createObject(data);
                     setActiveObject(obj.id);
                 }
-                // T1 Fase B: rebuild outliner list + render all objects (not just active).
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
             }
 
             // ===== T1 Fase B: modalità editor, rendering multi-oggetto, selezione =====
@@ -3686,14 +3714,17 @@
 
                             const partDel = document.createElement('span');
                             partDel.textContent = '🗑';
-                            partDel.title = 'Elimina parte';
+                            partDel.title = 'Elimina parte/figlio';
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
                                 if (!confirm('Eliminare la parte "' + partName + '"?')) return;
+                                if (typeof pushHistory === 'function') pushHistory();
                                 obj.data.voxels = obj.data.voxels.filter(v => v.part !== partName);
                                 if (activePartName === partName) activePartName = null;
+                                if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
                                 buildModel(false);
+                                renderObjectsList();
                             });
 
                             partRow.appendChild(partEye);
@@ -3710,6 +3741,14 @@
                         });
                     }
                 });
+                const delBtn = document.getElementById('objDeleteBtn');
+                if (delBtn) {
+                    if (activePartName) {
+                        delBtn.textContent = '🗑 Elimina figlio: ' + activePartName;
+                    } else {
+                        delBtn.textContent = '🗑 Elimina attivo';
+                    }
+                }
             }
 
             // Rende attivo un oggetto e ridisegna scena/outliner (senza reset camera).
@@ -3764,7 +3803,18 @@
             function objDelete() {
                 const active = getActiveObject();
                 if (!active) return;
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"? L\'operazione non è annullabile.')) return;
+                if (activePartName) {
+                    if (!confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return;
+                    if (typeof pushHistory === 'function') pushHistory();
+                    active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
+                    activePartName = null;
+                    if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
+                    buildModel(false);
+                    renderObjectsList();
+                    return;
+                }
+                if (!confirm('Eliminare l\'oggetto "' + active.name + '"?')) return;
+                if (typeof pushHistory === 'function') pushHistory();
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
                 if (idx === -1) return;
                 sceneObjects.splice(idx, 1);
@@ -3775,7 +3825,9 @@
                 } else {
                     setActiveObject(sceneObjects[Math.max(0, idx - 1)].id);
                 }
+                activePartName = null;
                 rig = null;
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 rebuildVoxelMap();
                 buildModel(false);
             }
@@ -4252,10 +4304,12 @@
                 const hasParts = voxels.some(v => v.part);
 
                 if (hasParts) {
+                    const existingParts = [...new Set(voxels.filter(v => v.part).map(v => v.part))];
+                    const fallbackPartName = existingParts.length > 0 ? existingParts[0] : (meta.name || 'main');
                     const partGroups = {};
                     voxels.forEach(v => {
                         if (v._hidden) return;
-                        const pName = v.part || 'default';
+                        const pName = v.part || fallbackPartName;
                         if (!partGroups[pName]) partGroups[pName] = {};
                         const c = v.color.toUpperCase();
                         if (!partGroups[pName][c]) partGroups[pName][c] = [];
@@ -4347,14 +4401,16 @@
                 const out = { objects: [] };
                 sceneObjects.forEach(o => {
                     const p = buildObjectPayload(o.data);
-                    out.objects.push({
+                    const objPayload = {
                         name: o.name,
                         transform: o.transform,
                         visible: o.visible,
                         metadata: p.metadata,
-                        palette: p.palette,
-                        ops: p.ops
-                    });
+                        palette: p.palette
+                    };
+                    if (p.parts) objPayload.parts = p.parts;
+                    if (p.ops) objPayload.ops = p.ops;
+                    out.objects.push(objPayload);
                 });
                 // Rig currently belongs to the active object only.
                 if (rig && rig.bones && rig.bones.length) {
@@ -4986,6 +5042,19 @@
                 if (e.key === KEYMAP.toggleMode) {
                     e.preventDefault();
                     toggleEditorMode();
+                }
+                if (e.key === 'Delete' && !globalTransformControls.object) {
+                    e.preventDefault();
+                    if (editorMode === 'object') {
+                        objDelete();
+                    } else if (activePartName) {
+                        const active = getActiveObject();
+                        if (active && confirm('Eliminare la parte "' + activePartName + '"?')) {
+                            active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
+                            activePartName = null;
+                            buildModel(false);
+                        }
+                    }
                 }
             });
 
@@ -6733,10 +6802,13 @@
                 
                 if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
 
+                const existingParts = [...new Set(allVoxels.filter(v => v.part).map(v => v.part))];
+                const fallbackPart = existingParts.length > 0 ? existingParts[0] : ((currentModelData.metadata && currentModelData.metadata.name) || 'Object');
+
                 const partsMap = {};
                 // Raggruppiamo i voxel visibili per parte
                 visibleVoxels.forEach(v => {
-                    const partName = v.part || 'Object';
+                    const partName = v.part || fallbackPart;
                     if (!partsMap[partName]) partsMap[partName] = { voxels: [], voxelSet: new Set() };
                     partsMap[partName].voxels.push(v);
                 });
@@ -6744,7 +6816,7 @@
                 // Per il culling delle facce, usiamo tutti i voxel di quella specifica parte
                 // cosi' le facce interne tra due parti diverse vengono generate (utile per separarle!)
                 allVoxels.forEach(vox => {
-                    const partName = vox.part || 'Object';
+                    const partName = vox.part || fallbackPart;
                     if (partsMap[partName]) {
                         partsMap[partName].voxelSet.add(`${vox.x},${vox.y},${vox.z}`);
                     }
@@ -6785,6 +6857,8 @@
                         });
                         geom.addGroup(groupStart, indices.length - groupStart, matIdx);
                     });
+
+                    if (indices.length === 0) return;
 
                     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
                     geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
@@ -9421,16 +9495,38 @@
                 return Array.from(visibleByColor.keys()).sort().join('|');
             }
 
-            // --- aggiornamento O(1) dell'array dei voxel -------------------------
+            function getTargetPartForVoxel(x, y, z) {
+                if (typeof activePartName !== 'undefined' && activePartName) return activePartName;
+                const voxels = (currentModelData && currentModelData.voxels) || [];
+                let minDist = Infinity;
+                let nearestPart = null;
+                for (let i = 0; i < voxels.length; i++) {
+                    const v = voxels[i];
+                    if (v.part) {
+                        const d = Math.abs(v.x - x) + Math.abs(v.y - y) + Math.abs(v.z - z);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearestPart = v.part;
+                            if (d === 1) break;
+                        }
+                    }
+                }
+                return nearestPart;
+            }
+
             function voxelArrayAdd(x, y, z, color) {
                 const arr = currentModelData.voxels;
                 const k = vkey(x, y, z);
                 const existing = voxelIndex.get(k);
+                const targetPart = getTargetPartForVoxel(x, y, z);
                 if (existing !== undefined) {          // gia' presente: solo ricolora
                     arr[existing].color = color;
+                    if (targetPart) arr[existing].part = targetPart;
                     return;
                 }
-                arr.push({ x: x, y: y, z: z, color: color });
+                const newVoxel = { x: x, y: y, z: z, color: color };
+                if (targetPart) newVoxel.part = targetPart;
+                arr.push(newVoxel);
                 voxelIndex.set(k, arr.length - 1);
             }
 
@@ -9561,7 +9657,11 @@
                         if (nowColor !== undefined) {                 // aggiungila al nuovo
                             let m = visibleByColor.get(nowColor);
                             if (!m) { m = new Map(); visibleByColor.set(nowColor, m); }
-                            m.set(k, { x: x, y: y, z: z, color: nowColor });
+                            const idx = voxelIndex ? voxelIndex.get(k) : undefined;
+                            const voxObj = (idx !== undefined && currentModelData.voxels[idx])
+                                ? currentModelData.voxels[idx]
+                                : { x: x, y: y, z: z, color: nowColor };
+                            m.set(k, voxObj);
                             dirtyColors.add(nowColor);
                             visibleColorByKey.set(k, nowColor);
                         }

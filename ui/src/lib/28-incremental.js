@@ -105,16 +105,38 @@
                 return Array.from(visibleByColor.keys()).sort().join('|');
             }
 
-            // --- aggiornamento O(1) dell'array dei voxel -------------------------
+            function getTargetPartForVoxel(x, y, z) {
+                if (typeof activePartName !== 'undefined' && activePartName) return activePartName;
+                const voxels = (currentModelData && currentModelData.voxels) || [];
+                let minDist = Infinity;
+                let nearestPart = null;
+                for (let i = 0; i < voxels.length; i++) {
+                    const v = voxels[i];
+                    if (v.part) {
+                        const d = Math.abs(v.x - x) + Math.abs(v.y - y) + Math.abs(v.z - z);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearestPart = v.part;
+                            if (d === 1) break;
+                        }
+                    }
+                }
+                return nearestPart;
+            }
+
             function voxelArrayAdd(x, y, z, color) {
                 const arr = currentModelData.voxels;
                 const k = vkey(x, y, z);
                 const existing = voxelIndex.get(k);
+                const targetPart = getTargetPartForVoxel(x, y, z);
                 if (existing !== undefined) {          // gia' presente: solo ricolora
                     arr[existing].color = color;
+                    if (targetPart) arr[existing].part = targetPart;
                     return;
                 }
-                arr.push({ x: x, y: y, z: z, color: color });
+                const newVoxel = { x: x, y: y, z: z, color: color };
+                if (targetPart) newVoxel.part = targetPart;
+                arr.push(newVoxel);
                 voxelIndex.set(k, arr.length - 1);
             }
 
@@ -245,7 +267,11 @@
                         if (nowColor !== undefined) {                 // aggiungila al nuovo
                             let m = visibleByColor.get(nowColor);
                             if (!m) { m = new Map(); visibleByColor.set(nowColor, m); }
-                            m.set(k, { x: x, y: y, z: z, color: nowColor });
+                            const idx = voxelIndex ? voxelIndex.get(k) : undefined;
+                            const voxObj = (idx !== undefined && currentModelData.voxels[idx])
+                                ? currentModelData.voxels[idx]
+                                : { x: x, y: y, z: z, color: nowColor };
+                            m.set(k, voxObj);
                             dirtyColors.add(nowColor);
                             visibleColorByKey.set(k, nowColor);
                         }

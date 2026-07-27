@@ -108,6 +108,19 @@
                     e.preventDefault();
                     toggleEditorMode();
                 }
+                if (e.key === 'Delete' && !globalTransformControls.object) {
+                    e.preventDefault();
+                    if (editorMode === 'object') {
+                        objDelete();
+                    } else if (activePartName) {
+                        const active = getActiveObject();
+                        if (active && confirm('Eliminare la parte "' + activePartName + '"?')) {
+                            active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
+                            activePartName = null;
+                            buildModel(false);
+                        }
+                    }
+                }
             });
 
             // Symmetry axis segmented control: mirror edits across the model center.

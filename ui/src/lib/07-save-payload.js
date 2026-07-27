@@ -5,10 +5,12 @@
                 const hasParts = voxels.some(v => v.part);
 
                 if (hasParts) {
+                    const existingParts = [...new Set(voxels.filter(v => v.part).map(v => v.part))];
+                    const fallbackPartName = existingParts.length > 0 ? existingParts[0] : (meta.name || 'main');
                     const partGroups = {};
                     voxels.forEach(v => {
                         if (v._hidden) return;
-                        const pName = v.part || 'default';
+                        const pName = v.part || fallbackPartName;
                         if (!partGroups[pName]) partGroups[pName] = {};
                         const c = v.color.toUpperCase();
                         if (!partGroups[pName][c]) partGroups[pName][c] = [];
@@ -100,14 +102,16 @@
                 const out = { objects: [] };
                 sceneObjects.forEach(o => {
                     const p = buildObjectPayload(o.data);
-                    out.objects.push({
+                    const objPayload = {
                         name: o.name,
                         transform: o.transform,
                         visible: o.visible,
                         metadata: p.metadata,
-                        palette: p.palette,
-                        ops: p.ops
-                    });
+                        palette: p.palette
+                    };
+                    if (p.parts) objPayload.parts = p.parts;
+                    if (p.ops) objPayload.ops = p.ops;
+                    out.objects.push(objPayload);
                 });
                 // Rig currently belongs to the active object only.
                 if (rig && rig.bones && rig.bones.length) {

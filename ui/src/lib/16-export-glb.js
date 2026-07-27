@@ -29,10 +29,13 @@
                 
                 if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
 
+                const existingParts = [...new Set(allVoxels.filter(v => v.part).map(v => v.part))];
+                const fallbackPart = existingParts.length > 0 ? existingParts[0] : ((currentModelData.metadata && currentModelData.metadata.name) || 'Object');
+
                 const partsMap = {};
                 // Raggruppiamo i voxel visibili per parte
                 visibleVoxels.forEach(v => {
-                    const partName = v.part || 'Object';
+                    const partName = v.part || fallbackPart;
                     if (!partsMap[partName]) partsMap[partName] = { voxels: [], voxelSet: new Set() };
                     partsMap[partName].voxels.push(v);
                 });
@@ -40,7 +43,7 @@
                 // Per il culling delle facce, usiamo tutti i voxel di quella specifica parte
                 // cosi' le facce interne tra due parti diverse vengono generate (utile per separarle!)
                 allVoxels.forEach(vox => {
-                    const partName = vox.part || 'Object';
+                    const partName = vox.part || fallbackPart;
                     if (partsMap[partName]) {
                         partsMap[partName].voxelSet.add(`${vox.x},${vox.y},${vox.z}`);
                     }
@@ -81,6 +84,8 @@
                         });
                         geom.addGroup(groupStart, indices.length - groupStart, matIdx);
                     });
+
+                    if (indices.length === 0) return;
 
                     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
                     geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
