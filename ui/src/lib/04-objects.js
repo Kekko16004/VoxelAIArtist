@@ -239,18 +239,31 @@
             }
 
             // ===== T1 Fase B: Outliner (pannello Oggetti) =====
+            let activePartName = null;
+
+            function getObjectParts(obj) {
+                const voxels = obj.data.voxels || [];
+                const parts = {};
+                voxels.forEach(v => {
+                    if (v.part) {
+                        if (!parts[v.part]) parts[v.part] = 0;
+                        parts[v.part]++;
+                    }
+                });
+                return Object.keys(parts).length > 1 ? parts : {};
+            }
+
             function renderObjectsList() {
                 const listEl = document.getElementById('objectsList');
                 if (!listEl) return;
                 listEl.innerHTML = '';
                 sceneObjects.forEach(obj => {
-                    const row = document.createElement('div');
                     const isActive = obj.id === activeObjectId;
+                    const row = document.createElement('div');
                     row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px;' +
                         (isActive ? 'background:rgba(71,85,105,0.28); border:1px solid var(--accent-primary, #475569);'
                                   : 'background:rgba(255,255,255,0.04); border:1px solid transparent;');
 
-                    // Checkbox multi-selezione (per merge)
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = selectedObjectIds.indexOf(obj.id) !== -1;
@@ -263,7 +276,6 @@
                         else if (!chk.checked && i !== -1) selectedObjectIds.splice(i, 1);
                     });
 
-                    // Icona occhio (visibile/nascosto)
                     const eye = document.createElement('span');
                     eye.textContent = obj.visible ? '👁' : '🚫';
                     eye.title = obj.visible ? 'Nascondi oggetto' : 'Mostra oggetto';
@@ -288,9 +300,92 @@
                     row.appendChild(label);
                     row.appendChild(count);
                     row.addEventListener('click', () => {
+                        activePartName = null;
                         if (obj.id !== activeObjectId) selectActiveObjectAndRefresh(obj.id);
+                        else renderObjectsList();
                     });
                     listEl.appendChild(row);
+
+                    const parts = getObjectParts(obj);
+                    const partNames = Object.keys(parts);
+                    if (partNames.length > 0) {
+                        partNames.forEach(partName => {
+                            const partRow = document.createElement('div');
+                            const isPartSel = isActive && activePartName === partName;
+                            const hiddenParts = obj._hiddenParts || {};
+                            const partHidden = !!hiddenParts[partName];
+                            partRow.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 8px 4px 28px; cursor:pointer; font-size:11px; border-radius:6px;' +
+                                (isPartSel ? 'background:rgba(71,85,105,0.4); border:1px solid var(--accent-primary,#475569);'
+                                           : 'background:transparent; border:1px solid transparent;');
+
+                            const partEye = document.createElement('span');
+                            partEye.textContent = partHidden ? '🚫' : '👁';
+                            partEye.style.cssText = 'cursor:pointer; user-select:none; font-size:10px; opacity:' + (partHidden ? '0.4' : '0.7') + ';';
+                            partEye.addEventListener('click', (ev) => {
+                                ev.stopPropagation();
+                                if (!obj._hiddenParts) obj._hiddenParts = {};
+                                obj._hiddenParts[partName] = !obj._hiddenParts[partName];
+                                obj.data.voxels.forEach(v => {
+                                    if (v.part === partName) v._hidden = !!obj._hiddenParts[partName];
+                                });
+                                buildModel(false);
+                            });
+
+                            const partLabel = document.createElement('span');
+                            partLabel.textContent = '⤷ ' + partName;
+                            partLabel.style.cssText = 'flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-secondary,#94a3b8);' +
+                                (partHidden ? 'opacity:0.4;' : '');
+
+                            const partCount = document.createElement('span');
+                            partCount.textContent = parts[partName];
+                            partCount.style.cssText = 'font-size:10px; color:var(--text-muted,#9ca3af);';
+
+                            const partDup = document.createElement('span');
+                            partDup.textContent = '📋';
+                            partDup.title = 'Duplica come oggetto separato';
+                            partDup.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
+                            partDup.addEventListener('click', (ev) => {
+                                ev.stopPropagation();
+                                const partVoxels = obj.data.voxels.filter(v => v.part === partName).map(v => {
+                                    const nv = Object.assign({}, v);
+                                    delete nv.part;
+                                    delete nv._hidden;
+                                    return nv;
+                                });
+                                const newData = {
+                                    metadata: Object.assign({}, obj.data.metadata, { name: partName }),
+                                    voxels: partVoxels,
+                                    palette: obj.data.palette ? JSON.parse(JSON.stringify(obj.data.palette)) : undefined
+                                };
+                                createObject(newData);
+                                buildModel(false);
+                            });
+
+                            const partDel = document.createElement('span');
+                            partDel.textContent = '🗑';
+                            partDel.title = 'Elimina parte';
+                            partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
+                            partDel.addEventListener('click', (ev) => {
+                                ev.stopPropagation();
+                                if (!confirm('Eliminare la parte "' + partName + '"?')) return;
+                                obj.data.voxels = obj.data.voxels.filter(v => v.part !== partName);
+                                if (activePartName === partName) activePartName = null;
+                                buildModel(false);
+                            });
+
+                            partRow.appendChild(partEye);
+                            partRow.appendChild(partLabel);
+                            partRow.appendChild(partCount);
+                            partRow.appendChild(partDup);
+                            partRow.appendChild(partDel);
+                            partRow.addEventListener('click', () => {
+                                if (obj.id !== activeObjectId) selectActiveObjectAndRefresh(obj.id);
+                                activePartName = isPartSel ? null : partName;
+                                renderObjectsList();
+                            });
+                            listEl.appendChild(partRow);
+                        });
+                    }
                 });
             }
 

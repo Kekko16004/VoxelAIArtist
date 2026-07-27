@@ -124,6 +124,7 @@
                         mode: modeSelect.value,
                         bigStructure: toggleBigStructure ? toggleBigStructure.checked : false,
                         modular: toggleModular ? toggleModular.checked : false,
+                        single_object: toggleSingleObject ? toggleSingleObject.checked : true,
                         currentModel: getSavePayload(),
                         image: selectedImageBase64
                     })

@@ -26,46 +26,72 @@
                 const gap = parseFloat(voxelGap.value) || 0; const s = 1.0 - gap;
                 const o = exportOrigin(currentModelData.voxels || []);
                 const allVoxels = currentModelData.voxels || [];
-                const voxelSet = new Set();
-                allVoxels.forEach(vox => voxelSet.add(`${vox.x},${vox.y},${vox.z}`));
-
-                const byColor = {};
-                // Il renderer incrementale aggiorna visibleVoxels in modo pigro:
-                // sincronizziamo qui, prima di leggerlo, cosi' l'export non usa mai
-                // uno stato vecchio.
+                
                 if (typeof syncVisibleVoxels === 'function') syncVisibleVoxels();
-                visibleVoxels.forEach(v => {
-                    if (!byColor[v.color]) byColor[v.color] = [];
-                    byColor[v.color].push(v);
-                });
-                const materials = [];
-                const positions = [], normals = [], indices = []; let vbase = 0;
-                const geom = new THREE.BufferGeometry();
-                Object.keys(byColor).forEach((hexColor, matIdx) => {
-                    const groupStart = indices.length;
-                    const col = new THREE.Color(hexColor).convertSRGBToLinear();
-                    materials.push(new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.25, side: THREE.DoubleSide }));
-                    byColor[hexColor].forEach(v => {
-                        CUBE_FACES.forEach(f => {
-                            const nx = v.x + f.n[0];
-                            const ny = v.y + f.n[1];
-                            const nz = v.z + f.n[2];
-                            if (voxelSet.has(`${nx},${ny},${nz}`)) return;
 
-                            for (let k = 0; k < 4; k++) {
-                                const vt = f.v[k];
-                                positions.push(v.x + vt[0] * s - o.x, v.y + vt[1] * s - o.y, v.z + vt[2] * s - o.z);
-                                normals.push(f.n[0], f.n[1], f.n[2]);
-                            }
-                            indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3); vbase += 4;
-                        });
-                    });
-                    geom.addGroup(groupStart, indices.length - groupStart, matIdx);
+                const partsMap = {};
+                // Raggruppiamo i voxel visibili per parte
+                visibleVoxels.forEach(v => {
+                    const partName = v.part || 'Object';
+                    if (!partsMap[partName]) partsMap[partName] = { voxels: [], voxelSet: new Set() };
+                    partsMap[partName].voxels.push(v);
                 });
-                geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-                geom.setIndex(indices);
-                return new THREE.Mesh(geom, materials);
+
+                // Per il culling delle facce, usiamo tutti i voxel di quella specifica parte
+                // cosi' le facce interne tra due parti diverse vengono generate (utile per separarle!)
+                allVoxels.forEach(vox => {
+                    const partName = vox.part || 'Object';
+                    if (partsMap[partName]) {
+                        partsMap[partName].voxelSet.add(`${vox.x},${vox.y},${vox.z}`);
+                    }
+                });
+
+                const group = new THREE.Group();
+
+                Object.keys(partsMap).forEach(partName => {
+                    const partData = partsMap[partName];
+                    const byColor = {};
+                    partData.voxels.forEach(v => {
+                        if (!byColor[v.color]) byColor[v.color] = [];
+                        byColor[v.color].push(v);
+                    });
+
+                    const materials = [];
+                    const positions = [], normals = [], indices = []; let vbase = 0;
+                    const geom = new THREE.BufferGeometry();
+
+                    Object.keys(byColor).forEach((hexColor, matIdx) => {
+                        const groupStart = indices.length;
+                        const col = new THREE.Color(hexColor).convertSRGBToLinear();
+                        materials.push(new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.25, side: THREE.DoubleSide }));
+                        byColor[hexColor].forEach(v => {
+                            CUBE_FACES.forEach(f => {
+                                const nx = v.x + f.n[0];
+                                const ny = v.y + f.n[1];
+                                const nz = v.z + f.n[2];
+                                if (partData.voxelSet.has(`${nx},${ny},${nz}`)) return;
+
+                                for (let k = 0; k < 4; k++) {
+                                    const vt = f.v[k];
+                                    positions.push(v.x + vt[0] * s - o.x, v.y + vt[1] * s - o.y, v.z + vt[2] * s - o.z);
+                                    normals.push(f.n[0], f.n[1], f.n[2]);
+                                }
+                                indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3); vbase += 4;
+                            });
+                        });
+                        geom.addGroup(groupStart, indices.length - groupStart, matIdx);
+                    });
+
+                    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                    geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                    geom.setIndex(indices);
+                    
+                    const mesh = new THREE.Mesh(geom, materials);
+                    mesh.name = partName;
+                    group.add(mesh);
+                });
+
+                return group;
             }
 
             function exportGLB() {

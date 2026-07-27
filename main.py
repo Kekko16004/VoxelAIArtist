@@ -233,21 +233,77 @@ ambiente), non un piccolo oggetto. Regole aggiuntive vincolanti:
 
 MODULAR_ASSET_RULE = """
 
-[MODALITA' ASSET MODULARE / BLOCCO COMPONIBILE - ISTRUZIONI TASSATIVE]
-Questo modello è un ASSET MODULARE COMPONIBILE (blocco, parete, pavimento, o modulo di costruzione).
-Devi rispettare tassativamente queste regole di costruzione per garantire la perfetta modularità:
+[MODALITA' ASSET MODULARE / COMPONIBILE — ANALISI FORMA E SIMMETRIA INTELLIGENTE]
 
-1. RIEMPIMENTO ED ESTENSIONE COMPLETA SUI BORDI (0..MAX):
-   Se l'oggetto è un blocco o tile (es. Blocco Terra, Blocco Ferro, Blocco Pietra, Parete, Pavimento), DEVE riempire interamente l'area X e Z della griglia da x=0 fino all'ultimo voxel x=X_MAX e da z=0 a z=Z_MAX. NON lasciare mai margini vuoti, rientranze o spazi fluttuanti ai bordi laterali: le 4 pareti laterali esterne devono essere PIATTE E PARALLELE agli assi della griglia.
+Prima di iniziare, IDENTIFICA il tipo di asset richiesto e applica le regole di simmetria appropriate per quella forma. NON applicare regole di simmetria "alla cieca" senza prima capire la geometria dell'oggetto.
 
-2. INCASTRO E CONTINUITÀ PERFETTA SENZA SPAZI:
-   Affiancando due moduli adiacenti in griglia (es. posizione 0 e posizione 64), le facce laterali devono combaciare al 100% SENZA ALCUN VUOTO O FESSURA tra un blocco e l'altro.
+━━━ ANALISI TIPO ASSET ━━━
 
-3. AUTONOMIA CROMATICA E MATERIALI:
-   Usa esclusivamente la palette e i colori idonei al MATERIALE SPECIFICO dell'oggetto (es. Ferro = grigio/scuro metallico, Pietra = grigio roccia, Marmo = bianco/grigio, Basalto = scuro/nero, Terra = marrone/verde). NON aggiungere coperture di erba o vegetazione verde a blocchi che non siano di terra o natura!
+▶ BLOCCO CUBICO UNIFORME (es: pietra, metallo, mattone, marmo, legno...)
+  → Forma: piena, occupa tutta la griglia X*Y*Z.
+  → Simmetria: Le 4 FACCE LATERALI (Nord/Sud/Est/Ovest) devono essere IDENTICHE o speculari tra loro.
+  → Come farlo: progetta il pattern su una sola faccia (z=0), poi replicalo matematicamente su Sud (z=Z_MAX), Est (x=X_MAX, z←x) e Ovest (x=0, z←x).
+  → Top (Y_MAX) e Bottom (Y=0): stesso stile dei lati.
 
-4. SUPERFICI ULTRA DETTAGLIATE (NO QUADRATI PIATTI):
-   EVITA ASSOLUTAMENTE grandi facciate piatte e monocolore o "quadrati di colore uniforme" (che sembrano errori di texture o zone non colorate). Usa texture avanzate, gradienti, crepe, sfumature e pattern dettagliati servendoti di comandi `set` e `line` e colori multipli della palette. Il blocco deve apparire realistico, ruvido e ricco di microdettagli su tutte le facce visibili.
+▶ BLOCCO CUBICO CON DUE MATERIALI (es: terra con erba, neve sulla pietra, muschio su roccia...)
+  → Riconosci questo tipo quando il nome contiene due materiali distinti (superiore + inferiore/corpo).
+  → Costruzione OBBLIGATORIA stile Minecraft:
+     • FACCIA SUPERIORE (y=Y_MAX): interamente del colore del materiale superiore (es. verde erba).
+     • FACCIA INFERIORE (y=0): interamente del colore del materiale corpo (es. marrone terra).
+     • FACCE LATERALI (Nord/Sud/Est/Ovest) — Divisione verticale in 3 zone:
+         - ZONA ALTA (ultimi 1-2 voxel in Y, da Y_MAX-2 a Y_MAX): striscia del materiale superiore (es. verde erba),
+           uguale su tutte e 4 le facce per permettere l'incastro visivo orizzontale.
+         - ZONA CORPO (da y=3 a Y_MAX-3 circa): materiale corpo con eventuali variazioni texture (crepe, sfumature).
+         - ZONA BASSA (primi 1-2 voxel, y=0..2): materiale corpo più scuro/compatto.
+     • Le 4 facce laterali devono essere IDENTICHE tra loro (stessa distribuzione di zone).
+  → NESSUNA macchia di erba a caso nel mezzo dei lati: la striscia verde deve essere una fascia CONTINUA e ORIZZONTALE in cima ai lati.
+
+▶ COLONNA / PILASTRO (es: colonna dorica, pilastro, palo...)
+  → Forma: asse verticale (Y), sezione trasversale uniforme su tutto l'asse Y.
+  → Simmetria: la sezione XZ deve essere simmetrica. Texture LATERALE con linee verticali/scanalature.
+  → La faccia superiore (capitello/base) può essere diversa dai lati.
+
+▶ PARETE / SLAB ORIZZONTALE (es: pavimento, tetto, lastra, gradino...)
+  → Forma: occupa tutta X e Z, con Y limitato.
+  → La faccia superiore (Y_MAX) è la principale e dettagliata. Bordi laterali continui per l'incastro.
+
+▶ ELEMENTO ARCHITETTONICO (es: arco, finestra, cornice, portale...)
+  → Simmetria: solo l'asse di simmetria naturale (es. asse X per un arco).
+
+▶ ELEMENTO DECORATIVO (es: cassa, barile, porta, lanterna...)
+  → Applica simmetria dove ha senso visivo per quell'oggetto.
+
+━━━ REGOLE SEMPRE VALIDE ━━━
+- NESSUN puntino o macchia casuale senza logica: ogni dettaglio deve fare parte di un pattern intenzionale.
+- I BORDI ESTERNI (x=0, x=X_MAX, z=0, z=Z_MAX) devono essere PIATTI e PIENI per l'incastro.
+- Usa `fill` per il volume base, poi `set`/`line`/`rect` per i dettagli decorativi.
+- I colori devono essere coerenti con il materiale richiesto.
+"""
+
+MULTI_PART_RULE = """
+[MODALITA' MULTI-PARTE: SUDDIVISIONE IN SOTTO-OGGETTI]
+L'utente ha disattivato l'oggetto unico. DEVI costruire l'oggetto formandolo da più parti separate (es. le ruote di un'auto separate dalla carrozzeria, il braccio di una catapulta separato dalla base).
+INVECE DI usare la solita chiave "ops", DEVI USARE UNA CHIAVE "parts" alla radice del JSON.
+La chiave "parts" è un oggetto JSON in cui ogni chiave è il nome descrittivo della parte (es. "base", "braccio") e il valore è l'array di comandi (fill, box, ecc) per costruirla.
+
+ESEMPIO DI STRUTTURA JSON:
+```json
+{
+  "metadata": { "name": "Catapulta", "grid_size": [128, 128, 128] },
+  "palette": { "a": "#RRGGBB", "b": "#RRGGBB" },
+  "parts": {
+    "base": [
+      ["fill", 0, 0, 0, 127, 20, 127, "a"]
+    ],
+    "braccio_mobile": [
+      ["fill", 60, 20, 40, 68, 100, 48, "b"]
+    ]
+  }
+}
+```
+Tutte le parti condividono la stessa griglia e la stessa palette (niente palette separate). 
+Le parti non devono incrociarsi o fondersi male, ma essere adiacenti nei punti di articolazione. 
+Ricorda: sostituisci l'array "ops" globale con l'oggetto "parts" contenente i vari array di comandi!
 """
 
 
@@ -277,7 +333,7 @@ def run_ai_generation(final_prompt, model=None):
     """
     Invia il prompt a Gemini e ritorna il modello JSON parsato.
     Solleva un'eccezione se la risposta non e' recuperabile: la coda pack la
-    trasforma in un job in errore, /api/generate in una 500.
+    gestira' come errore del job, la modalita' singola come errore 500.
     """
     client = _gemini_client()
     response = client.generate_content(final_prompt)
@@ -339,6 +395,12 @@ def build_pack_prompt(object_name, variant, style_contract, options):
 
     if style_contract:
         parts.append(style_contract)
+
+    if (options or {}).get("modular"):
+        parts.append(MODULAR_ASSET_RULE)
+
+    if (options or {}).get("single_object", True) is False:
+        parts.append(MULTI_PART_RULE)
 
     prompt = "\n\n".join(p for p in parts if p)
     return _apply_grid_rule(prompt, (options or {}).get("grid_size"))
@@ -518,6 +580,20 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": str(e)})
             return
 
+        # --- Selettore cartella ---
+        if route == '/api/settings/choose-dir':
+            try:
+                result = _run_on_gui(lambda w: QFileDialog.getExistingDirectory(w, "Seleziona cartella"))
+                if result:
+                    self._send_json(200, {"folder": result})
+                else:
+                    self._send_json(200, {"cancelled": True})
+            except RuntimeError as e:
+                self._send_json(501, {"error": str(e)})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
         # --- Autosave: lista ---
         if route == '/api/autosave/list':
             try:
@@ -689,6 +765,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "variants": variants,
                     "enforce_palette": body.get("enforcePalette", True),
                     "normalize": body.get("normalize", True),
+                    "single_object": body.get("single_object", True),
                 }
                 run = PACK_MANAGER.create_run(objects, variants, references, options)
                 print(f"[pack] avviato {run.id}: {len(run.jobs)} job "
@@ -747,6 +824,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 prompt = payload.get("prompt", "")
                 grid_size = payload.get("gridSize", "auto")
                 mode = payload.get("mode", "generate")
+                single_object = payload.get("single_object", True)
 
                 prompts_dir = os.path.join(BASE_DIR, "assets", "prompts")
 
@@ -793,6 +871,9 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 if payload.get("modular"):
                     final_prompt += MODULAR_ASSET_RULE
+                    
+                if not single_object:
+                    final_prompt += MULTI_PART_RULE
 
                 if grid_size != "auto":
                     dims = grid_size.split('x')
@@ -931,7 +1012,9 @@ class MainWindow(QMainWindow):
     def save_project_dialog(self):
         """Apre 'Salva con nome' (filtro .voxai) sul thread GUI. Ritorna il path
         scelto oppure None se annullato. Chiamare SOLO via _run_on_gui."""
-        default_dir = app_settings.get_appdata_dir()
+        default_dir = app_settings.get_setting("default_save_dir")
+        if not default_dir or not os.path.exists(default_dir):
+            default_dir = app_settings.get_appdata_dir()
         default_name = os.path.join(default_dir, "progetto.voxai")
         path, _ = QFileDialog.getSaveFileName(
             self, "Salva progetto", default_name, "Progetto VoxelAI (*.voxai)"
@@ -948,7 +1031,10 @@ class MainWindow(QMainWindow):
             "Progetto VoxelAI (*.voxai);;JSON (*.json);;"
             "MagicaVoxel (*.vox);;Minecraft schematic (*.schem);;Tutti i file (*)"
         )
-        path, _ = QFileDialog.getOpenFileName(self, "Apri progetto", "", filt)
+        default_dir = app_settings.get_setting("default_save_dir")
+        if not default_dir or not os.path.exists(default_dir):
+            default_dir = ""
+        path, _ = QFileDialog.getOpenFileName(self, "Apri progetto", default_dir, filt)
         if not path:
             return None
         ext = os.path.splitext(path)[1].lower().lstrip(".")
@@ -968,7 +1054,13 @@ class MainWindow(QMainWindow):
 
     def on_downloadRequested(self, downloadItem):
         default_name = downloadItem.suggestedFileName()
-        path, _ = QFileDialog.getSaveFileName(self, "Salva File", default_name)
+        default_dir = app_settings.get_setting("default_save_dir")
+        if default_dir and os.path.exists(default_dir):
+            default_path = os.path.join(default_dir, default_name)
+        else:
+            default_path = default_name
+            
+        path, _ = QFileDialog.getSaveFileName(self, "Salva File", default_path)
         if path:
             if hasattr(downloadItem, 'setDownloadDirectory'):
                 downloadItem.setDownloadDirectory(os.path.dirname(path))

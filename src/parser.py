@@ -1,11 +1,6 @@
 import json
 import os
 from uuid import uuid4
-# NOTA: `perplexity` NON e' piu' importato a livello di modulo. Il path live
-# (main.py -> extract_and_parse_json / expand_ops) non lo usa mai; l'unico
-# consumatore e' il server standalone legacy start_local_server(), che fa un
-# import LAZY di perplexity al suo interno (vedi piu' sotto). Cosi' `perplexity-api`
-# non e' piu' una dipendenza runtime dell'app. Vedi requirements.txt.
 
 
 def hex_to_rgb(hex_str):
@@ -105,8 +100,8 @@ def expand_ops(data):
     if not isinstance(data, dict):
         return data
     ops = data.get("ops")
-    if not ops:
-        # Nothing to expand; ensure a voxels list exists.
+    parts = data.get("parts")
+    if not ops and not parts:
         if "voxels" not in data:
             data["voxels"] = []
         return data
@@ -119,130 +114,116 @@ def expand_ops(data):
         col = palette.get(key)
         if isinstance(col, str) and col:
             return col.upper()
-        # Fallback: unknown key -> neutral gray so nothing silently vanishes.
         return "#CCCCCC"
 
-    # Sparse dict keyed by (x,y,z) -> color. Later writes overwrite earlier ones.
-    grid = {}
-
-    # Budget adattivo: una griglia 256^3 ha diritto a piu' celle di una 32^3.
     meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     budget_limit = voxel_budget_for(meta.get("grid_size"))
 
-    def rng(a, b):
-        a, b = int(a), int(b)
-        if a > b:
-            a, b = b, a
-        return range(a, b + 1)
+    def evaluate_ops_to_grid(op_list, start_count=0):
+        grid = {}
+        
+        def rng(a, b):
+            a, b = int(a), int(b)
+            if a > b:
+                a, b = b, a
+            return range(a, b + 1)
 
-    def budget_ok(extra=1):
-        """
-        Tetto di sicurezza sul numero di celle. Un singolo op malformato prodotto
-        dall'AI (es. `fill 0 0 0 299 299 299`) generava 27 MILIONI di voci: il
-        processo restava bloccato per minuti o esauriva la memoria, senza alcun
-        messaggio. Superata la soglia si smette di aggiungere celle e il modello
-        viene troncato: meglio un modello parziale visibile che un'app congelata.
-        Il limite e' adattivo alla griglia: vedi voxel_budget_for().
-        """
-        return len(grid) + extra <= budget_limit
+        def budget_ok(extra=1):
+            return (start_count + len(grid) + extra) <= budget_limit
 
-    def do_fill(x0, y0, z0, x1, y1, z1, color):
-        for x in rng(x0, x1):
-            for y in rng(y0, y1):
-                for z in rng(z0, z1):
-                    if not budget_ok():
-                        return
-                    grid[(x, y, z)] = color
-
-    def do_box(x0, y0, z0, x1, y1, z1, color):
-        xs = rng(x0, x1)
-        ys = rng(y0, y1)
-        zs = rng(z0, z1)
-        xmin, xmax = min(int(x0), int(x1)), max(int(x0), int(x1))
-        ymin, ymax = min(int(y0), int(y1)), max(int(y0), int(y1))
-        zmin, zmax = min(int(z0), int(z1)), max(int(z0), int(z1))
-        for x in xs:
-            for y in ys:
-                for z in zs:
-                    if (x in (xmin, xmax) or y in (ymin, ymax) or z in (zmin, zmax)):
-                        if not budget_ok():
-                            return
+        def do_fill(x0, y0, z0, x1, y1, z1, color):
+            for x in rng(x0, x1):
+                for y in rng(y0, y1):
+                    for z in rng(z0, z1):
+                        if not budget_ok(): return
                         grid[(x, y, z)] = color
 
-    def do_line(x0, y0, z0, x1, y1, z1, color):
-        # 3D Bresenham-ish: step along the dominant axis.
-        x0, y0, z0, x1, y1, z1 = map(int, (x0, y0, z0, x1, y1, z1))
-        dx, dy, dz = abs(x1 - x0), abs(y1 - y0), abs(z1 - z0)
-        steps = max(dx, dy, dz)
-        if steps == 0:
-            grid[(x0, y0, z0)] = color
-            return
-        for i in range(steps + 1):
-            t = i / steps
-            x = round(x0 + (x1 - x0) * t)
-            y = round(y0 + (y1 - y0) * t)
-            z = round(z0 + (z1 - z0) * t)
-            if not budget_ok():
+        def do_box(x0, y0, z0, x1, y1, z1, color):
+            xs, ys, zs = rng(x0, x1), rng(y0, y1), rng(z0, z1)
+            xmin, xmax = min(int(x0), int(x1)), max(int(x0), int(x1))
+            ymin, ymax = min(int(y0), int(y1)), max(int(y0), int(y1))
+            zmin, zmax = min(int(z0), int(z1)), max(int(z0), int(z1))
+            for x in xs:
+                for y in ys:
+                    for z in zs:
+                        if (x in (xmin, xmax) or y in (ymin, ymax) or z in (zmin, zmax)):
+                            if not budget_ok(): return
+                            grid[(x, y, z)] = color
+
+        def do_line(x0, y0, z0, x1, y1, z1, color):
+            x0, y0, z0, x1, y1, z1 = map(int, (x0, y0, z0, x1, y1, z1))
+            dx, dy, dz = abs(x1 - x0), abs(y1 - y0), abs(z1 - z0)
+            steps = max(dx, dy, dz)
+            if steps == 0:
+                grid[(x0, y0, z0)] = color
                 return
-            grid[(x, y, z)] = color
+            for i in range(steps + 1):
+                t = i / steps
+                x = round(x0 + (x1 - x0) * t)
+                y = round(y0 + (y1 - y0) * t)
+                z = round(z0 + (z1 - z0) * t)
+                if not budget_ok(): return
+                grid[(x, y, z)] = color
 
-    def do_rect(axis, level, a0, b0, a1, b1, color):
-        level = int(level)
-        axis = str(axis).lower()
-        for a in rng(a0, a1):
-            for b in rng(b0, b1):
-                if not budget_ok():
-                    return
-                if axis == "y":
-                    grid[(a, level, b)] = color   # a=x, b=z
-                elif axis == "x":
-                    grid[(level, a, b)] = color   # a=y, b=z
-                elif axis == "z":
-                    grid[(a, b, level)] = color   # a=x, b=y
+        def do_rect(axis, level, a0, b0, a1, b1, color):
+            level, axis = int(level), str(axis).lower()
+            for a in rng(a0, a1):
+                for b in rng(b0, b1):
+                    if not budget_ok(): return
+                    if axis == "y": grid[(a, level, b)] = color
+                    elif axis == "x": grid[(level, a, b)] = color
+                    elif axis == "z": grid[(a, b, level)] = color
 
-    def do_set(color, coords):
-        for i in range(0, len(coords) - 2, 3):
-            x, y, z = int(coords[i]), int(coords[i + 1]), int(coords[i + 2])
-            if not budget_ok():
-                return
-            grid[(x, y, z)] = color
+        def do_set(color, coords):
+            for i in range(0, len(coords) - 2, 3):
+                x, y, z = int(coords[i]), int(coords[i + 1]), int(coords[i + 2])
+                if not budget_ok(): return
+                grid[(x, y, z)] = color
 
-    def do_del(x0, y0, z0, x1, y1, z1):
-        for x in rng(x0, x1):
-            for y in rng(y0, y1):
-                for z in rng(z0, z1):
-                    grid.pop((x, y, z), None)
+        def do_del(x0, y0, z0, x1, y1, z1):
+            for x in rng(x0, x1):
+                for y in rng(y0, y1):
+                    for z in rng(z0, z1):
+                        grid.pop((x, y, z), None)
 
-    for op in ops:
-        if not isinstance(op, (list, tuple)) or len(op) == 0:
-            continue
-        name = str(op[0]).lower()
-        try:
-            if name == "fill":
-                do_fill(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
-            elif name == "box":
-                do_box(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
-            elif name == "line":
-                do_line(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
-            elif name == "rect":
-                do_rect(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
-            elif name == "set":
-                do_set(resolve_color(op[1]), op[2:])
-            elif name == "del":
-                do_del(op[1], op[2], op[3], op[4], op[5], op[6])
-        except (IndexError, TypeError, ValueError):
-            # Skip malformed op rather than failing the whole model.
-            continue
+        for op in op_list:
+            if not isinstance(op, (list, tuple)) or len(op) == 0: continue
+            name = str(op[0]).lower()
+            try:
+                if name == "fill": do_fill(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
+                elif name == "box": do_box(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
+                elif name == "line": do_line(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
+                elif name == "rect": do_rect(op[1], op[2], op[3], op[4], op[5], op[6], resolve_color(op[7]))
+                elif name == "set": do_set(resolve_color(op[1]), op[2:])
+                elif name == "del": do_del(op[1], op[2], op[3], op[4], op[5], op[6])
+            except (IndexError, TypeError, ValueError):
+                continue
+        return grid
 
-    voxels = [{"x": k[0], "y": k[1], "z": k[2], "color": c} for k, c in grid.items()]
+    all_voxels = []
+    
+    if "parts" in data and isinstance(data["parts"], dict):
+        current_voxel_count = 0
+        for part_name, part_ops in data["parts"].items():
+            if not isinstance(part_ops, list):
+                continue
+            grid = evaluate_ops_to_grid(part_ops, current_voxel_count)
+            for (x, y, z), c in grid.items():
+                all_voxels.append({"x": x, "y": y, "z": z, "color": c, "part": part_name})
+            current_voxel_count = len(all_voxels)
+    elif "ops" in data and isinstance(data["ops"], list):
+        grid = evaluate_ops_to_grid(data["ops"])
+        for (x, y, z), c in grid.items():
+            all_voxels.append({"x": x, "y": y, "z": z, "color": c})
+
     result = {
         "metadata": data.get("metadata", {}),
-        "voxels": voxels,
+        "voxels": all_voxels,
     }
-    if "palette" in data:
-        result["palette"] = data["palette"]
-    if "ops" in data:
-        result["ops"] = data["ops"]
+    if "palette" in data: result["palette"] = data["palette"]
+    if "ops" in data: result["ops"] = data["ops"]
+    if "parts" in data: result["parts"] = data["parts"]
+    
     return result
 
 
@@ -460,7 +441,7 @@ def extract_and_parse_json(text):
         try:
             parsed = parse_with_recovery(cand)
             if isinstance(parsed, dict):
-                if "voxels" in parsed or "ops" in parsed:
+                if "voxels" in parsed or "ops" in parsed or "parts" in parsed:
                     return expand_ops(parsed)
                 parsed_objects.append(parsed)
         except Exception as e:
@@ -522,135 +503,9 @@ def export_voxels_to_obj(voxel_data, obj_filename, mtl_filename):
             vertex_offset += 8
             obj_file.write("\n")
 
-def start_local_server():
-    import http.server
-    import socketserver
-    import webbrowser
-    import threading
-    import socket
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('', 0))
-    port = s.getsockname()[1]
-    s.close()
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def log_message(self, format, *args):
-            pass
-
-        def do_POST(self):
-            if self.path == "/api/generate":
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
-                try:
-                    payload = json.loads(post_data.decode('utf-8'))
-                    prompt = payload.get("prompt", "")
-                    thinking = payload.get("thinking", False)
-                    selected_model = payload.get("model", "auto")
-                    grid_size = payload.get("gridSize", "auto")
-                    
-                    prompt_template_path = os.path.join(os.path.dirname(__file__), "prompt.txt")
-                    if os.path.exists(prompt_template_path):
-                        with open(prompt_template_path, 'r', encoding='utf-8') as pf:
-                            prompt_template = pf.read()
-                    else:
-                        prompt_template = "Generate voxel model: [INSERISCI QUI IL MODELLO DESIDERATO]"
-                    
-                    if "[INSERISCI QUI IL MODELLO DESIDERATO]" in prompt_template:
-                        final_prompt = prompt_template.replace("[INSERISCI QUI IL MODELLO DESIDERATO]", prompt)
-                    else:
-                        final_prompt = prompt_template.strip() + " " + prompt
-                    final_prompt = f"SOGGETTO DA GENERARE: {prompt}\n\nIMPORTANTE: Progetta da zero le coordinate per rappresentare fedelmente questo soggetto. Non copiare le coordinate o la topologia della torre dell'esempio.\n\n" + final_prompt
-                    
-                    if grid_size != "auto":
-                        dims = grid_size.split('x')
-                        if len(dims) == 3:
-                            final_prompt += f"\n\n[REGOLA TASSATIVA: L'utente ha richiesto esplicitamente che il modello venga generato con la griglia {grid_size}. Nel metadata JSON devi ASSOLUTAMENTE impostare 'grid_size': [{dims[0]}, {dims[1]}, {dims[2]}]. Sfrutta tutta la griglia per aggiungere dettagli in base alle nuove dimensioni!]"
-                    
-                    token_path = os.path.join(os.path.dirname(__file__), "token.txt")
-                    cookies = {}
-                    if os.path.exists(token_path):
-                        with open(token_path, 'r', encoding='utf-8') as tf:
-                            tok = tf.read().strip()
-                            if tok:
-                                cookies = {"next-auth.session-token": tok}
-                                
-                    import perplexity
-                    client = perplexity.Client(cookies=cookies)
-                    if not cookies:
-                        client.copilot = 10
-                    
-                    if thinking:
-                        mode = "reasoning"
-                        model_arg = None if selected_model in ("reasoning", "auto", "") else selected_model
-                    else:
-                        if selected_model in ("auto", ""):
-                            mode = "auto"
-                            model_arg = None
-                        else:
-                            mode = "pro"
-                            model_arg = selected_model
-                            
-                    response = client.search(final_prompt, mode=mode, model=model_arg, sources=[])
-                    
-                    answer = ""
-                    blocks = response.get("blocks", [])
-                    for block in blocks:
-                        if block.get("intended_usage") == "ask_text":
-                            chunks = block.get("markdown_block", {}).get("chunks", [])
-                            answer += "".join(chunks)
-                    
-                    model_data = extract_and_parse_json(answer)
-                    
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps(model_data).encode('utf-8'))
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    if 'answer' in locals() and answer:
-                        print(f"--- FAILED RAW ANSWER ---\n{answer}\n-------------------------")
-                    self.send_response(500)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
-            else:
-                super().do_POST()
-
-    server = socketserver.TCPServer(("", port), Handler)
-    url = f"http://localhost:{port}/index.html"
-    
-    print(f"Avvio del server di visualizzazione 3D su: {url}")
-    print("Premi Ctrl+C nel terminale per interrompere il server.")
-    
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer arrestato.")
-        server.server_close()
-
-# Example usage
-example_json = {
-  "metadata": {
-    "name": "Spada Pixel Art",
-    "grid_size": [16, 16, 16]
-  },
-  "voxels": [
-    {"x": 8, "y": 1, "z": 8, "color": "#4A3B32"},
-    {"x": 8, "y": 2, "z": 8, "color": "#4A3B32"},
-    {"x": 8, "y": 3, "z": 8, "color": "#FFD700"},
-    {"x": 7, "y": 3, "z": 8, "color": "#FFD700"},
-    {"x": 9, "y": 3, "z": 8, "color": "#FFD700"},
-    {"x": 8, "y": 4, "z": 8, "color": "#C0C0C0"}
-  ]
-}
 
 if __name__ == "__main__":
     import sys
-    # If a file is passed as argument, read it, otherwise export the example
     if len(sys.argv) > 1:
         json_path = sys.argv[1]
         with open(json_path, 'r') as f:
@@ -659,4 +514,4 @@ if __name__ == "__main__":
         export_voxels_to_obj(data, f"{name}.obj", f"{name}.mtl")
         print(f"Modello esportato correttamente: {name}.obj e {name}.mtl")
     else:
-        start_local_server()
+        print("Uso: python parser.py <file.json>")

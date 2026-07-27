@@ -227,10 +227,34 @@
                         '</div>' +
                         '<div class="section-title">Salvataggio</div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
+                          '<div class="control-row">' +
+                            '<label>Cartella di default (Salvataggio/Esportazione)</label>' +
+                            '<div style="display:flex; gap:6px; flex:1;">' +
+                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly placeholder="Predefinita (Appdata)">' +
+                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;">Sfoglia...</button>' +
+                            '</div>' +
+                          '</div>' +
                           '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata (solo desktop).</div>' +
                           '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
+
+                    const defaultSaveInput = document.getElementById('settingsDefaultSaveDir');
+                    if (defaultSaveInput && typeof window.getPref === 'function') {
+                        defaultSaveInput.value = window.getPref('default_save_dir', '');
+                    }
+                    const chooseDirBtn = document.getElementById('settingsChooseDirBtn');
+                    if (chooseDirBtn) chooseDirBtn.addEventListener('click', async () => {
+                        if (!screensIsDesktop()) { alert('Disponibile solo nell\'app desktop.'); return; }
+                        try {
+                            const res = await fetch(screensApi('/api/settings/choose-dir'));
+                            const data = await res.json();
+                            if (data.folder) {
+                                defaultSaveInput.value = data.folder;
+                                if (typeof window.savePref === 'function') window.savePref('default_save_dir', data.folder);
+                            }
+                        } catch(e) { console.error('Errore scelta cartella', e); }
+                    });
 
                     const settingsChk = document.getElementById('settingsShowLauncher');
                     if (settingsChk) settingsChk.addEventListener('change', () => {

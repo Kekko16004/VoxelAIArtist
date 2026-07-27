@@ -254,7 +254,8 @@
                                 model: packModelSelect ? packModelSelect.value : null,
                                 gridSize: packGridSelect ? packGridSelect.value : 'auto',
                                 enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true,
-                                modular: packModular ? packModular.checked : false
+                                modular: packModular ? packModular.checked : false,
+                                single_object: document.getElementById('packSingleObject') ? document.getElementById('packSingleObject').checked : true
                             })
                         });
                         const data = await res.json();

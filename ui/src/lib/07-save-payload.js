@@ -2,12 +2,57 @@
                 const meta = (data && data.metadata) || {};
                 const voxels = (data && data.voxels) || [];
 
-                // Compress voxels into palette and "set" operations for massive file size reduction
-                const palette = {};
-                let nextChar = 97; // 'a'
-                const ops = [];
+                const hasParts = voxels.some(v => v.part);
 
-                // Group voxels by color
+                if (hasParts) {
+                    const partGroups = {};
+                    voxels.forEach(v => {
+                        if (v._hidden) return;
+                        const pName = v.part || 'default';
+                        if (!partGroups[pName]) partGroups[pName] = {};
+                        const c = v.color.toUpperCase();
+                        if (!partGroups[pName][c]) partGroups[pName][c] = [];
+                        partGroups[pName][c].push(v.x, v.y, v.z);
+                    });
+
+                    const palette = {};
+                    let paletteIndex = 0;
+                    const allColors = new Set();
+                    for (const pName in partGroups) {
+                        for (const c in partGroups[pName]) allColors.add(c);
+                    }
+                    const colorToKey = {};
+                    allColors.forEach(c => {
+                        let key;
+                        if (paletteIndex < 26) key = String.fromCharCode(97 + paletteIndex);
+                        else if (paletteIndex < 52) key = String.fromCharCode(65 + (paletteIndex - 26));
+                        else key = 'c' + (paletteIndex - 52);
+                        paletteIndex++;
+                        palette[key] = c;
+                        colorToKey[c] = key;
+                    });
+
+                    const parts = {};
+                    for (const pName in partGroups) {
+                        const ops = [];
+                        for (const c in partGroups[pName]) {
+                            ops.push(["set", colorToKey[c], ...partGroups[pName][c]]);
+                        }
+                        parts[pName] = ops;
+                    }
+
+                    return {
+                        metadata: {
+                            name: meta.name || "voxel_model",
+                            grid_size: meta.grid_size || [16, 16, 16]
+                        },
+                        palette: palette,
+                        parts: parts
+                    };
+                }
+
+                const palette = {};
+                const ops = [];
                 const colorGroups = {};
                 voxels.forEach(v => {
                     const c = v.color.toUpperCase();
@@ -18,16 +63,11 @@
                 let paletteIndex = 0;
                 for (const c in colorGroups) {
                     let key;
-                    if (paletteIndex < 26) {
-                        key = String.fromCharCode(97 + paletteIndex); // 'a'..'z'
-                    } else if (paletteIndex < 52) {
-                        key = String.fromCharCode(65 + (paletteIndex - 26)); // 'A'..'Z'
-                    } else {
-                        key = 'c' + (paletteIndex - 52); // 'c0', 'c1', 'c2'...
-                    }
+                    if (paletteIndex < 26) key = String.fromCharCode(97 + paletteIndex);
+                    else if (paletteIndex < 52) key = String.fromCharCode(65 + (paletteIndex - 26));
+                    else key = 'c' + (paletteIndex - 52);
                     paletteIndex++;
                     palette[key] = c;
-                    // op structure: ["set", key, x1,y1,z1, x2,y2,z2, ...]
                     ops.push(["set", key, ...colorGroups[c]]);
                 }
 

@@ -411,17 +411,11 @@ def build_style_contract(style, grid_override=None, detail_override=None, extra_
         "plausibile rispetto agli altri oggetti del pack; nessun elemento "
         "fluttuante staccato dal corpo principale."
     )
-    lines.append(
-        "- SUPERFICI ULTRA DETTAGLIATE: EVITA ASSOLUTAMENTE grandi facciate piatte e monocolore "
-        "(niente 'quadrati' o 'rettangoli' di colore uniforme e vuoti). Usa comandi `set` e `line` per aggiungere "
-        "texture, rumore, crepe, venature, sfumature e dettagli realistici su ogni superficie."
-    )
-
-    if modular:
+    if not modular:
         lines.append(
-            "- ASSET MODULARI COMPONIBILI: Tutti gli elementi devono avere bordi esterni dritti, "
-            "piatti e allineati alla griglia (riempiendo interamente da x=0 a x=X_MAX e z=0 a z=Z_MAX) "
-            "per consentire l'incastro perfetto e l'affiancamento continuo senza vuoti o fessure."
+            "- SUPERFICI ULTRA DETTAGLIATE: EVITA ASSOLUTAMENTE grandi facciate piatte e monocolore "
+            "(niente 'quadrati' o 'rettangoli' di colore uniforme e vuoti). Usa comandi `set` e `line` per aggiungere "
+            "texture, rumore, crepe, venature, sfumature e dettagli realistici su ogni superficie."
         )
 
     if extra_notes:

@@ -22,7 +22,7 @@
                 if (boxHelper) { modelPivot.remove(boxHelper); disposeMesh(boxHelper); boxHelper = null; }
 
                 const meta = currentModelData.metadata || {};
-                const voxels = currentModelData.voxels || [];
+                const voxels = (currentModelData.voxels || []).filter(v => !v._hidden);
                 const builtMeshByColor = new Map();
 
                 rebuildVoxelMap();

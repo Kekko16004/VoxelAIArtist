@@ -139,7 +139,7 @@
                                 throw new Error("Il file non è in formato JSON in chiaro né in formato crittografato .voxelai valido.");
                             }
                         }
-                        if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels))) {
+                        if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
                             if (!parsed.metadata) parsed.metadata = {};
                             if (!parsed.metadata.name) {
                                 parsed.metadata.name = file.name.replace(/\.[^/.]+$/, "");
@@ -248,7 +248,7 @@
                             throw new Error("Il testo inserito non è JSON valido né un codice .voxelai valido.");
                         }
                     }
-                    if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels))) {
+                    if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
                         if (!parsed.metadata) parsed.metadata = {};
                         if (!parsed.metadata.name) {
                             parsed.metadata.name = "Modello Caricato";
@@ -263,7 +263,7 @@
                         }
                         return true;
                     } else {
-                        alert("Formato non valido: deve contenere un array 'voxels', 'ops' o 'objects'.");
+                        alert("Formato non valido: deve contenere un array 'voxels', 'ops', 'objects' o un oggetto 'parts'.");
                         return false;
                     }
                 } catch (err) {

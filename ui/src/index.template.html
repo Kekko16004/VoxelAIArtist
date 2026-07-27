@@ -1767,6 +1767,15 @@
                             data-i18n="generate.modularHint">
                             L'IA allineerà i bordi alla griglia in modo che il modello sia componibile e affiancabile.
                         </p>
+                        <div class="control-row">
+                            <label title="Genera un oggetto singolo. Disattivare per suddividere l'oggetto in parti mobili (es. per esportare in GLB con mesh separate)"
+                                data-i18n-title="generate.singleObjectTitle"
+                                data-i18n="generate.singleObject">Oggetto unico (mesh singola)</label>
+                            <label class="switch">
+                                <input type="checkbox" id="toggleSingleObject" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
 
                         <button class="btn btn-primary" id="generateBtn"
                             style="width: 100%; font-size: 12px; padding: 10px;" data-i18n="generate.generateBtn">Genera Modello</button>
@@ -1989,10 +1998,16 @@
                             </label>
                         </div>
                         <div class="control-row">
-                            <label title="Rende gli asset del pack componibili con bordi allineati e modulari"
-                                data-i18n-title="pack.modularTitle" data-i18n="pack.modular">Genera asset modulari</label>
+                            <label title="Forza la generazione di oggetti modulari allineati alla griglia (da incastrare)" data-i18n-title="pack.modularTitle" data-i18n="pack.modular">Asset modulari / componibili</label>
                             <label class="switch">
                                 <input type="checkbox" id="packModular">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="control-row">
+                            <label title="Genera ogni asset del pack come un oggetto singolo. Disattivare per consentire parti mobili separate." data-i18n-title="pack.singleObjectTitle" data-i18n="pack.singleObject">Oggetto unico (mesh singola)</label>
+                            <label class="switch">
+                                <input type="checkbox" id="packSingleObject" checked>
                                 <span class="slider"></span>
                             </label>
                         </div>
