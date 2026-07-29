@@ -225,8 +225,8 @@
             gap: 2px;
             border-radius: var(--radius-md);
             background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
             z-index: 50;
@@ -257,6 +257,31 @@
         .menu-item .mi-icon { width: 16px; text-align: center; flex-shrink: 0; opacity: 0.85; }
         .menu-item .mi-hint { margin-left: auto; font-size: 10px; color: var(--text-muted); }
         .menu-sep { height: 1px; background: var(--glass-border); margin: 4px 2px; }
+
+        /* ===== Modale Aiuto ===== */
+        .help-nav-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 9px; border: none; border-radius: var(--radius-sm);
+            background: transparent; color: var(--text-secondary);
+            font-family: inherit; font-size: 12px; font-weight: 600;
+            text-align: left; cursor: pointer; transition: background 0.12s, color 0.12s;
+        }
+        .help-nav-item:hover { background: var(--hover-bg-strong); color: var(--text-primary); }
+        .help-nav-item.active { background: var(--hover-bg-strong); color: var(--text-primary); }
+        .help-section { margin-bottom: 22px; scroll-margin-top: 8px; }
+        .help-section h3 {
+            margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--text-primary);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .help-section ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+        .help-section li { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+        .help-section li b, .help-section li kbd { color: var(--text-primary); }
+        .help-section li kbd {
+            font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+            padding: 1px 5px; border: 1px solid var(--glass-border);
+            border-radius: 4px; background: var(--input-bg);
+        }
+        .help-empty { font-size: 12px; color: var(--text-muted); }
         .menu-label {
             padding: 6px 10px 2px;
             font-size: 10px;
@@ -279,8 +304,8 @@
             overflow-y: auto;
             border-left: 1px solid var(--glass-border);
             background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             box-shadow: -8px 0 30px rgba(0, 0, 0, 0.35);
             z-index: 10;
         }
@@ -329,8 +354,8 @@
         /* Glassmorphism utility */
         .glass {
             background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
             border-radius: var(--radius-lg);
         }
@@ -1080,8 +1105,8 @@
             border-radius: var(--radius-md);
             border: 1px solid var(--glass-border);
             background: var(--glass-bg);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
             z-index: 60;
             overflow: hidden;
@@ -1342,6 +1367,268 @@
             display: block;
         }
 
+        /* ===== TIMELINE (stile Blender, solo nella scheda Rig) =====
+           Barra ancorata in basso alla viewport. E' in position:absolute dentro
+           .canvas-container: resizeCanvas() sottrae timelineHeight() dall'altezza
+           del renderer, cosi' il canvas non finisce mai sotto la barra. */
+        #timelineDock {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            background: var(--glass-bg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-top: 1px solid var(--glass-border);
+            color: var(--text-primary);
+            font-size: 11.5px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Maniglia per cambiare l'altezza della barra trascinando il bordo alto. */
+        #tlResizer {
+            flex: 0 0 auto;
+            height: 6px;
+            margin-top: -3px;
+            cursor: ns-resize;
+            background: transparent;
+        }
+        #tlResizer:hover { background: var(--accent-primary); opacity: 0.55; }
+
+        .tl-toolbar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            padding: 5px 10px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .tl-sep {
+            width: 1px;
+            height: 18px;
+            background: var(--glass-border);
+            margin: 0 2px;
+        }
+
+        .tl-btn {
+            padding: 4px 9px;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            color: var(--text-primary);
+            font-size: 11.5px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, opacity 0.15s;
+        }
+        .tl-btn:hover:not(:disabled) { background: var(--hover-bg); }
+        .tl-btn:disabled { opacity: 0.4; cursor: default; }
+        .tl-btn.active {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-deep));
+            color: var(--text-on-accent);
+            border-color: transparent;
+        }
+
+        .tl-label { color: var(--text-secondary); font-size: 11px; }
+
+        .tl-num {
+            width: 54px;
+            padding: 3px 6px;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            color: var(--text-primary);
+            font-size: 11.5px;
+            font-family: inherit;
+        }
+        .tl-num:disabled { opacity: 0.45; }
+
+        #tlClip {
+            max-width: 190px;
+            padding: 3px 6px;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
+            color: var(--text-primary);
+            font-size: 11.5px;
+            font-family: inherit;
+        }
+
+        #tlKeyScope {
+            grid-template-columns: repeat(2, 1fr);
+            padding: 2px;
+            gap: 2px;
+            width: 152px;
+        }
+        #tlKeyScope .seg-btn { padding: 3px 4px; font-size: 11px; }
+
+        #tlFrameLabel {
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+            color: var(--accent-primary);
+            min-width: 62px;
+            text-align: center;
+        }
+
+        #tlStatus {
+            margin-left: auto;
+            color: var(--text-secondary);
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        /* Corpo: colonna etichette (larghezza fissa) + colonna tracce.
+           IMPORTANTE: tlXOfFrame() applica da solo un padding di TL_PAD px, quindi
+           #tlRuler e #tlRows NON devono avere padding/bordi orizzontali, e devono
+           essere larghi uguali e allineati fra loro. */
+        #tlBody {
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tl-head { display: flex; flex: 0 0 auto; }
+
+        .tl-corner {
+            flex: 0 0 130px;
+            width: 130px;
+            box-sizing: border-box;
+            border-right: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--glass-border);
+            height: 20px;
+        }
+
+        #tlRuler {
+            position: relative;
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 20px;
+            box-sizing: border-box;
+            padding: 0;
+            border-bottom: 1px solid var(--glass-border);
+            overflow: hidden;
+            cursor: ew-resize;
+        }
+
+        .tl-tick {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 0;
+            border-left: 1px solid var(--glass-border);
+        }
+        .tl-tick span {
+            position: absolute;
+            left: 3px;
+            top: 3px;
+            font-size: 9.5px;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+            pointer-events: none;
+        }
+
+        /* La barra di scorrimento e' azzerata di proposito: se occupasse spazio,
+           #tlRows sarebbe piu' stretto di #tlRuler e i diamanti non sarebbero piu'
+           allineati al righello (tlXOfFrame usa la larghezza del righello). */
+        .tl-scroll {
+            display: flex;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        .tl-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+        #tlLabels {
+            flex: 0 0 130px;
+            width: 130px;
+            box-sizing: border-box;
+            border-right: 1px solid var(--glass-border);
+        }
+
+        #tlRows {
+            position: relative;
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 0;
+        }
+
+        .tl-rowlabel {
+            height: 20px;
+            line-height: 20px;
+            padding: 0 8px;
+            box-sizing: border-box;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+        .tl-rowlabel:hover { background: var(--hover-bg); color: var(--text-primary); }
+        .tl-rowlabel.tl-summary {
+            font-weight: 700;
+            color: var(--text-primary);
+            cursor: default;
+        }
+        .tl-rowlabel.tl-summary:hover { background: transparent; }
+        .tl-rowlabel.tl-rowlabel-sel {
+            color: var(--text-on-accent);
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-deep));
+            font-weight: 700;
+        }
+
+        .tl-rowtrack {
+            position: relative;
+            height: 20px;
+            box-sizing: border-box;
+            border-bottom: 1px solid var(--glass-border-soft, rgba(127,127,127,0.14));
+        }
+        .tl-rowtrack.tl-summary { background: var(--inset-bg); }
+
+        /* Diamante del keyframe: quadrato ruotato di 45 gradi, come in Blender. */
+        .tl-key {
+            position: absolute;
+            top: 50%;
+            width: 9px;
+            height: 9px;
+            margin-left: -4.5px;
+            margin-top: -4.5px;
+            background: var(--text-secondary);
+            border: 1px solid var(--glass-border);
+            transform: rotate(45deg);
+            cursor: grab;
+        }
+        .tl-key.tl-key-sum { background: var(--text-primary); }
+        .tl-key.tl-key-sel {
+            background: var(--accent-primary);
+            border-color: var(--text-primary);
+            box-shadow: 0 0 6px var(--accent-glow);
+        }
+        .tl-key.tl-key-ro { cursor: default; opacity: 0.75; }
+
+        #tlPlayhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            margin-left: -1px;
+            background: var(--accent-primary);
+            box-shadow: 0 0 6px var(--accent-glow);
+            pointer-events: none;
+            z-index: 3;
+        }
+
         /* Gizmo mode switch (top-left scene overlay) */
         #gizmoBar {
             display: none;
@@ -1436,7 +1723,7 @@
             justify-content: center;
             z-index: 10;
             background: var(--overlay-scrim);
-            backdrop-filter: blur(12px);
+            backdrop-filter: blur(10px);
             transition: all 0.3s ease;
         }
 
@@ -1622,6 +1909,11 @@
         </div>
 
         <div class="topbar-spacer"></div>
+
+        <!-- Aiuto (apre la modale con le guide) -->
+        <div class="menu">
+            <button class="menu-trigger" type="button" id="openHelpBtn" title="Guide e scorciatoie (F1)" data-i18n-title="topbar.helpTitle" data-i18n="topbar.help">❓ Aiuto</button>
+        </div>
 
         <!-- Impostazioni (apre la modale) -->
         <div class="menu">
@@ -2209,6 +2501,18 @@
                             style="width:100%; font-size:12px; padding:10px; margin-top:4px;" data-i18n="rig.autoRig">
                             🦴 Auto-Rig
                         </button>
+                        <button class="btn btn-secondary" id="showRigBtn"
+                            style="width:100%; font-size:12px; padding:9px; margin-top:6px; display:none;"
+                            title="Rientra nell'anteprima del rig salvato su questo oggetto, senza rigenerarlo">
+                            👁 Mostra rig
+                        </button>
+                        <div class="control-row" style="margin-top:6px;">
+                            <label title="Ruota le ossa dello scheletro rispetto ai voxel senza spostare la mesh">Ruota Scheletro</label>
+                            <div style="display:flex; gap:4px;">
+                                <button class="btn btn-secondary" id="rotateRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>
+                                <button class="btn btn-secondary" id="rotateRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>
+                            </div>
+                        </div>
                         <div class="control-row">
                             <label title="Mostra le ossa sovrapposte al modello" data-i18n-title="rig.showSkeletonTitle" data-i18n="rig.showSkeleton">Mostra scheletro</label>
                             <label class="switch">
@@ -2236,6 +2540,151 @@
                             style="color:var(--text-secondary); font-weight:400;"></span></div>
                     <div class="controls-group glass" style="padding:12px;">
                         <div id="boneList" class="bone-list"></div>
+                        <div style="display:flex; gap:6px; margin-top:10px;">
+                            <button class="btn btn-secondary" id="boneAddBtn" style="flex:1; padding:7px; font-size:11px;"
+                                title="Aggiunge un osso figlio all'osso selezionato, partendo dallo scheletro automatico">+ Osso</button>
+                            <button class="btn btn-secondary" id="boneRenameBtn" style="flex:1; padding:7px; font-size:11px;"
+                                title="Rinomina l'osso selezionato (anche con doppio clic nella lista)">Rinomina</button>
+                            <button class="btn btn-secondary" id="boneDelBtn" style="flex:1; padding:7px; font-size:11px;"
+                                title="Elimina l'osso selezionato: i figli passano al genitore" data-i18n="timeline.deleteKey">Elimina</button>
+                        </div>
+                        <p class="hint-text" style="margin-top:8px;">
+                            Doppio clic su un osso per rinominarlo. Rinominare aggiorna posa, pesi dipinti e
+                            animazioni AI; eliminando un osso i suoi voxel tornano all'osso più vicino.
+                        </p>
+                    </div>
+
+                    <div class="section-title" style="margin-top:16px;">Simmetria X</div>
+                    <div class="controls-group glass" style="padding:16px;">
+                        <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
+                            <label>Direzione</label>
+                            <div class="segmented" id="mirrorDir">
+                                <button class="seg-btn active" data-dir="LtoR" title="Copia il lato sinistro (_L) su quello destro (_R)">L → R</button>
+                                <button class="seg-btn" data-dir="RtoL" title="Copia il lato destro (_R) su quello sinistro (_L)">R → L</button>
+                                <button class="seg-btn" data-dir="both" title="Scambia i due lati fra loro (e allinea le ossa centrali)">Scambia</button>
+                            </div>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
+                            <button class="btn btn-secondary" id="mirrorPoseBtn" style="width:100%; padding:8px; font-size:12px;"
+                                title="Specchia la posa delle ossa _L/_R: rotazione Y e Z invertite">⇄ Specchia posa</button>
+                            <button class="btn btn-secondary" id="mirrorWeightsBtn" style="width:100%; padding:8px; font-size:12px;"
+                                title="Copia le correzioni dei pesi sul voxel simmetrico dell'altro lato">⇄ Specchia pesi dipinti</button>
+                            <button class="btn btn-secondary" id="symSkeletonBtn" style="width:100%; padding:8px; font-size:12px;"
+                                title="Rende lo scheletro simmetrico dopo le correzioni con G: le articolazioni L/R combaciano al voxel">⇄ Simmetrizza scheletro</button>
+                        </div>
+                        <p class="hint-text" style="margin-top:8px;">
+                            Lo specchio è sull'asse X, rispetto al centro del modello. Su un personaggio simmetrico
+                            posi e dipingi un solo lato: l'altro si ricava da qui.
+                        </p>
+                    </div>
+
+                    <div class="section-title" style="margin-top:16px;" data-i18n="help.s.weights.t">Pittura pesi</div>
+                    <div class="controls-group glass" style="padding:16px;">
+                        <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
+                            <label data-i18n="rig.bindMode">Tipo di legatura</label>
+                            <div class="segmented" id="bindMode">
+                                <button class="seg-btn active" data-bind="smooth"
+                                    data-i18n="rig.bindSmooth"
+                                    data-i18n-title="rig.bindSmoothTitle"
+                                    title="Ogni voxel puo' seguire fino a 4 ossa: le articolazioni non si strappano">Morbida</button>
+                                <button class="seg-btn" data-bind="rigid"
+                                    data-i18n="rig.bindRigid"
+                                    data-i18n-title="rig.bindRigidTitle"
+                                    title="Un solo osso per voxel, peso 1: i cubi restano rigidi">Rigida</button>
+                            </div>
+                        </div>
+                        <div class="pose-axis" style="margin-top:8px;">
+                            <label data-i18n="rig.bindHardness">Durezza legatura</label>
+                            <span id="bindHardnessVal" style="color:var(--accent-cyan); font-size:12px;">6</span>
+                            <input type="range" id="bindHardness" min="1" max="16" step="1" value="6">
+                        </div>
+                        <p class="hint-text" style="margin-top:2px;" data-i18n="rig.bindHardnessHint">
+                            Alta = transizione stretta fra un osso e l'altro. Bassa = miscela larga, spalle e anche
+                            piu' morbide.
+                        </p>
+
+                        <button class="btn btn-secondary" id="weightPaintToggle"
+                            style="width:100%; font-size:12px; padding:9px; margin-top:12px;"
+                            data-i18n-title="rig.wp.toggleTitle"
+                            title="Dipingi a mano il peso dell'osso selezionato su ogni voxel" data-i18n="rig.wp.enter">Dipingi pesi</button>
+                        <div id="wpBody" style="display:none; margin-top:10px;">
+                            <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
+                                <label data-i18n="rig.wp.mode">Modalita' pennello</label>
+                                <div class="segmented" id="wpMode">
+                                    <button class="seg-btn active" data-wpmode="mix"
+                                        data-i18n="rig.wp.modeMix" data-i18n-title="rig.wp.modeMixTitle"
+                                        title="Porta il peso verso 1 con l'intensita' scelta">Miscela</button>
+                                    <button class="seg-btn" data-wpmode="add"
+                                        data-i18n="rig.wp.modeAdd" data-i18n-title="rig.wp.modeAddTitle"
+                                        title="Aumenta il peso dell'osso selezionato">Aggiungi</button>
+                                    <button class="seg-btn" data-wpmode="subtract"
+                                        data-i18n="rig.wp.modeSub" data-i18n-title="rig.wp.modeSubTitle"
+                                        title="Diminuisce il peso dell'osso selezionato">Sottrai</button>
+                                </div>
+                                <div class="segmented" id="wpMode2" style="margin-top:4px;">
+                                    <button class="seg-btn" data-wpmode="blur"
+                                        data-i18n="rig.wp.modeBlur" data-i18n-title="rig.wp.modeBlurTitle"
+                                        title="Media i pesi con quelli dei voxel vicini: ammorbidisce le articolazioni">Sfuma</button>
+                                    <button class="seg-btn" data-wpmode="fill"
+                                        data-i18n="rig.wp.modeFill" data-i18n-title="rig.wp.modeFillTitle"
+                                        title="Assegna in un clic tutto il pezzo collegato che ora segue lo stesso osso">Riempi</button>
+                                    <button class="seg-btn" data-wpmode="erase"
+                                        data-i18n="rig.wp.modeErase" data-i18n-title="rig.wp.modeEraseTitle"
+                                        title="Rimuove la correzione manuale e torna all'assegnazione automatica">Cancella</button>
+                                </div>
+                            </div>
+                            <div class="pose-axis" style="margin-top:8px;">
+                                <label><span data-i18n="rig.wp.radius">Raggio pennello</span> <span id="wpRadiusVal">2 voxel</span></label>
+                                <input type="range" id="wpRadius" min="0" max="8" step="1" value="2">
+                            </div>
+                            <div class="pose-axis" style="margin-top:4px;">
+                                <label><span data-i18n="rig.wp.strength">Forza</span> <span id="wpStrengthVal">100%</span></label>
+                                <input type="range" id="wpStrength" min="1" max="100" step="1" value="100">
+                            </div>
+                            <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px; margin-top:6px;">
+                                <label data-i18n="rig.wp.falloff">Sfumatura del pennello</label>
+                                <div class="segmented" id="wpFalloff">
+                                    <button class="seg-btn active" data-falloff="smooth"
+                                        data-i18n="rig.wp.falloffSmooth" data-i18n-title="rig.wp.falloffSmoothTitle"
+                                        title="Bordo morbido: l'effetto cala dolcemente verso l'esterno">Morbida</button>
+                                    <button class="seg-btn" data-falloff="sharp"
+                                        data-i18n="rig.wp.falloffSharp" data-i18n-title="rig.wp.falloffSharpTitle"
+                                        title="Punta stretta: l'effetto cala in fretta">Stretta</button>
+                                    <button class="seg-btn" data-falloff="constant"
+                                        data-i18n="rig.wp.falloffConstant" data-i18n-title="rig.wp.falloffConstantTitle"
+                                        title="Bordo netto: stessa intensita' su tutto il raggio">Netta</button>
+                                </div>
+                            </div>
+                            <div class="control-row" style="margin-top:8px;">
+                                <label data-i18n="rig.wp.targetBone">Osso bersaglio</label>
+                                <span id="wpTargetBone" style="color:var(--accent-cyan); font-size:12px;">-</span>
+                            </div>
+                            <div class="control-row" style="margin-top:2px;">
+                                <label data-i18n="rig.wp.readout">Peso sotto il cursore</label>
+                                <span id="wpWeightReadout"
+                                    style="font-size:12px; font-weight:600; padding:2px 8px; border-radius:6px; min-width:52px; text-align:center;">-</span>
+                            </div>
+                            <div style="margin-top:8px;">
+                                <div style="height:10px; border-radius:5px; background:linear-gradient(to right,
+                                    rgb(0,0,255) 0%, rgb(0,255,255) 25%, rgb(0,255,0) 50%,
+                                    rgb(255,255,0) 75%, rgb(255,0,0) 100%);"></div>
+                                <div style="display:flex; justify-content:space-between; font-size:10px;
+                                    color:var(--text-secondary); margin-top:3px;">
+                                    <span>0.0</span><span>0.25</span><span>0.5</span><span>0.75</span><span>1.0</span>
+                                </div>
+                            </div>
+                            <p class="hint-text" id="wpStats" style="margin-top:6px;" data-i18n="rig.wp.statsNone">Nessuna correzione manuale</p>
+                            <button class="btn btn-secondary" id="wpResetBtn"
+                                style="width:100%; padding:7px; font-size:11px; margin-top:6px;"
+                                data-i18n-title="rig.wp.resetTitle"
+                                title="Butta tutte le correzioni manuali e torna ai pesi automatici">Azzera correzioni</button>
+                            <p class="hint-text" style="margin-top:8px;" data-i18n="rig.wp.hint">
+                                Il modello si colora con la rampa di Blender: blu = peso 0, ciano, verde, giallo,
+                                rosso = peso 1, sempre relativa all'osso selezionato. La sfera wireframe mostra dove
+                                arrivera' il pennello. In pittura la posa e' azzerata di proposito, il gizmo e'
+                                disattivato e Ctrl+Z annulla ogni pennellata.
+                            </p>
+                        </div>
                     </div>
 
                     <div class="section-title" style="margin-top:16px;" data-i18n="rig.selectedPose">Posa osso selezionato</div>
@@ -2250,6 +2699,29 @@
                         </div>
                         <button class="btn btn-secondary" id="resetPoseBtn"
                             style="width:100%; padding:8px; font-size:12px; margin-top:8px;">↺ Riporta a T-pose</button>
+                    </div>
+
+                    <div class="section-title" style="margin-top:16px;">Punta arto (IK)</div>
+                    <div class="controls-group glass" style="padding:16px;">
+                        <button class="btn btn-secondary" id="ikToggleBtn" style="width:100%; padding:9px; font-size:12px;"
+                            title="Trascina la mano o il piede: spalla e gomito (anca e ginocchio) si sistemano da soli">🎯 Punta arto</button>
+                        <p id="ikHint" class="hint-text" style="margin-top:8px;"></p>
+                        <p class="hint-text" style="margin-top:4px;">
+                            Attiva la modalità, poi trascina con il tasto sinistro l'estremità dell'arto verso il punto
+                            voluto: invece di ruotare tre ossa a mano, la catena si orienta da sola. Il ginocchio piega
+                            avanti e il gomito indietro. Ogni trascinamento è un solo Ctrl+Z.
+                        </p>
+                    </div>
+
+                    <div class="section-title" style="margin-top:16px;">Libreria pose</div>
+                    <div class="controls-group glass" style="padding:16px;">
+                        <button class="btn btn-secondary" id="poseSaveBtn" style="width:100%; padding:8px; font-size:12px;"
+                            title="Salva la posa corrente nella libreria, riusabile su altri oggetti">💾 Salva posa corrente</button>
+                        <div id="poseLibList" style="margin-top:10px;"></div>
+                        <p id="poseLibEmpty" class="hint-text" style="margin-top:4px;">
+                            Nessuna posa salvata. Le pose restano su questo computer e valgono per qualsiasi oggetto
+                            con gli stessi nomi di ossa.
+                        </p>
                     </div>
 
                     <div class="section-title" style="margin-top:16px;" data-i18n="rig.animations">Animazioni</div>
@@ -2268,6 +2740,38 @@
                         </div>
                         <p class="hint-text" style="margin-top:8px;">Le clip sono generate dallo scheletro e servono per
                             l'anteprima. Vengono incluse nell'export GLB.</p>
+                    </div>
+
+                    <div class="section-title" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between;">
+                        <span data-i18n="rig.aiAnims">Animazioni AI</span>
+                        <button id="addAnimBtn" class="btn btn-secondary" title="Nuova animazione AI"
+                            data-i18n-title="rig.aiAnimNew"
+                            style="width:26px; height:26px; padding:0; font-size:18px; line-height:1; border-radius:6px;">+</button>
+                    </div>
+                    <div class="controls-group glass" style="padding:16px;">
+                        <div id="customAnimList" style="display:flex; flex-direction:column; gap:6px;"></div>
+                        <p id="customAnimEmpty" class="hint-text" style="margin-top:4px;" data-i18n="rig.aiAnimEmpty">
+                            Nessuna animazione AI. Premi + per crearne una da un prompt.</p>
+
+                        <div id="animForm" style="display:none; margin-top:10px; flex-direction:column; gap:8px;">
+                            <input type="text" id="animNameInput" class="field-strong" maxlength="40"
+                                placeholder="Nome (es. Danza)" data-i18n-placeholder="rig.aiAnimName"
+                                style="padding:7px 9px; font-size:12px;">
+                            <textarea id="animPromptInput" rows="3"
+                                placeholder="Descrivi il movimento (es. saluta con la mano destra e inchinati)"
+                                data-i18n-placeholder="rig.aiAnimPrompt"
+                                style="resize:vertical; padding:8px; font-size:12px; font-family:inherit;
+                                       background:var(--inset-bg); color:var(--text-primary);
+                                       border:1px solid var(--glass-border); border-radius:var(--radius-sm);"></textarea>
+                            <div style="display:flex; gap:6px;">
+                                <button id="animGenerateBtn" class="btn btn-primary"
+                                    style="flex:1; padding:8px; font-size:12px;" data-i18n="rig.aiAnimGenerate">Genera con AI</button>
+                                <button id="animCancelBtn" class="btn btn-secondary"
+                                    style="padding:8px 12px; font-size:12px;" data-i18n="rig.aiAnimCancel">Annulla</button>
+                            </div>
+                            <p class="hint-text" data-i18n="rig.aiAnimHint">L'AI crea keyframe per le ossa dello scheletro
+                                attuale. Le animazioni salvate restano nel progetto ed entrano nell'export GLB.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2349,7 +2853,79 @@
                 </div>
                 <div id="autosaveList" style="overflow-y:auto; flex:1; margin-bottom:12px;"></div>
                 <button class="btn btn-secondary" id="autosaveOpenFolderBtn" style="width:100%; font-size:12px; padding:8px;"
-                    title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>
+                    title="Apri la cartella dei salvataggi automatici" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder">📁 Apri cartella autosave</button>
+            </div>
+        </div>
+
+        <!-- ===== TIMELINE ANIMAZIONI (stile Blender) =====
+             Ancorata in basso alla viewport e visibile SOLO nella scheda Rig:
+             la mostra/nasconde timelineSync() (lib/33-timeline.js), chiamata da
+             updateRigVisibility() in lib/15-rig.js. Parte nascosta (display:none
+             impostato dal modulo stesso al primo giro).
+             NOTA: #tlRuler e #tlRows non devono avere padding orizzontale, il
+             modulo applica da solo TL_PAD in tlXOfFrame(). -->
+        <div id="timelineDock" style="display:none;">
+            <div id="tlResizer" data-i18n-title="timeline.resizerTitle" title="Trascina per cambiare l'altezza della timeline"></div>
+
+            <div class="tl-toolbar">
+                <span class="tl-label" data-i18n="timeline.clip">Clip</span>
+                <select id="tlClip" data-i18n-title="timeline.clipTitle" title="Animazione mostrata sulla timeline"></select>
+
+                <button class="tl-btn" id="tlMakeEditableBtn" style="display:none;"
+                        data-i18n="timeline.makeEditable" data-i18n-title="timeline.makeEditableTitle"
+                        title="Crea una copia modificabile di questa animazione predefinita">Rendi modificabile</button>
+                <button class="tl-btn" id="tlNewAnimBtn"
+                        data-i18n="timeline.newAnim" data-i18n-title="timeline.newAnimTitle"
+                        title="Crea una nuova animazione vuota sull'osso selezionato">Nuova</button>
+
+                <span class="tl-sep"></span>
+
+                <button class="tl-btn" id="tlFirstBtn" data-i18n-title="timeline.firstTitle" title="Vai al primo frame">|&lt;</button>
+                <button class="tl-btn" id="tlPrevKeyBtn" data-i18n-title="timeline.prevKeyTitle" title="Chiave precedente">&lt;</button>
+                <button class="tl-btn" id="tlPlayBtn" data-i18n="timeline.play" data-i18n-title="timeline.playTitle" title="Riproduci">Play</button>
+                <button class="tl-btn" id="tlStopBtn" data-i18n="timeline.stop" data-i18n-title="timeline.stopTitle" title="Ferma e torna al primo frame">Stop</button>
+                <button class="tl-btn" id="tlNextKeyBtn" data-i18n-title="timeline.nextKeyTitle" title="Chiave successiva">&gt;</button>
+                <button class="tl-btn" id="tlLastBtn" data-i18n-title="timeline.lastTitle" title="Vai all'ultimo frame">&gt;|</button>
+                <button class="tl-btn" id="tlLoopBtn" data-i18n="timeline.loop" data-i18n-title="timeline.loopTitle" title="Ripeti l'animazione in ciclo">Ciclo</button>
+
+                <span id="tlFrameLabel">0 / 48</span>
+
+                <span class="tl-sep"></span>
+
+                <button class="tl-btn" id="tlInsertKeyBtn"
+                        data-i18n="timeline.insertKey" data-i18n-title="timeline.insertKeyTitle"
+                        title="Inserisci una chiave nel frame corrente con la posa attuale">Chiave</button>
+                <button class="tl-btn" id="tlDeleteKeyBtn"
+                        data-i18n="timeline.deleteKey" data-i18n-title="timeline.deleteKeyTitle"
+                        title="Elimina le chiavi selezionate">Elimina</button>
+
+                <div class="segmented" id="tlKeyScope" data-i18n-title="timeline.scopeTitle" title="Su quali ossa inserire la chiave">
+                    <button class="seg-btn active" data-scope="sel" data-i18n="timeline.scopeSel">Osso</button>
+                    <button class="seg-btn" data-scope="all" data-i18n="timeline.scopeAll">Tutte</button>
+                </div>
+
+                <span class="tl-sep"></span>
+
+                <span class="tl-label" data-i18n="timeline.fps">FPS</span>
+                <input type="number" class="tl-num" id="tlFps" min="1" max="120" step="1" value="24"
+                       data-i18n-title="timeline.fpsTitle" title="Frame al secondo dell'animazione">
+                <span class="tl-label" data-i18n="timeline.duration">Durata</span>
+                <input type="number" class="tl-num" id="tlDuration" min="0.1" max="600" step="0.1" value="2"
+                       data-i18n-title="timeline.durationTitle" title="Durata in secondi">
+
+                <span id="tlStatus" data-i18n="timeline.statusNone">Nessuna animazione</span>
+            </div>
+
+            <div id="tlBody">
+                <div class="tl-head">
+                    <div class="tl-corner"></div>
+                    <div id="tlRuler"></div>
+                </div>
+                <div class="tl-scroll">
+                    <div id="tlLabels"></div>
+                    <div id="tlRows"></div>
+                </div>
+                <div id="tlPlayhead" style="left:130px;"></div>
             </div>
         </div>
     </div>
@@ -2451,6 +3027,28 @@
         </div>
     </div>
 
+    <!-- ===== Modale Aiuto (guide) =====
+         Struttura: indice a sinistra + corpo scorrevole a destra. Le sezioni sono
+         iniettate da 31-help.js (HELP_SECTIONS) cosi' il testo vive in un solo
+         posto ed e' traducibile con le chiavi help.*. -->
+    <div id="helpOverlay"
+         style="display:none; position:fixed; inset:0; z-index:70; align-items:center; justify-content:center; background:var(--overlay-scrim);">
+        <div class="glass" style="width:min(920px, 94%); height:min(80vh, 720px); display:flex; flex-direction:column; padding:0; border-radius:var(--radius-lg); border:1px solid var(--glass-border); box-shadow:0 16px 60px rgba(0,0,0,0.55); overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--glass-border);">
+                <div style="font-size:16px; font-weight:700; color:var(--text-primary);" data-i18n="help.title">Guida a Voxel AI Artist</div>
+                <input type="text" id="helpSearch" class="field-strong" placeholder="Cerca nella guida…"
+                       data-i18n-placeholder="help.search"
+                       style="margin-left:auto; width:220px; padding:6px 8px; font-size:12px;">
+                <button class="btn btn-secondary" id="helpCloseBtn" style="font-size:12px; padding:6px 12px;" data-i18n="help.close">Chiudi</button>
+            </div>
+            <div style="flex:1; display:flex; min-height:0;">
+                <div id="helpIndex"
+                     style="width:210px; flex-shrink:0; overflow-y:auto; padding:12px 8px; border-right:1px solid var(--glass-border); display:flex; flex-direction:column; gap:2px;"></div>
+                <div id="helpBody" style="flex:1; overflow-y:auto; padding:16px 20px;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== Modale Impostazioni ===== -->
     <div id="settingsOverlay"
          style="display:none; position:fixed; inset:0; z-index:60; align-items:center; justify-content:center; background:var(--overlay-scrim);">
@@ -2514,7 +3112,7 @@
                     <div class="section-title" data-i18n="settings.shortcuts">Scorciatoie da tastiera</div>
                     <div class="controls-group glass" id="shortcutsPanel" style="padding: 14px; display:flex; flex-direction:column; gap:8px;">
                         <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;">
-                            Clicca il tasto accanto a un'azione, poi premi la nuova combinazione. <b>Esc</b> annulla.
+                            Clicca il tasto accanto a un'azione, poi premi la nuova combinazione. <b data-i18n="shortcut.keyEsc">Esc</b> annulla.
                         </div>
                         <div id="shortcutsList" style="display:flex; flex-direction:column; gap:4px;">
                             <!-- Righe scorciatoia iniettate qui -->
@@ -2523,6 +3121,45 @@
                         <div style="display:flex; gap:6px;">
                             <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" title="Ripristina tutte le scorciatoie ai valori predefiniti">↺ Ripristina predefiniti</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Sessione Gemini (cookie): tutta la gestione che stava in ui/settings.html -->
+                <div id="settingsCookiesSection">
+                    <div class="section-title" data-i18n="settings.session">Sessione Gemini</div>
+                    <div class="controls-group glass" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
+                        <div style="display:flex; align-items:flex-start; gap:10px;">
+                            <span id="cookieStatusDot" style="width:10px; height:10px; margin-top:4px; border-radius:50%; flex-shrink:0; background:var(--text-muted);"></span>
+                            <div style="flex:1; min-width:0;">
+                                <div id="cookieStatusLabel" style="font-size:12px; font-weight:600; color:var(--text-primary);" data-i18n="settings.sessionChecking">Verifica della sessione...</div>
+                                <div id="cookieStatusSub" style="font-size:11px; color:var(--text-muted); line-height:1.45;"></div>
+                            </div>
+                            <button class="btn btn-secondary" id="cookieRefreshBtn" style="font-size:11px; padding:5px 9px;" data-i18n="settings.sessionRefresh">Aggiorna</button>
+                        </div>
+                        <div id="cookieFirstRunHint" style="display:none; font-size:11px; line-height:1.5; padding:9px 11px; border-radius:var(--radius-sm); background:rgba(245,158,11,0.10); border:1px solid rgba(245,158,11,0.28);" data-i18n="settings.sessionFirstRun">Prima configurazione: la generazione con l'AI ha bisogno di una sessione Gemini attiva. Incolla qui sotto i cookie del browser in cui sei collegato a Gemini.</div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label for="cookiePsidInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.sessionPsidLabel">Cookie __Secure-1PSID</label>
+                            <input type="password" id="cookiePsidInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Incolla il valore del cookie" data-i18n-placeholder="settings.sessionPsidPlaceholder">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label for="cookiePsidTsInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.sessionPsidTsLabel">Cookie __Secure-1PSIDTS</label>
+                            <input type="password" id="cookiePsidTsInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Incolla il valore del cookie" data-i18n-placeholder="settings.sessionPsidPlaceholder">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <label for="cookieRawInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.sessionRawLabel">Oppure incolla tutto</label>
+                            <textarea id="cookieRawInput" class="field-strong" rows="3" autocomplete="off" spellcheck="false" style="padding:6px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="cookies.json esportato oppure __Secure-1PSID=...; __Secure-1PSIDTS=..." data-i18n-placeholder="settings.sessionRawPlaceholder"></textarea>
+                            <div style="font-size:10px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.sessionRawHelp">Accetta un cookies.json esportato (per esempio con Cookie-Editor) oppure la stringa completa dei cookie copiata da gemini.google.com.</div>
+                        </div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="cookieSaveBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.sessionSave">Salva sessione</button>
+                            <button class="btn btn-secondary" id="cookieFileBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.sessionLoadFile">Carica cookies.json</button>
+                            <button class="btn btn-secondary" id="cookieOpenFolderBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.sessionOpenFolder">Apri cartella impostazioni</button>
+                            <button class="btn btn-secondary" id="cookieDeleteBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.sessionDelete">Rimuovi sessione</button>
+                        </div>
+                        <input type="file" id="cookieFileInput" accept=".json,application/json" style="display:none;">
+                        <div id="cookieFeedback" style="display:none; font-size:11px; line-height:1.45; padding:8px 10px; border-radius:var(--radius-sm);"></div>
+                        <div class="screens-section-note" data-i18n="settings.sessionPrivacy">I cookie vengono salvati soltanto su questo computer, nella cartella impostazioni locale, e servono solo ad autenticare le richieste a Gemini: non vengono mai condivisi con terze parti.</div>
+                        <div id="cookiePathInfo" style="font-size:10px; color:var(--text-muted); word-break:break-all;"></div>
                     </div>
                 </div>
 

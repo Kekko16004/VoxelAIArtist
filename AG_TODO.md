@@ -59,3 +59,7 @@
 - [x] fix hardcoded 'default' part generation in JSON/GLB exports and voxel editing (100%)
 - [x] implement 3D spatial distance fallback to assign unselected new voxels to nearest existing child part (100%)
 - [x] fix fileInput reset & incremental invalidation to prevent import freezing after object deletion (100%)
+- [x] auto detect foot facing direction (100%)
+- [x] dynamic animation leg & knee orientation (100%)
+- [x] fix crotch voxel tearing in bindVoxels (100%)
+- [x] fix blender mcp config & fastmcp dependency (100%)

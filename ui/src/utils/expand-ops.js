@@ -142,6 +142,87 @@
                 return { metadata: data.metadata || {}, voxels: allVoxels };
             }
 
+            // Applica una PATCH di ops (un "diff" di modifica) DIRETTAMENTE sopra una
+            // voxelMap esistente ("x,y,z" -> COLORE), mutandola sul posto. A differenza
+            // di expandOps (che costruisce una griglia da zero e ignora i voxel gia'
+            // presenti), qui le ops si sommano allo stato corrente: fill/box/line/rect/
+            // set aggiungono o ricolorano, "del" rimuove. La semantica delle singole op
+            // e' IDENTICA a expandOps (stesso trunc / pyRound / range): se tocchi l'una,
+            // aggiorna anche l'altra. Usata dalla modalita' "modifica" AI (diff-based).
+            function applyOpsToVoxelMap(map, ops, palette) {
+                if (!map || !Array.isArray(ops) || ops.length === 0) return 0;
+                palette = palette || {};
+                const resolveColor = (key) => {
+                    if (typeof key === 'string' && key.startsWith('#')) return key.toUpperCase();
+                    let col = palette[key];
+                    if (!col && typeof key === 'string') {
+                        const normKey = key.normalize ? key.normalize('NFC') : key;
+                        for (const k in palette) {
+                            if (k === normKey || (k.normalize && k.normalize('NFC') === normKey)) { col = palette[k]; break; }
+                        }
+                    }
+                    return (typeof col === 'string' && col) ? col.toUpperCase() : '#CCCCCC';
+                };
+                const trunc = (v) => Math.trunc(Number(v) || 0);
+                const pyRound = (v) => {
+                    const n = Number(v) || 0, f = Math.floor(n), diff = n - f;
+                    if (diff > 0.5) return f + 1;
+                    if (diff < 0.5) return f;
+                    return (f % 2 === 0) ? f : f + 1;
+                };
+                const rng = (a, b) => {
+                    a = trunc(a); b = trunc(b);
+                    if (a > b) { const t = a; a = b; b = t; }
+                    const out = [];
+                    for (let i = a; i <= b; i++) out.push(i);
+                    return out;
+                };
+                const K = (x, y, z) => `${x},${y},${z}`;
+                let touched = 0;
+                const GUARD = 5000000;   // patch enormi: aborto di sicurezza
+                for (const op of ops) {
+                    if (!Array.isArray(op) || op.length === 0) continue;
+                    if (touched > GUARD) break;
+                    const name = String(op[0]).toLowerCase();
+                    try {
+                        if (name === 'fill') {
+                            const c = resolveColor(op[7]);
+                            for (const x of rng(op[1], op[4])) for (const y of rng(op[2], op[5])) for (const z of rng(op[3], op[6])) { map.set(K(x, y, z), c); touched++; }
+                        } else if (name === 'box') {
+                            const c = resolveColor(op[7]);
+                            const xmin = Math.min(trunc(op[1]), trunc(op[4])), xmax = Math.max(trunc(op[1]), trunc(op[4]));
+                            const ymin = Math.min(trunc(op[2]), trunc(op[5])), ymax = Math.max(trunc(op[2]), trunc(op[5]));
+                            const zmin = Math.min(trunc(op[3]), trunc(op[6])), zmax = Math.max(trunc(op[3]), trunc(op[6]));
+                            for (const x of rng(op[1], op[4])) for (const y of rng(op[2], op[5])) for (const z of rng(op[3], op[6])) {
+                                if (x === xmin || x === xmax || y === ymin || y === ymax || z === zmin || z === zmax) { map.set(K(x, y, z), c); touched++; }
+                            }
+                        } else if (name === 'line') {
+                            const c = resolveColor(op[7]);
+                            const x0 = trunc(op[1]), y0 = trunc(op[2]), z0 = trunc(op[3]);
+                            const x1 = trunc(op[4]), y1 = trunc(op[5]), z1 = trunc(op[6]);
+                            const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0));
+                            if (steps === 0) { map.set(K(x0, y0, z0), c); touched++; }
+                            else for (let i = 0; i <= steps; i++) { const t = i / steps; map.set(K(pyRound(x0 + (x1 - x0) * t), pyRound(y0 + (y1 - y0) * t), pyRound(z0 + (z1 - z0) * t)), c); touched++; }
+                        } else if (name === 'rect') {
+                            const c = resolveColor(op[7]);
+                            const level = trunc(op[2]); const axis = String(op[1]).toLowerCase();
+                            for (const a of rng(op[3], op[5])) for (const b of rng(op[4], op[6])) {
+                                if (axis === 'y') map.set(K(a, level, b), c);
+                                else if (axis === 'x') map.set(K(level, a, b), c);
+                                else if (axis === 'z') map.set(K(a, b, level), c);
+                                touched++;
+                            }
+                        } else if (name === 'set') {
+                            const c = resolveColor(op[1]); const coords = op.slice(2);
+                            for (let i = 0; i + 2 < coords.length; i += 3) { map.set(K(trunc(coords[i]), trunc(coords[i + 1]), trunc(coords[i + 2])), c); touched++; }
+                        } else if (name === 'del') {
+                            for (const x of rng(op[1], op[4])) for (const y of rng(op[2], op[5])) for (const z of rng(op[3], op[6])) { if (map.delete(K(x, y, z))) touched++; }
+                        }
+                    } catch (e) {}
+                }
+                return touched;
+            }
+
             // Occlusion Culling Algorithm — compact numeric key (avoids 32-bit signed overflow)
             function computeVisibility(voxels) {
                 if (!voxels || !voxels.length) return voxels;

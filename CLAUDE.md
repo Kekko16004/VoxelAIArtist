@@ -9,11 +9,26 @@ VoxelAIArtist is a desktop voxel modeling app with integrated AI generation. A P
 ## Run & build
 
 ```bash
-python main.py                 # launch desktop app (needs PyQt6 + PyQt6-WebEngine)
+python main.py                 # launch (default: WEB mode, see APP_MODE below)
+python main.py --py            # launch the PyQt6 desktop window instead
+VOXELAI_MODE=web python main.py    # same as --web
 pyinstaller --clean VoxelAI.spec   # build dist/VoxelAIArtist.exe (or run build.bat on Windows)
 ```
 
-- If no Qt binding is importable, `main.py` falls back to opening `ui/index.html` in the system browser.
+- **`APP_MODE` (top of `main.py`) picks the launch mode** and defaults to `"web"`:
+  no Qt window at all — only the local HTTP server starts and the UI opens in the
+  system browser (`webbrowser.open`), which removes the QWebEngineView flicker
+  entirely. `"py"` is the classic embedded webview. Override order: CLI
+  (`--web` / `--py` / `--mode=web`) > env `VOXELAI_MODE` > the constant. An
+  unknown value prints a warning and falls back to `"py"`.
+- In web mode the Qt import block is **skipped**, so `window.__IS_DESKTOP__` /
+  `window.__API_BASE__` are NOT injected (relative `fetch('/api/...')` still works:
+  same origin) and the native dialogs (`/api/project/open`, `/api/settings/choose-dir`)
+  answer `501` — the UI already degrades to browser download/file input.
+- Startup never opens `ui/settings.html` any more: `GET /api/settings` exposes
+  `needsCookies` (plus `app_mode` / `is_desktop`) and the in-app settings modal
+  decides. Missing cookies only print a console hint.
+- If no Qt binding is importable in `"py"` mode, `main.py` degrades to web mode.
 - Qt binding is auto-detected in priority order PyQt6 → PySide6 → PyQt5 (`GUI_LIBRARY`).
 - `PORT = 0` lets the OS pick a free port; the main thread spin-waits until the server thread sets it.
 
@@ -48,7 +63,7 @@ Additionally verify by:
   - `generate` → `prompt.txt`, replaces `[INSERISCI QUI IL MODELLO DESIDERATO]`.
   - `modify` → `prompt-edit.txt`, injects the current model JSON + the edit request.
   The AI answer is run through `extract_and_parse_json()` before being returned as JSON.
-- `src/settings.py` — cookies and settings live in `%APPDATA%/VoxelAIArtist/` (`cookies.json`, `settings.json`), **not** in the repo. On first launch with no cookies, the settings page (`ui/settings.html`) opens so the user can paste them.
+- `src/settings.py` — cookies and settings live in `%APPDATA%/VoxelAIArtist/` (`cookies.json`, `settings.json`), **not** in the repo. With no cookies nothing is opened automatically: `main.py` prints a console hint and `GET /api/settings` returns `needsCookies: true` so the in-app settings modal can open itself. `ui/settings.html` and its `/settings.html` route survive as a manual fallback only.
 - `src/parser.py` — contains a legacy standalone `start_local_server()` / `__main__` block; the live app path is `main.py`, which only uses `expand_ops` and `extract_and_parse_json` from this module. The rest (OBJ export, standalone server) is legacy/CLI. NOTE (2026-07-19): the top-level `import perplexity` was removed — it's now a lazy import inside `start_local_server()` only, so `perplexity-api` is no longer a runtime dependency (Gemini is the live generator). The old `scratch/test_perplexity.py` (contained a hardcoded session token) was deleted.
 
 ### Asset Pack / multi-generation (`src/pack.py` + `ui/src/lib/27-pack.js`)

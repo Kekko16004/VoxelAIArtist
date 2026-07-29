@@ -41,14 +41,32 @@
             function setActiveObject(id) {
                 const obj = sceneObjects.find(o => o.id === id);
                 if (!obj) return null;
+                // Il rig appartiene all'OGGETTO (obj.rig). Va parcheggiato su quello che
+                // stiamo lasciando PRIMA di cambiare attivo, altrimenti finirebbe addosso
+                // al nuovo: e' l'unico punto in cui il passaggio avviene, cosi' nessun
+                // chiamante deve ricordarsene.
+                if (obj.id !== activeObjectId && typeof stashRigToActiveObject === 'function') {
+                    stashRigToActiveObject();
+                }
                 activeObjectId = id;
                 currentModelData = obj.data;
+                if (typeof adoptRigFromActiveObject === 'function') adoptRigFromActiveObject();
                 // Il renderer incrementale indicizza l'oggetto ATTIVO: cambiando oggetto
                 // gli indici puntano ai voxel sbagliati. Invalidiamo, cosi' il prossimo
                 // edit passa dal rebuild completo che riallinea tutto.
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 // T1 Fase B: refresh outliner selection / bounding-box highlight here.
                 return obj;
+            }
+
+            // Attacca a un oggetto il rig letto dal payload. `fallback` e' il rig a livello
+            // di radice: nei file di una sola figura (e in TUTTI i file salvati dalle
+            // versioni precedenti) il rig sta la', non dentro objects[i].
+            function attachRigFromPayload(obj, saved, fallback) {
+                const src = saved || fallback;
+                if (!src || typeof normalizeRig !== 'function') return;
+                const r = normalizeRig(src);
+                if (r) obj.rig = r;
             }
 
             // loadSceneFromParsed(parsed) — replaces the whole scene from a parsed payload.
@@ -59,25 +77,30 @@
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 sceneObjects = [];
                 activeObjectId = null;
+                rig = null;
                 if (parsed && Array.isArray(parsed.objects)) {
-                    parsed.objects.forEach(o => {
+                    parsed.objects.forEach((o, i) => {
                         const data = expandOps({
                             metadata: o.metadata || (o.name ? { name: o.name } : {}),
                             palette: o.palette,
                             ops: o.ops,
                             voxels: o.voxels
                         });
-                        createObject(data, {
+                        const obj = createObject(data, {
                             name: o.name,
                             transform: o.transform,
                             visible: o.visible
                         });
+                        // Il rig di radice vale solo per il PRIMO oggetto: nelle versioni
+                        // vecchie apparteneva comunque all'oggetto attivo, che era il primo.
+                        attachRigFromPayload(obj, o.rig, i === 0 ? parsed.rig : null);
                     });
                     if (!sceneObjects.length) createObject({ metadata: {}, voxels: [] });
                     setActiveObject(sceneObjects[0].id);
                 } else {
                     const data = expandOps(parsed);
                     const obj = createObject(data);
+                    attachRigFromPayload(obj, parsed && parsed.rig, null);
                     setActiveObject(obj.id);
                 }
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
@@ -229,6 +252,11 @@
                     // In Modalità Oggetto niente editing: torna alla vista/orbita.
                     if (currentTool !== 'view') setTool('view');
                     renderer.domElement.style.cursor = 'pointer';
+                    // Mostra il gizmo di spostamento sulla selezione corrente.
+                    if (typeof attachSelectionGizmo === 'function') attachSelectionGizmo();
+                } else {
+                    // Uscendo dalla Modalità Oggetto si toglie il gizmo automatico.
+                    if (typeof globalTransformControls !== 'undefined') globalTransformControls.detach();
                 }
                 updateSelectionHighlight();
             }
@@ -305,6 +333,10 @@
                         activePartName = null;
                         if (obj.id !== activeObjectId) selectActiveObjectAndRefresh(obj.id);
                         else renderObjectsList();
+                        // Selezione dell'intero oggetto: il gizmo torna a spostare tutto.
+                        if (editorMode === 'object' && typeof attachSelectionGizmo === 'function') {
+                            attachSelectionGizmo();
+                        }
                     });
                     listEl.appendChild(row);
 
@@ -387,6 +419,11 @@
                                 if (obj.id !== activeObjectId) selectActiveObjectAndRefresh(obj.id);
                                 activePartName = isPartSel ? null : partName;
                                 renderObjectsList();
+                                // In Modalità Oggetto il gizmo segue la parte selezionata:
+                                // agganciandosi alla parte, il drag sposta solo quella.
+                                if (editorMode === 'object' && typeof attachSelectionGizmo === 'function') {
+                                    attachSelectionGizmo();
+                                }
                             });
                             listEl.appendChild(partRow);
                         });
@@ -409,9 +446,14 @@
                 const obj = sceneObjects.find(o => o.id === id);
                 if (obj && !isIdentityTransform(obj.transform)) bakeTransform(obj);
                 setActiveObject(id);
-                rig = null;
+                // Nessun `rig = null` qui: setActiveObject ha gia' parcheggiato il rig
+                // sull'oggetto lasciato e adottato quello del nuovo.
                 rebuildVoxelMap();
                 buildModel(false);
+                // In Modalità Oggetto riposiziona il gizmo sul nuovo oggetto selezionato.
+                if (editorMode === 'object' && typeof attachSelectionGizmo === 'function') {
+                    attachSelectionGizmo();
+                }
             }
 
             // ===== T1 Fase B: operazioni oggetto =====
@@ -477,7 +519,8 @@
                     setActiveObject(sceneObjects[Math.max(0, idx - 1)].id);
                 }
                 activePartName = null;
-                rig = null;
+                // Il rig dell'oggetto eliminato spariva con lui; quello del nuovo attivo
+                // e' gia' stato adottato da setActiveObject, quindi qui NON si azzera.
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 rebuildVoxelMap();
                 buildModel(false);
@@ -524,7 +567,8 @@
                 sceneObjects = sceneObjects.filter(o => !mergeIdSet.has(o.id) || o.id === merged.id);
                 selectedObjectIds = [];
                 setActiveObject(merged.id);
-                rig = null;
+                // L'unione produce un oggetto NUOVO senza rig: setActiveObject ha gia'
+                // messo `rig` a null adottando il rig (assente) del merge.
                 rebuildVoxelMap();
                 buildModel(false);
             }
@@ -533,17 +577,19 @@
             function appendSceneFromParsed(parsed) {
                 let firstNew = null;
                 if (parsed && Array.isArray(parsed.objects)) {
-                    parsed.objects.forEach(o => {
+                    parsed.objects.forEach((o, i) => {
                         const data = expandOps({
                             metadata: o.metadata || (o.name ? { name: o.name } : {}),
                             palette: o.palette, ops: o.ops, voxels: o.voxels
                         });
                         const obj = createObject(data, { name: o.name, transform: o.transform, visible: o.visible });
+                        attachRigFromPayload(obj, o.rig, i === 0 ? parsed.rig : null);
                         if (!firstNew) firstNew = obj;
                     });
                 } else {
                     const data = expandOps(parsed);
                     firstNew = createObject(data);
+                    attachRigFromPayload(firstNew, parsed && parsed.rig, null);
                 }
                 if (firstNew) setActiveObject(firstNew.id);
                 rebuildVoxelMap();

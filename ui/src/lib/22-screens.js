@@ -24,7 +24,8 @@
                 function screensApi(route) {
                     return (window.__API_BASE__ ? window.__API_BASE__ : '') + route;
                 }
-                function screensIsDesktop() { return !!window.__IS_DESKTOP__; }
+                // Capacita' (19-prefs.js): hasLocalBackend() = c'e' il server Python
+                // (anche in modalita' web), hasNativeDialogs() = ci sono i dialog Qt.
                 const LAUNCHER_PREF_KEY = 'showLauncherOnStart';
 
                 /* ---------- 0. Stili (hover/anim) iniettati una volta ---------- */
@@ -118,24 +119,24 @@
                     } catch (e) { /* se fallisce restiamo sulla scena corrente */ }
                 }
 
-                // Clic su un recente. LIMITE: nessun endpoint "leggi da path", quindi in
-                // desktop ripieghiamo sul dialog nativo (openProject) informando l'utente.
+                // Clic su un recente. LIMITE: nessun endpoint "leggi da path", quindi con
+                // i dialog nativi ripieghiamo su openProject() informando l'utente.
                 async function openRecent(entry) {
                     hideLauncher();
                     if (!entry) return;
-                    if (screensIsDesktop()) {
+                    if (hasNativeDialogs()) {
                         if (typeof openProject === 'function') {
                             alert('Seleziona "' + (entry.name || entry.path || 'il progetto') + '" nella finestra che sta per aprirsi.\n\n(Percorso: ' + (entry.path || '') + ')');
                             try { await openProject(); } catch (e) { }
                         }
                         return;
                     }
-                    // WEB: nessun accesso al filesystem, si usa comunque l'input file.
+                    // BROWSER: nessun dialog nativo, si usa comunque l'input file.
                     if (typeof openProject === 'function') { try { await openProject(); } catch (e) { } }
                 }
 
                 async function fetchRecent() {
-                    if (!screensIsDesktop()) return [];
+                    if (!hasLocalBackend()) return [];
                     try {
                         const res = await fetch(screensApi('/api/recent'));
                         if (!res || !res.ok) return [];
@@ -145,7 +146,7 @@
                 }
 
                 async function deleteRecent(path) {
-                    if (!screensIsDesktop() || !path) return;
+                    if (!hasLocalBackend() || !path) return;
                     try { await fetch(screensApi('/api/recent?path=' + encodeURIComponent(path)), { method: 'DELETE' }); }
                     catch (e) { /* best-effort */ }
                 }
@@ -158,8 +159,8 @@
                 async function refreshLauncherRecent() {
                     const listEl = document.getElementById('launcherRecentList');
                     if (!listEl) return;
-                    if (!screensIsDesktop()) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">In modalità web i progetti recenti non sono disponibili. Usa "Apri progetto…".</div>';
+                    if (!hasLocalBackend()) {
+                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Senza l\'app avviata (python main.py) i progetti recenti non sono disponibili. Usa "Apri progetto…".</div>';
                         return;
                     }
                     listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Caricamento…</div>';
@@ -234,7 +235,7 @@
                                '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;">Sfoglia...</button>' +
                             '</div>' +
                           '</div>' +
-                          '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata (solo desktop).</div>' +
+                          '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata dal backend Python (funziona sia in modalità web sia desktop).</div>' +
                           '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
@@ -245,15 +246,22 @@
                     }
                     const chooseDirBtn = document.getElementById('settingsChooseDirBtn');
                     if (chooseDirBtn) chooseDirBtn.addEventListener('click', async () => {
-                        if (!screensIsDesktop()) { alert('Disponibile solo nell\'app desktop.'); return; }
+                        if (!hasNativeDialogs()) { alert('La finestra di scelta cartella è un dialog di sistema: serve la modalità desktop (avvia con "python main.py --py").'); return; }
                         try {
                             const res = await fetch(screensApi('/api/settings/choose-dir'));
-                            const data = await res.json();
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || data.error) {
+                                alert('Impossibile aprire la finestra di selezione cartella: ' + (data.error || ('HTTP ' + res.status)));
+                                return;
+                            }
                             if (data.folder) {
                                 defaultSaveInput.value = data.folder;
                                 if (typeof window.savePref === 'function') window.savePref('default_save_dir', data.folder);
                             }
-                        } catch(e) { console.error('Errore scelta cartella', e); }
+                        } catch(e) {
+                            console.error('Errore scelta cartella', e);
+                            alert('Errore nell\'apertura della finestra di selezione cartella.');
+                        }
                     });
 
                     const settingsChk = document.getElementById('settingsShowLauncher');
@@ -268,7 +276,7 @@
                     const folderBtn = document.getElementById('settingsOpenAutosaveFolderBtn');
                     if (folderBtn) folderBtn.addEventListener('click', async () => {
                         if (typeof openAutosaveFolder === 'function') { try { await openAutosaveFolder(); } catch (e) { } return; }
-                        if (!screensIsDesktop()) { alert('Disponibile solo nell\'app desktop.'); return; }
+                        if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
                     });
 

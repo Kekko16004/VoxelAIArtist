@@ -55,6 +55,52 @@
                 return out;
             }
 
+            /* ===== Capacita' del backend: "desktop" NON vuol dire "c'e' un backend" ===
+             * Con APP_MODE="web" (ora il default in main.py) la UI gira in un tab del
+             * browser MA il server Python locale c'e' comunque: autosave, cronologia
+             * salvataggi, progetti recenti e "apri cartella" sono semplice I/O su disco
+             * e funzionano identici. Solo i DIALOG NATIVI (Apri, Salva con nome, scegli
+             * cartella) richiedono Qt, che esiste soltanto in modalita' "py".
+             *
+             * Prima le due cose erano un unico flag `window.__IS_DESKTOP__` (iniettato
+             * solo dalla webview): in modalita' web l'autosave ripiegava su localStorage
+             * e la cronologia restava vuota. Cioe' la modalita' PREDEFINITA perdeva
+             * funzioni che il backend offriva gia'.
+             *
+             * hasLocalBackend() e' SINCRONA di proposito (i chiamanti sono handler di
+             * click): parte ottimista quando la pagina arriva da http(s) - servita dal
+             * server locale - e diventa definitiva appena detectBackend() ha risposto.
+             * Aperta da file:// (nessun server) resta negativa e si usano i fallback. */
+            let backendProbe = null;           // null = mai sondato; true/false = risposta
+            let backendNativeDialogs = null;   // Qt disponibile lato server (dialog nativi)
+
+            function hasLocalBackend() {
+                if (window.__IS_DESKTOP__) return true;      // webview: backend garantito
+                if (backendProbe !== null) return backendProbe;
+                const p = (typeof location !== 'undefined' && location.protocol) || '';
+                return p === 'http:' || p === 'https:';
+            }
+            function hasNativeDialogs() {
+                if (backendNativeDialogs !== null) return backendNativeDialogs;
+                return !!window.__IS_DESKTOP__;
+            }
+            async function detectBackend() {
+                try {
+                    const res = await fetch((window.__API_BASE__ ? window.__API_BASE__ : '') + '/api/settings');
+                    if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
+                    const j = await res.json();
+                    backendProbe = true;
+                    backendNativeDialogs = !!(j && (j.is_desktop || j.isDesktop));
+                } catch (e) {
+                    backendProbe = false;
+                    backendNativeDialogs = false;
+                }
+                window.__BACKEND_OK__ = backendProbe;
+                window.__NATIVE_DIALOGS__ = backendNativeDialogs;
+                return backendProbe;
+            }
+            detectBackend();
+
             /* ===== T6: Pannello rimappatura scorciatoie ============================
              * Elenca ogni azione di KEYMAP con il suo tasto e permette di rimapparla:
              * clic sul tasto -> "premi un tasto" -> nuova assegnazione. Rileva i

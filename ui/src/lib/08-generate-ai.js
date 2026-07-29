@@ -96,6 +96,46 @@
                 });
             }
 
+            // Applica una PATCH di modifica (diff) restituita dall'AI sopra
+            // all'oggetto attivo. La modalita' "modifica" ora chiede all'AI SOLO le
+            // aggiunte/rimozioni (vedi prompt-edit.txt): molto piu' veloce e non
+            // rovina il resto del modello, che resta identico per costruzione. Se
+            // per qualche motivo l'AI rispondesse con un modello intero (vecchio
+            // formato, senza 'del' e con conteggio voxel simile all'attuale), si
+            // ripiega sulla sostituzione completa per non lasciare voxel fantasma.
+            function applyModifyResult(data, sentPayload) {
+                const obj = getActiveObject();
+                if (!obj) { loadSceneFromParsed(data); return; }
+                const diffOps = Array.isArray(data && data.ops) ? data.ops : [];
+                const palette = Object.assign({}, (sentPayload && sentPayload.palette) || {}, (data && data.palette) || {});
+
+                // Euristica anti-"modello intero": se la risposta NON contiene 'del'
+                // e le sue ops rigenerano da zero un numero di voxel paragonabile
+                // all'attuale, e' un rewrite completo -> sostituisci tutto.
+                const hasDel = diffOps.some(o => Array.isArray(o) && String(o[0]).toLowerCase() === 'del');
+                const curCount = (currentModelData.voxels || []).length;
+                if (!hasDel && diffOps.length) {
+                    let produced = 0;
+                    try { produced = (expandOps({ palette: palette, ops: diffOps, metadata: data.metadata || {} }).voxels || []).length; } catch (e) { produced = 0; }
+                    if (curCount > 0 && produced >= curCount * 0.8) {
+                        obj.data = expandOps(data);
+                        currentModelData = obj.data;
+                        return;
+                    }
+                }
+
+                // Percorso normale: applica il diff sopra allo stato corrente.
+                pushHistory();                     // annullabile con Ctrl+Z
+                rebuildVoxelMap();                 // voxelMap = celle visibili correnti
+                applyOpsToVoxelMap(voxelMap, diffOps, palette);
+                syncVoxelsFromMap();               // riscrive currentModelData.voxels (preserva part/nascosti)
+                if (data && data.metadata && data.metadata.grid_size) {
+                    currentModelData.metadata = currentModelData.metadata || {};
+                    currentModelData.metadata.grid_size = data.metadata.grid_size;
+                }
+                obj.data = currentModelData;
+            }
+
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
@@ -113,6 +153,10 @@
                 generateBtn.innerHTML = '<span class="spinner"></span> Elaborazione...';
                 loaderOverlay.style.display = 'flex';
 
+                // Cattura cio' che inviamo: in "modifica" la palette inviata serve a
+                // risolvere le chiavi colore del diff di risposta.
+                const sentPayload = getSavePayload();
+
                 fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -125,7 +169,7 @@
                         bigStructure: toggleBigStructure ? toggleBigStructure.checked : false,
                         modular: toggleModular ? toggleModular.checked : false,
                         single_object: toggleSingleObject ? toggleSingleObject.checked : true,
-                        currentModel: getSavePayload(),
+                        currentModel: sentPayload,
                         image: selectedImageBase64
                     })
                 })
@@ -136,12 +180,10 @@
                         return res.json();
                     })
                     .then(data => {
-                        // 'modify' edits the active object in place; 'generate' replaces
-                        // the scene. Both go through the single-object path in Fase A.
+                        // 'modify' applica una patch (diff) sull'oggetto attivo;
+                        // 'generate' rimpiazza la scena.
                         if (modeSelect.value === 'modify' && getActiveObject()) {
-                            const obj = getActiveObject();
-                            obj.data = expandOps(data);
-                            currentModelData = obj.data;
+                            applyModifyResult(data, sentPayload);
                         } else {
                             loadSceneFromParsed(data);
                         }

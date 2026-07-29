@@ -36,18 +36,28 @@
                     '<div class="menu-sep"></div>' +
                     '<div class="menu-label" data-i18n="properties.transform">Trasformazione</div>' +
                     '<div style="display:flex; gap:6px;">' +
-                        '<label style="flex:1; font-size:11px; color:var(--text-muted);">X<input type="number" id="propPosX" step="1" value="0" style="width:100%; padding:5px; font-size:12px;"></label>' +
-                        '<label style="flex:1; font-size:11px; color:var(--text-muted);">Y<input type="number" id="propPosY" step="1" value="0" style="width:100%; padding:5px; font-size:12px;"></label>' +
-                        '<label style="flex:1; font-size:11px; color:var(--text-muted);">Z<input type="number" id="propPosZ" step="1" value="0" style="width:100%; padding:5px; font-size:12px;"></label>' +
+                        '<label style="flex:1; font-size:11px; color:var(--text-muted);">X<input type="number" id="propPosX" class="field-strong" step="1" value="0" style="width:100%; padding:5px; font-size:12px; margin-top:2px;"></label>' +
+                        '<label style="flex:1; font-size:11px; color:var(--text-muted);">Y<input type="number" id="propPosY" class="field-strong" step="1" value="0" style="width:100%; padding:5px; font-size:12px; margin-top:2px;"></label>' +
+                        '<label style="flex:1; font-size:11px; color:var(--text-muted);">Z<input type="number" id="propPosZ" class="field-strong" step="1" value="0" style="width:100%; padding:5px; font-size:12px; margin-top:2px;"></label>' +
                     '</div>' +
-                    '<div class="control-row">' +
+                    '<div class="control-row" style="margin-top:6px;">' +
                         '<label data-i18n="properties.rotation">Rotazione Y (90°)</label>' +
-                        '<input type="number" id="propRotY" step="90" value="0" style="width:80px; padding:5px; font-size:12px;">' +
+                        '<input type="number" id="propRotY" class="field-strong" step="90" value="0" style="width:80px; padding:5px; font-size:12px;">' +
                     '</div>' +
                     '<div class="control-row">' +
                         '<label data-i18n="properties.scale">Scala</label>' +
-                        '<input type="number" id="propScale" step="1" min="1" value="1" style="width:80px; padding:5px; font-size:12px;">' +
+                        '<input type="number" id="propScale" class="field-strong" step="1" min="1" value="1" style="width:80px; padding:5px; font-size:12px;">' +
                     '</div>' +
+                    ((typeof rig !== 'undefined' && rig && rig.bones) ?
+                        '<div class="menu-sep"></div>' +
+                        '<div class="menu-label">Ruota Scheletro (Rig)</div>' +
+                        '<div class="control-row">' +
+                            '<label title="Ruota solo le ossa rispetto alla mesh">Orientamento</label>' +
+                            '<div style="display:flex; gap:4px;">' +
+                                '<button class="btn btn-secondary" id="propRotRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>' +
+                                '<button class="btn btn-secondary" id="propRotRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>' +
+                            '</div>' +
+                        '</div>' : '') +
                     '<div class="screens-section-note" data-i18n="properties.liveNote">Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta nei voxel (coordinate intere, rotazione a 90°).</div>' +
                     '<div class="screens-section-note" style="text-align:center;">' + voxCount + ' voxel</div>';
 
@@ -120,6 +130,11 @@
                         if (typeof renderObjectsList === 'function') renderObjectsList();
                     });
                 });
+
+                const pRig90 = document.getElementById('propRotRig90Btn');
+                const pRig180 = document.getElementById('propRotRig180Btn');
+                if (pRig90) pRig90.addEventListener('click', () => { if (typeof rotateSkeletonY === 'function') rotateSkeletonY(90); });
+                if (pRig180) pRig180.addEventListener('click', () => { if (typeof rotateSkeletonY === 'function') rotateSkeletonY(180); });
 
                 if (typeof applyI18n === 'function') applyI18n(panel);
             }

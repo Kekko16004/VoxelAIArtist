@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import json
 import time
 import base64
@@ -7,6 +8,7 @@ import threading
 import socketserver
 import http.server
 import subprocess
+import webbrowser
 from urllib.parse import urlparse, parse_qs
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,51 +16,125 @@ sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 import settings as app_settings
 import pack as pack_engine
 
-os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox"
+# ===== MODALITA' DI AVVIO =====================================================
+# "web" -> DEFAULT: nessuna finestra Qt. Si avvia SOLO il server locale e la UI
+#          si apre nel browser di sistema. E' il default perche' la finestra
+#          QWebEngineView lampeggia: Chromium composita su una surface
+#          OpenGL/ANGLE che Qt ricrea al primo passaggio in modalita' GPU (il
+#          "sparisce e riappare"). Nel browser quel compositing e' gestito dal
+#          browser stesso, quindi il flicker non esiste. Zero Chromium embedded.
+# "py"  -> finestra desktop Qt (QWebEngineView): dialog nativi Apri/Salva e
+#          selettore cartella funzionanti (/api/project/*, /api/settings/choose-dir)
+#          e window.__IS_DESKTOP__ iniettato nella pagina.
+#
+# Cambia il valore qui sotto a mano per scegliere. Override, in ordine di
+# priorita': argomento CLI (--web / --py / --mode=web) > variabile d'ambiente
+# VOXELAI_MODE > questa costante.
+APP_MODE = "web"   # <- scegli qui: "web" oppure "py"
+
+VALID_APP_MODES = ("web", "py")
+
+# Alias tollerati: se qualcuno scrive "qt" o "browser" e' ovvio cosa intende, e
+# far fallire l'avvio per un sinonimo sarebbe solo fastidioso.
+_APP_MODE_ALIASES = {
+    "qt": "py", "pyqt": "py", "pyqt6": "py", "desktop": "py", "window": "py",
+    "browser": "web", "http": "web", "server": "web", "headless": "web",
+}
+
+
+def _resolve_app_mode(default_mode="web", argv=None, env=None):
+    """Risolve la modalita' di avvio: argomento CLI > VOXELAI_MODE > costante.
+
+    Un valore sconosciuto non deve impedire l'avvio: stampiamo un avviso e
+    ripieghiamo su "py" (la modalita' storica, con finestra e dialog nativi).
+    argv/env sono parametri per poter testare la funzione senza toccare il
+    processo reale.
+    """
+    argv = list(sys.argv[1:]) if argv is None else list(argv)
+    env = os.environ if env is None else env
+
+    raw = str(default_mode)
+    source = "costante APP_MODE"
+
+    env_val = (env.get("VOXELAI_MODE") or "").strip()
+    if env_val:
+        raw, source = env_val, "variabile VOXELAI_MODE"
+
+    cli_val = None
+    for i, arg in enumerate(argv):
+        a = str(arg).strip().lower()
+        if a in ("--web", "-web", "web"):
+            cli_val = "web"
+        elif a in ("--py", "-py", "py"):
+            cli_val = "py"
+        elif a.startswith("--mode="):
+            cli_val = a.split("=", 1)[1]
+        elif a == "--mode" and i + 1 < len(argv):
+            cli_val = str(argv[i + 1])
+    if cli_val:
+        raw, source = cli_val, "argomento CLI"
+
+    mode = str(raw).strip().lower()
+    mode = _APP_MODE_ALIASES.get(mode, mode)
+    if mode not in VALID_APP_MODES:
+        print("[avvio] modalita' '%s' non riconosciuta (%s): uso 'py'. "
+              "Valori validi: web, py." % (raw, source))
+        mode = "py"
+    return mode
+
+
+APP_MODE = _resolve_app_mode(APP_MODE)
 
 GUI_AVAILABLE = False
 GUI_LIBRARY = None
 
-try:
-    from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMenuBar, QMenu
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-    from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
-    from PyQt6.QtCore import QUrl, QTimer, Qt
-    from PyQt6.QtGui import QKeySequence, QAction, QColor, QPalette
-    GUI_AVAILABLE = True
-    GUI_LIBRARY = 'PyQt6'
-except ImportError:
+if APP_MODE == "py":
+    # In modalita' "web" i binding Qt non vengono nemmeno importati: importare
+    # QtWebEngine carica le DLL di Chromium/ANGLE (centinaia di ms e un bel po'
+    # di RAM) per una finestra che non apriremo. Cosi' la modalita' web resta
+    # anche l'unica avviabile su una macchina senza Qt, e main.py rimane
+    # importabile nei test headless.
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--no-sandbox"
     try:
-        from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMenuBar, QMenu
-        from PySide6.QtWebEngineWidgets import QWebEngineView
-        from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
-        from PySide6.QtCore import QUrl, QTimer, Qt
-        from PySide6.QtGui import QKeySequence, QAction, QColor, QPalette
+        from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMenuBar, QMenu
+        from PyQt6.QtWebEngineWidgets import QWebEngineView
+        from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+        from PyQt6.QtCore import QUrl, QTimer, Qt
+        from PyQt6.QtGui import QKeySequence, QAction, QColor, QPalette
         GUI_AVAILABLE = True
-        GUI_LIBRARY = 'PySide6'
+        GUI_LIBRARY = 'PyQt6'
     except ImportError:
         try:
-            from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QAction, QMenuBar, QMenu
-            from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineSettings
-            from PyQt5.QtCore import QUrl, QTimer, Qt
-            from PyQt5.QtGui import QKeySequence, QColor, QPalette
+            from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QMenuBar, QMenu
+            from PySide6.QtWebEngineWidgets import QWebEngineView
+            from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+            from PySide6.QtCore import QUrl, QTimer, Qt
+            from PySide6.QtGui import QKeySequence, QAction, QColor, QPalette
             GUI_AVAILABLE = True
-            GUI_LIBRARY = 'PyQt5'
+            GUI_LIBRARY = 'PySide6'
         except ImportError:
-            pass
+            try:
+                from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QFileDialog, QAction, QMenuBar, QMenu
+                from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineSettings
+                from PyQt5.QtCore import QUrl, QTimer, Qt
+                from PyQt5.QtGui import QKeySequence, QColor, QPalette
+                GUI_AVAILABLE = True
+                GUI_LIBRARY = 'PyQt5'
+            except ImportError:
+                pass
 
 if GUI_AVAILABLE:
     class WebEnginePage(QWebEnginePage):
         def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
             print(f"[JS Console] Riga {lineNumber}: {message}")
 else:
-    # Senza binding Qt la classe MainWindow (definita a livello di modulo) non
-    # avrebbe una classe base valida e il modulo esploderebbe con NameError
-    # ancora prima di arrivare al fallback browser documentato nel CLAUDE.md,
-    # rendendolo codice morto. Questi alias tengono il modulo IMPORTABILE:
-    # MainWindow diventa una classe inerte che non viene mai istanziata (il
-    # `main()` la salta quando GUI_AVAILABLE e' False). Serve anche a poter
-    # importare main.py nei test headless.
+    # Senza binding Qt (modalita' "web", oppure Qt non installato) la classe
+    # MainWindow (definita a livello di modulo) non avrebbe una classe base
+    # valida e il modulo esploderebbe con NameError ancora prima di arrivare
+    # all'avvio in modalita' web, rendendolo codice morto. Questi alias tengono
+    # il modulo IMPORTABILE: MainWindow diventa una classe inerte che non viene
+    # mai istanziata (il `__main__` la salta quando GUI_AVAILABLE e' False).
+    # Serve anche a poter importare main.py nei test headless.
     QMainWindow = object
     WebEnginePage = object
 
@@ -321,12 +397,126 @@ def _apply_grid_rule(prompt_text, grid_size):
     )
 
 
-def _gemini_client():
-    """Crea il client Gemini con i cookie salvati (o auto-discovery)."""
+# --- Errori AI "parlanti" ---------------------------------------------------
+# Un 500 con str(e) non dice all'utente cosa fare. Queste tre classi separano i
+# soli casi su cui l'utente PUO' agire (cookie da riconfigurare / riprovare piu'
+# tardi / il modello ha risposto ma non in JSON) e gli endpoint le mappano su
+# codici e messaggi diversi.
+
+class AIAuthError(RuntimeError):
+    """Cookie Gemini mancanti o scaduti: serve riconfigurare la sessione."""
+
+
+class AITransientError(RuntimeError):
+    """Rete, quota o rate-limit: la stessa richiesta puo' funzionare piu' tardi."""
+
+
+class AIFormatError(RuntimeError):
+    """Il modello ha risposto, ma non con JSON utilizzabile."""
+
+    def __init__(self, message, answer=None):
+        super().__init__(message)
+        self.answer = answer
+
+
+# Indizi testuali di un problema di autenticazione. Il client `gemini` e' un web
+# client reverse-engineered: non espone codici, solo messaggi.
+_AI_AUTH_HINTS = (
+    "cookie", "snlm0e", "nonce", "unauthorized", "forbidden", "401", "403",
+    "sign in", "signin", "login", "credential", "not authenticated",
+    "authentication", "secure_1psid", "session expired",
+)
+
+
+def _classify_ai_error(exc):
+    """Traduce un'eccezione del client Gemini in una delle classi sopra."""
+    msg = str(exc).strip() or exc.__class__.__name__
+    low = msg.lower()
+    if any(h in low for h in _AI_AUTH_HINTS):
+        return AIAuthError(
+            "Sessione Gemini non valida: i cookie sono mancanti o scaduti. "
+            "Apri le Impostazioni e reimposta i cookie del browser. "
+            "Dettaglio: %s" % msg)
+    # Riusa ESATTAMENTE il criterio di transitorieta' della coda pack: se un
+    # errore vale un retry nella coda, vale un retry anche qui.
+    if pack_engine._looks_like_rate_limit(msg) or isinstance(exc, (OSError,)):
+        return AITransientError(
+            "Servizio AI non raggiungibile o quota/limite temporaneo. "
+            "Riprova fra qualche minuto. Dettaglio: %s" % msg)
+    return AITransientError("Errore del servizio AI: %s" % msg)
+
+
+def _gemini_client(model=None):
+    """Crea il client Gemini con i cookie salvati (o auto-discovery).
+
+    `model` e' accettato per uniformita' con la UI (il selettore modello) ma il
+    client `gemini` installato NON espone un parametro modello
+    (`Gemini.__init__` non lo prevede e `generate_content(prompt, image)`
+    nemmeno): il valore viene quindi ignorato qui, in UN SOLO punto, invece che
+    silenziosamente in tre endpoint diversi. Il giorno in cui il client lo
+    supportera' basta cambiare questa funzione.
+    """
     cookies_dict = app_settings.load_cookies()
     if cookies_dict:
         return Gemini(cookies=cookies_dict, timeout=180)
     return Gemini(auto_cookies=True, timeout=180)
+
+
+def ai_answer_text(final_prompt, model=None):
+    """UNA chiamata al client Gemini -> testo grezzo della risposta.
+
+    Punto di contatto unico: creazione client, cookie e classificazione degli
+    errori stanno qui, non duplicati negli handler HTTP.
+    """
+    try:
+        client = _gemini_client(model)
+    except Exception as e:                                  # noqa: BLE001
+        raise _classify_ai_error(e) from e
+    try:
+        response = client.generate_content(final_prompt)
+    except Exception as e:                                  # noqa: BLE001
+        raise _classify_ai_error(e) from e
+    return response.text if hasattr(response, 'text') else str(response)
+
+
+# Backoff per gli endpoint INTERATTIVI. La scala e' quella della coda pack
+# (nessun valore duplicato) ma troncata a un budget compatibile con una
+# richiesta HTTP sincrona: nella coda si possono aspettare 20+60+150 s, davanti
+# a uno spinner no.
+INTERACTIVE_RETRY_BUDGET_SECONDS = 30
+
+
+def _interactive_backoff():
+    waits, total = [], 0
+    for w in pack_engine.RETRY_BACKOFF_SECONDS:
+        if total + w > INTERACTIVE_RETRY_BUDGET_SECONDS:
+            break
+        waits.append(w)
+        total += w
+    return waits
+
+
+def ai_answer_text_retrying(final_prompt, model=None, sleep=None):
+    """Come `ai_answer_text` ma ritenta gli errori transitori col backoff.
+
+    Gli errori di autenticazione e di formato NON vengono ritentati (come nella
+    coda pack: un JSON malformato non migliora riprovando subito).
+    `sleep` e' iniettabile per i test.
+    """
+    sleep = sleep or time.sleep
+    backoff = _interactive_backoff()
+    last = None
+    for attempt in range(len(backoff) + 1):
+        try:
+            return ai_answer_text(final_prompt, model)
+        except AITransientError as e:
+            last = e
+            if attempt >= len(backoff):
+                raise
+            print("[ai] errore transitorio, ritento fra %ds: %s"
+                  % (backoff[attempt], e))
+            sleep(backoff[attempt])
+    raise last  # pragma: no cover - il loop esce sempre da return/raise
 
 
 def run_ai_generation(final_prompt, model=None):
@@ -334,10 +524,12 @@ def run_ai_generation(final_prompt, model=None):
     Invia il prompt a Gemini e ritorna il modello JSON parsato.
     Solleva un'eccezione se la risposta non e' recuperabile: la coda pack la
     gestira' come errore del job, la modalita' singola come errore 500.
+
+    NOTA: qui NON si ritenta. La coda pack ha il proprio loop di retry
+    (cancel-aware) attorno a questa funzione: aggiungerne un secondo qui
+    significherebbe moltiplicare i tentativi e i tempi di attesa.
     """
-    client = _gemini_client()
-    response = client.generate_content(final_prompt)
-    answer = response.text if hasattr(response, 'text') else str(response)
+    answer = ai_answer_text(final_prompt, model)
 
     sys.path.insert(0, os.path.join(BASE_DIR, "src"))
     from parser import extract_and_parse_json
@@ -416,6 +608,432 @@ def _pack_generate(prompt, model, grid_size):
 PACK_MANAGER = pack_engine.PackManager(_pack_generate, prompt_builder=build_pack_prompt)
 
 
+# ---------------------------------------------------------------------------
+# ANIMAZIONI AI: prompt + normalizzazione della clip
+#
+# `buildClipFromAnimData` (ui/src/lib/15-rig.js) accetta UNA sola forma:
+#   { name, duration, loop, tracks: [ { bone, keys: [ {t, rot:[x,y,z]?,
+#                                                     pos:[dx,dy,dz]?} ] } ] }
+# con rot in GRADI (Euler XYZ) e pos in voxel. Un LLM invece produce
+# regolarmente varianti innocue (`keyframes` per `keys`, `rotation` per `rot`,
+# `time` per `t`, `tracks` come oggetto, nomi di ossa con maiuscole diverse...):
+# prima erano tutte "Errore animazione" lato client. Ora il server le riconduce
+# al contratto, e se non resta nulla di valido risponde 400 spiegando cosa e'
+# arrivato.
+# ---------------------------------------------------------------------------
+
+ANIM_PROMPT_FALLBACK = (
+    "Sei un esperto di ANIMAZIONE di personaggi voxel (rigging a ossa).\n"
+    "Crea UNA clip di animazione a keyframe per lo scheletro fornito.\n\n"
+    "### OSSA DISPONIBILI (usa SOLO questi nomi, copiati IDENTICI)\n"
+    "[INSERISCI QUI LE OSSA]\n\n"
+    "### FORMATO OUTPUT: SOLO questo JSON, nessun testo, nessun blocco markdown.\n"
+    "Le chiavi sono esattamente name, duration, loop, tracks, bone, keys, t, rot, pos.\n"
+    "\"tracks\" e' un ARRAY. Rotazioni in GRADI, Euler [X, Y, Z].\n"
+    "{\"name\":\"Nome\",\"duration\":2.0,\"loop\":true,\"tracks\":"
+    "[{\"bone\":\"NOME_OSSO\",\"keys\":[{\"t\":0.0,\"rot\":[0,0,0]},"
+    "{\"t\":2.0,\"rot\":[0,0,0]}]}]}\n\n"
+    "### RICHIESTA DELL'UTENTE\n[INSERISCI QUI LA RICHIESTA]\n"
+)
+
+ANIM_MIN_DURATION = 0.1
+ANIM_MAX_DURATION = 60.0
+ANIM_DEFAULT_DURATION = 1.5
+ANIM_MAX_KEYS = 400          # tetto di sicurezza per track
+ANIM_MAX_TRACKS = 64
+
+# Sinonimi accettati. L'ordine conta: il primo trovato vince.
+_ANIM_TRACKS_KEYS = ("tracks", "track", "channels", "boneTracks", "bone_tracks",
+                     "bones", "animation", "animations", "clip", "clips", "data")
+_ANIM_KEYS_KEYS = ("keys", "keyframes", "keyFrames", "key_frames", "frames",
+                   "poses", "steps", "values")
+_ANIM_BONE_KEYS = ("bone", "boneName", "bone_name", "name", "target", "joint",
+                   "node")
+_ANIM_TIME_KEYS = ("t", "time", "at", "sec", "second", "seconds", "timestamp",
+                   "frame", "f")
+_ANIM_ROT_KEYS = ("rot", "rotation", "euler", "rotate", "rotationEuler",
+                  "angles", "rotEuler", "r")
+_ANIM_POS_KEYS = ("pos", "position", "translation", "translate", "offset",
+                  "loc", "location", "p")
+_ANIM_DURATION_KEYS = ("duration", "length", "durationSeconds", "dur", "time",
+                       "totalTime")
+_ANIM_LOOP_KEYS = ("loop", "looping", "isLoop", "repeat", "cycle")
+
+
+def _anim_first(d, names):
+    """Primo valore non-None fra `names` in un dict (case-insensitive)."""
+    if not isinstance(d, dict):
+        return None, None
+    lowered = {str(k).lower(): k for k in d}
+    for n in names:
+        real = lowered.get(n.lower())
+        if real is not None and d[real] is not None:
+            return d[real], real
+    return None, None
+
+
+def _anim_bone_slug(name):
+    """'Upper Arm-R' / 'upperArm_R' / 'upperarm r' -> 'upperarmr'."""
+    return re.sub(r'[^a-z0-9]', '', str(name).lower())
+
+
+def _anim_bone_slug_sides(name):
+    """Come sopra ma con 'right'/'left'/'destro'/'sinistro' ridotti a r/l."""
+    s = _anim_bone_slug(name)
+    for word, short in (("right", "r"), ("left", "l"),
+                        ("destro", "r"), ("destra", "r"),
+                        ("sinistro", "l"), ("sinistra", "l")):
+        s = s.replace(word, short)
+    return s
+
+
+def _anim_bone_index(bones):
+    """slug -> nome REALE dell'osso. Il primo che occupa uno slug vince."""
+    index = {}
+    for b in bones or []:
+        real = str(b)
+        for slug in (_anim_bone_slug(real), _anim_bone_slug_sides(real)):
+            if slug and slug not in index:
+                index[slug] = real
+    return index
+
+
+def _anim_number(value, default=None):
+    """Numero da int/float/str ('-90', '90 gradi', '1.5s'). None se impossibile."""
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        try:
+            f = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return default
+        return f if f == f and abs(f) != float('inf') else default
+    if isinstance(value, str):
+        m = re.search(r'-?\d+(?:[.,]\d+)?', value.replace(' ', ''))
+        if m:
+            try:
+                return float(m.group(0).replace(',', '.'))
+            except ValueError:
+                return default
+    return default
+
+
+def _anim_vec3(value):
+    """Vettore a 3 componenti da lista, dict {x,y,z}, o stringa '0, 0, -90'."""
+    if isinstance(value, str):
+        nums = re.findall(r'-?\d+(?:\.\d+)?', value)
+        value = nums if nums else None
+    if isinstance(value, dict):
+        out, found = [], False
+        for axis in ("x", "y", "z"):
+            v, _ = _anim_first(value, (axis, axis.upper(), "r" + axis, "d" + axis))
+            n = _anim_number(v, None)
+            out.append(0.0 if n is None else n)
+            found = found or n is not None
+        return out if found else None
+    if isinstance(value, (list, tuple)):
+        nums = [_anim_number(v, None) for v in value[:3]]
+        nums = [0.0 if n is None else n for n in nums]
+        if not nums:
+            return None
+        while len(nums) < 3:
+            nums.append(0.0)
+        return nums
+    return None
+
+
+def _anim_loose_vec3(key_dict, prefixes):
+    """rot/pos scritti come componenti sciolte: {rx,ry,rz} oppure {x,y,z}."""
+    for pfx in prefixes:
+        out, found = [], False
+        for axis in ("x", "y", "z"):
+            v, _ = _anim_first(key_dict, (pfx + axis,))
+            n = _anim_number(v, None)
+            out.append(0.0 if n is None else n)
+            found = found or n is not None
+        if found:
+            return out
+    return None
+
+
+def _anim_truthy(value, default=True):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    s = str(value).strip().lower()
+    if s in ("true", "1", "yes", "y", "si", "sì", "on", "loop", "ciclico"):
+        return True
+    if s in ("false", "0", "no", "n", "off", "once", "oneshot"):
+        return False
+    return default
+
+
+def _anim_raw_tracks(node, depth=0):
+    """Estrae la lista grezza di (hint_nome_osso, dict_track) da qualunque forma.
+
+    Gestisce: array al top level, `tracks` come array o come oggetto
+    bone->keys, un singolo track non incapsulato, e clip annidate
+    ({"animation": {...}}, {"animations": [ {...} ]}).
+    """
+    if depth > 5 or node is None:
+        return []
+
+    if isinstance(node, list):
+        direct = [it for it in node
+                  if isinstance(it, dict) and _anim_first(it, _ANIM_KEYS_KEYS)[0] is not None]
+        if direct:
+            return [(None, it) for it in direct]
+        for it in node:
+            got = _anim_raw_tracks(it, depth + 1)
+            if got:
+                return got
+        return []
+
+    if not isinstance(node, dict):
+        return []
+
+    # Un track singolo passato al posto della lista.
+    if _anim_first(node, _ANIM_KEYS_KEYS)[0] is not None and \
+            _anim_first(node, _ANIM_BONE_KEYS)[0] is not None:
+        return [(None, node)]
+
+    for key in _ANIM_TRACKS_KEYS:
+        value, _ = _anim_first(node, (key,))
+        if value is None:
+            continue
+        got = _anim_tracks_from_value(value, depth + 1)
+        if got:
+            return got
+
+    # Ultima spiaggia: {"hips": [...], "spine": [...]} senza contenitore.
+    mapped = _anim_tracks_from_mapping(node)
+    if mapped:
+        return mapped
+
+    for value in node.values():
+        got = _anim_raw_tracks(value, depth + 1)
+        if got:
+            return got
+    return []
+
+
+def _anim_tracks_from_value(value, depth):
+    if isinstance(value, list):
+        return _anim_raw_tracks(value, depth)
+    if isinstance(value, dict):
+        if _anim_first(value, _ANIM_KEYS_KEYS)[0] is not None:
+            return [(None, value)]
+        mapped = _anim_tracks_from_mapping(value)
+        if mapped:
+            return mapped
+        return _anim_raw_tracks(value, depth)
+    return []
+
+
+def _anim_tracks_from_mapping(node):
+    """{"hips": [keys...]} oppure {"hips": {"keys": [...]}} -> lista di track.
+
+    Attenzione: una chiave contenitore ("tracks", "bones", "channels", ...) NON
+    e' un nome di osso. Senza questo filtro {"animation": {"bones": [...]}}
+    diventava un track chiamato "bones" e l'unico osso vero veniva perso.
+    """
+    container = {k.lower() for k in _ANIM_TRACKS_KEYS}
+    out = []
+    for name, value in node.items():
+        if str(name).lower() in container:
+            continue
+        if isinstance(value, list) and value and all(isinstance(v, dict) for v in value):
+            # Se gli elementi hanno a loro volta dei keyframe sono TRACK, non key.
+            if any(_anim_first(v, _ANIM_KEYS_KEYS)[0] is not None for v in value):
+                continue
+            out.append((name, {"keys": value}))
+        elif isinstance(value, dict) and _anim_first(value, _ANIM_KEYS_KEYS)[0] is not None:
+            out.append((name, value))
+    return out
+
+
+def _anim_meta(node, depth=0):
+    """Trova il dict che porta i metadati della clip (name/duration/loop)."""
+    if depth > 5 or not isinstance(node, dict):
+        return {}
+    if _anim_first(node, _ANIM_DURATION_KEYS)[0] is not None or \
+            _anim_first(node, _ANIM_LOOP_KEYS)[0] is not None:
+        return node
+    for value in node.values():
+        if isinstance(value, dict):
+            got = _anim_meta(value, depth + 1)
+            if got:
+                return got
+        elif isinstance(value, list):
+            for it in value:
+                got = _anim_meta(it, depth + 1)
+                if got:
+                    return got
+    return node
+
+
+def _anim_parse_keys(raw_keys, fps=None):
+    """Lista grezza di keyframe -> [(t, rot|None, pos|None)] ordinata."""
+    parsed = []
+    if isinstance(raw_keys, dict):
+        # {"0": {...}, "1.0": {...}} : la chiave e' il tempo.
+        raw_keys = [dict(v, **{"t": k}) if isinstance(v, dict) else v
+                    for k, v in raw_keys.items()]
+    if not isinstance(raw_keys, (list, tuple)):
+        return parsed
+
+    for i, k in enumerate(raw_keys[:ANIM_MAX_KEYS]):
+        if isinstance(k, (list, tuple)):
+            # [t, x, y, z] oppure [x, y, z]
+            nums = [_anim_number(v, None) for v in k]
+            nums = [n for n in nums if n is not None]
+            if len(nums) >= 4:
+                parsed.append((nums[0], nums[1:4], None))
+            elif len(nums) == 3:
+                parsed.append((float(i), nums, None))
+            continue
+        if not isinstance(k, dict):
+            continue
+
+        t_raw, t_key = _anim_first(k, _ANIM_TIME_KEYS)
+        t = _anim_number(t_raw, None)
+        if t is None:
+            t = float(i)
+        elif t_key and str(t_key).lower() in ("frame", "f") and fps:
+            t = t / float(fps)
+
+        rot_raw, _ = _anim_first(k, _ANIM_ROT_KEYS)
+        rot = _anim_vec3(rot_raw)
+        if rot is None:
+            rot = _anim_loose_vec3(k, ("r", "rot", ""))
+
+        pos_raw, _ = _anim_first(k, _ANIM_POS_KEYS)
+        pos = _anim_vec3(pos_raw)
+        if pos is None and rot is None:
+            pos = _anim_loose_vec3(k, ("d", "p"))
+
+        if rot is None and pos is None:
+            continue
+        parsed.append((max(0.0, t), rot, pos))
+
+    parsed.sort(key=lambda e: e[0])
+    return parsed
+
+
+def normalize_anim_data(data, bones):
+    """
+    Riconduce la risposta dell'AI al contratto di `buildClipFromAnimData`.
+
+    Ritorna SEMPRE {name, duration, loop, tracks:[{bone, keys:[{t, rot?, pos?}]}]}.
+    Chiavi diagnostiche aggiuntive (presenti solo se non vuote, il client le
+    ignora): `unknownBones` (nomi inventati dall'AI) e `warnings`.
+    Se `tracks` risulta vuota, il chiamante deve rispondere 400.
+    """
+    bone_index = _anim_bone_index(bones)
+    strict_bones = bool(bone_index)      # senza scheletro non possiamo validare
+    unknown, warnings = [], []
+
+    raw_tracks = _anim_raw_tracks(data)
+    meta = _anim_meta(data if isinstance(data, dict) else {})
+
+    fps = _anim_number(_anim_first(meta, ("fps", "frameRate", "frame_rate"))[0], None)
+
+    # 1) Track: nome osso + keyframe.
+    collected = []
+    for hint, tr in raw_tracks[:ANIM_MAX_TRACKS]:
+        if not isinstance(tr, dict):
+            continue
+        name_raw, _ = _anim_first(tr, _ANIM_BONE_KEYS)
+        name = name_raw if name_raw is not None else hint
+        if name is None:
+            warnings.append("track senza nome osso, scartato")
+            continue
+        if strict_bones:
+            real = bone_index.get(_anim_bone_slug(name)) or \
+                bone_index.get(_anim_bone_slug_sides(name))
+            if not real:
+                if str(name) not in unknown:
+                    unknown.append(str(name))
+                continue
+        else:
+            real = str(name)
+
+        keys_raw, _ = _anim_first(tr, _ANIM_KEYS_KEYS)
+        if keys_raw is None:
+            keys_raw = tr.get("keys")
+        keys = _anim_parse_keys(keys_raw, fps)
+        if not keys:
+            warnings.append("track '%s' senza keyframe validi, scartato" % real)
+            continue
+        collected.append((real, keys))
+
+    # 2) Durata: dichiarata se sensata, altrimenti dedotta dai keyframe. Mai
+    #    inferiore al tempo dell'ultimo keyframe (perderemmo dei keyframe).
+    max_t = max((k[0] for _, keys in collected for k in keys), default=0.0)
+    declared = _anim_number(_anim_first(meta, _ANIM_DURATION_KEYS)[0], None)
+    duration = declared if (declared and declared > 0) else None
+    if duration is None:
+        duration = max_t if max_t > 0 else ANIM_DEFAULT_DURATION
+    if max_t > duration:
+        duration = max_t
+    duration = min(ANIM_MAX_DURATION, max(ANIM_MIN_DURATION, float(duration)))
+
+    # 3) Keyframe -> contratto JS. Un solo keyframe non produce animazione:
+    #    lo duplichiamo a t=0 e t=duration (posa statica, ma clip valida).
+    tracks = []
+    for real, keys in collected:
+        rot_keys = [(min(duration, k[0]), k[1]) for k in keys if k[1] is not None]
+        pos_keys = [(min(duration, k[0]), k[2]) for k in keys if k[2] is not None]
+        if len(rot_keys) == 1:
+            rot_keys = [(0.0, rot_keys[0][1]), (duration, rot_keys[0][1])]
+            warnings.append("track '%s': un solo keyframe di rotazione, duplicato" % real)
+        if len(pos_keys) == 1:
+            pos_keys = [(0.0, pos_keys[0][1]), (duration, pos_keys[0][1])]
+            warnings.append("track '%s': un solo keyframe di posizione, duplicato" % real)
+
+        merged = {}
+        for t, rot in rot_keys:
+            merged.setdefault(round(t, 6), {})["rot"] = [float(v) for v in rot]
+        for t, pos in pos_keys:
+            merged.setdefault(round(t, 6), {})["pos"] = [float(v) for v in pos]
+        if not merged:
+            continue
+        out_keys = []
+        for t in sorted(merged):
+            entry = {"t": t}
+            entry.update(merged[t])
+            out_keys.append(entry)
+        tracks.append({"bone": real, "keys": out_keys})
+
+    name = _anim_first(meta, ("name", "clipName", "title", "animationName"))[0]
+    name = str(name).strip() if name is not None and str(name).strip() else "Animazione AI"
+
+    result = {
+        "name": name[:60],
+        "duration": round(duration, 4),
+        "loop": _anim_truthy(_anim_first(meta, _ANIM_LOOP_KEYS)[0], True),
+        "tracks": tracks,
+    }
+    if unknown:
+        result["unknownBones"] = unknown
+    if warnings:
+        result["warnings"] = warnings[:20]
+    return result
+
+
+def build_anim_prompt(prompt, bones):
+    """Prompt di UNA clip di animazione. Il template su disco e' la fonte; il
+    fallback inline serve solo se il file manca (bundle rotto) e ripete gli
+    stessi vincoli di formato."""
+    template = _read_prompt_file("prompt-anim.txt", ANIM_PROMPT_FALLBACK)
+    bones_str = ", ".join(str(b) for b in bones) if bones else "(scheletro non disponibile)"
+    out = template.replace("[INSERISCI QUI LE OSSA]", bones_str)
+    return out.replace("[INSERISCI QUI LA RICHIESTA]", prompt)
+
+
 class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -444,7 +1062,71 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    @staticmethod
+    def _log_ai_answer(label, answer, exc=None):
+        """Log della risposta grezza del modello (mai i cookie: qui passa solo
+        il testo della risposta)."""
+        print("\n=== ERRORE %s ===" % label)
+        if answer:
+            preview = answer if len(answer) <= 4000 else answer[:4000] + "\n[...troncato]"
+            print(preview)
+        else:
+            print("[Risposta non disponibile]")
+        print("=" * (10 + len(label)))
+        if exc is not None:
+            import traceback
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+    def _send_ai_error(self, exc, label):
+        """Mappa gli errori AI classificati su codici HTTP distinti.
+
+        401 -> cookie da riconfigurare (il client puo' aprire le Impostazioni),
+        503 -> rete/quota/rate-limit (riprovabile), 400 -> risposta non JSON.
+        """
+        self._log_ai_answer(label, getattr(exc, "answer", None), exc)
+        if isinstance(exc, AIAuthError):
+            self._send_json(401, {"error": str(exc), "needsCookies": True})
+        elif isinstance(exc, AIFormatError):
+            self._send_json(400, {"error": str(exc)})
+        else:
+            self._send_json(503, {"error": str(exc), "retryable": True})
+
+    def _serve_html_injected(self, fs_path, desktop):
+        """Serve una pagina HTML (index/settings) su HTTP normale, iniettando le
+        variabili desktop se richiesto. Serviamo la UI via `setUrl(http://...)`
+        invece di `setHtml(...)`: setHtml ricarica/riparsa il documento con un
+        base file:// e provoca un lampeggio bianco a ogni load; una navigazione
+        HTTP vera lascia a Chromium il compositing normale (niente flash) e
+        `fetch('/api/...')` relativo funziona senza riscritture."""
+        try:
+            with open(fs_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except OSError:
+            self.send_error(404)
+            return
+        if desktop:
+            inject = (f"<script>window.__API_BASE__ = 'http://127.0.0.1:{PORT}';"
+                      f" window.__IS_DESKTOP__ = true;</script>")
+            content = content.replace("</head>", inject + "\n</head>", 1)
+        body = content.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        # Le pagine principali passano da un handler dedicato che inietta le
+        # variabili desktop (?desktop=1). Cosi' la MainWindow puo' caricarle con
+        # setUrl(http://...) — vedi _serve_html_injected per il perche'.
+        _pg = urlparse(self.path)
+        if _pg.path in ('/', '/ui/', '/index.html', '/ui/index.html',
+                        '/settings.html', '/ui/settings.html'):
+            desktop = 'desktop=1' in (_pg.query or '')
+            fname = 'settings.html' if _pg.path.endswith('settings.html') else 'index.html'
+            self._serve_html_injected(os.path.join(BASE_DIR, 'ui', fname), desktop)
+            return
+
         # ===== MULTIGENERAZIONE: stato e risultati =====
         # GET /api/pack/status?runId=...  -> stato leggero (senza i modelli)
         # GET /api/pack/result?runId=...&jobId=...  -> il modello di UN job
@@ -541,11 +1223,23 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if self.path == '/api/settings':
+            _has_cookies = app_settings.has_cookies()
             self._send_json(200, {
-                "has_cookies": app_settings.has_cookies(),
+                "has_cookies": _has_cookies,
+                # needsCookies: la UI usa questo flag per aprire da se' il proprio
+                # modale Impostazioni al primo avvio. Prima era main.py ad aprire
+                # d'autorita' ui/settings.html: in modalita' web avrebbe dirottato
+                # la pagina appena aperta dall'utente, quindi la decisione e' della
+                # UI. E' la negazione di has_cookies, duplicata come nome esplicito
+                # perche' il frontend non deve conoscere la semantica del backend.
+                "needsCookies": (not _has_cookies),
                 "cookie_count": len(app_settings.load_cookies()),
                 "cookies_path": app_settings.get_cookies_path(),
                 "appdata_dir": app_settings.get_appdata_dir(),
+                # La UI puo' cambiare comportamento (dialog nativi vs download del
+                # browser) sapendo in che modalita' gira il processo.
+                "app_mode": APP_MODE,
+                "is_desktop": bool(APP_MODE == "py" and GUI_AVAILABLE),
             })
             return
         if self.path == '/api/settings/open-folder':
@@ -583,7 +1277,12 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         # --- Selettore cartella ---
         if route == '/api/settings/choose-dir':
             try:
-                result = _run_on_gui(lambda w: QFileDialog.getExistingDirectory(w, "Seleziona cartella"))
+                # Usiamo il dialog NATIVO di Windows (come "Apri"/"Salva", che gia'
+                # funzionano): un dialog nativo e' una finestra a livello di OS e appare
+                # SOPRA la surface GPU del QWebEngineView. Il dialog non-nativo disegnato
+                # da Qt finiva invece COPERTO dalla webview composita ("Sfoglia" sembrava
+                # non aprirsi). Con AA_ShareOpenGLContexts il compositing e' stabile.
+                result = _run_on_gui(lambda w: w.choose_dir_dialog())
                 if result:
                     self._send_json(200, {"folder": result})
                 else:
@@ -805,6 +1504,88 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": str(e)})
             return
 
+        if self.path == "/api/animate":
+            # Genera UNA clip di animazione a keyframe per lo scheletro corrente,
+            # a partire da un prompt in linguaggio naturale. Ritorna il JSON dei
+            # track (bone/rot/pos): il frontend lo trasforma in AnimationClip.
+            try:
+                content_length = int(self.headers.get('Content-Length') or 0)
+            except (TypeError, ValueError):
+                content_length = 0
+            if content_length <= 0:
+                self._send_json(400, {"error": "Corpo della richiesta mancante."})
+                return
+            answer = None
+            try:
+                payload = json.loads(self.rfile.read(content_length).decode('utf-8'))
+            except Exception as e:                              # noqa: BLE001
+                self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+                return
+            prompt = (payload.get("prompt") or "").strip()
+            bones = payload.get("bones") or []
+            if not isinstance(bones, (list, tuple)):
+                bones = []
+            if not prompt:
+                self._send_json(400, {"error": "Descrizione dell'animazione mancante."})
+                return
+
+            try:
+                final_prompt = build_anim_prompt(prompt, bones)
+                answer = ai_answer_text_retrying(final_prompt, payload.get("model"))
+            except (AIAuthError, AITransientError) as e:
+                self._send_ai_error(e, "ANIMAZIONE AI")
+                return
+            except Exception as e:                              # noqa: BLE001
+                self._send_ai_error(_classify_ai_error(e), "ANIMAZIONE AI")
+                return
+
+            # Il modello ha risposto: da qui in poi il problema e' di FORMATO, e
+            # va detto in chiaro (un 500 con str(e) faceva vedere all'utente solo
+            # "Errore animazione: Expecting property name...").
+            sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+            from parser import extract_and_parse_json
+            try:
+                raw = extract_and_parse_json(answer)
+            except Exception as e:                              # noqa: BLE001
+                self._log_ai_answer("ANIMAZIONE AI", answer, e)
+                self._send_json(400, {
+                    "error": "Il modello non ha restituito JSON. Riprova, "
+                             "eventualmente riformulando la descrizione. "
+                             "Dettaglio: %s" % e,
+                    "rawPreview": (answer or "")[:400],
+                })
+                return
+
+            anim = normalize_anim_data(raw, bones)
+            if not anim.get("tracks"):
+                self._log_ai_answer("ANIMAZIONE AI", answer, None)
+                detail = ["Il modello ha risposto ma nessun track e' utilizzabile."]
+                if anim.get("unknownBones"):
+                    detail.append("Ossa inventate dall'AI: %s."
+                                  % ", ".join(anim["unknownBones"][:12]))
+                if bones:
+                    detail.append("Ossa disponibili: %s."
+                                  % ", ".join(str(b) for b in list(bones)[:20]))
+                for w in (anim.get("warnings") or [])[:5]:
+                    detail.append(w + ".")
+                detail.append("Riprova: spesso basta rigenerare.")
+                self._send_json(400, {
+                    "error": " ".join(detail),
+                    "unknownBones": anim.get("unknownBones", []),
+                    "availableBones": [str(b) for b in bones],
+                    "warnings": anim.get("warnings", []),
+                    "rawPreview": (answer or "")[:400],
+                })
+                return
+
+            if anim.get("warnings") or anim.get("unknownBones"):
+                print("[animate] clip normalizzata con avvisi: %s"
+                      % json.dumps({"unknownBones": anim.get("unknownBones", []),
+                                    "warnings": anim.get("warnings", [])},
+                                   ensure_ascii=False))
+            self._send_json(200, anim)
+            return
+
         if self.path == "/api/generate":
             # `self.headers['Content-Length']` e' None se l'header manca, e
             # int(None) solleva TypeError FUORI dal try: il thread muore e la
@@ -819,6 +1600,10 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(400, {"error": "Corpo della richiesta mancante o Content-Length assente."})
                 return
             post_data = self.rfile.read(content_length)
+            # Inizializzata prima del try: l'except finale la passa a
+            # _log_ai_answer, e senza questa riga un errore sollevato PRIMA
+            # della chiamata all'AI diventerebbe un NameError.
+            answer = None
             try:
                 payload = json.loads(post_data.decode('utf-8'))
                 prompt = payload.get("prompt", "")
@@ -832,18 +1617,51 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                     current_model = payload.get("currentModel", {})
                     current_model_str = json.dumps(current_model, separators=(',', ':'))
 
+                    # Contesto compatto: griglia, palette e bounding-box della forma
+                    # attuale. Serve all'AI per capire DOVE stanno le parti senza
+                    # doversi ricostruire tutto il modello (la modifica ora e' un
+                    # DIFF: vedi prompt-edit.txt). Il bbox si ricava espandendo le
+                    # ops in voxel (riusa expand_ops, lo stesso del resto dell'app).
+                    ctx_lines = []
+                    try:
+                        meta = current_model.get("metadata", {}) if isinstance(current_model, dict) else {}
+                        grid = meta.get("grid_size")
+                        if grid:
+                            ctx_lines.append(f"Griglia (grid_size): {grid}")
+                        pal = current_model.get("palette") if isinstance(current_model, dict) else None
+                        if isinstance(pal, dict) and pal:
+                            ctx_lines.append("Palette attuale (chiave -> colore): " +
+                                             json.dumps(pal, ensure_ascii=False))
+                        sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+                        from parser import expand_ops as _expand_ops
+                        expanded = _expand_ops(dict(current_model)) if isinstance(current_model, dict) else None
+                        vox = (expanded or {}).get("voxels") or []
+                        if vox:
+                            xs = [v["x"] for v in vox]; ys = [v["y"] for v in vox]; zs = [v["z"] for v in vox]
+                            ctx_lines.append(
+                                f"Bounding box occupato: X[{min(xs)}..{max(xs)}] "
+                                f"Y[{min(ys)}..{max(ys)}] Z[{min(zs)}..{max(zs)}] "
+                                f"({len(vox)} voxel totali)")
+                    except Exception:
+                        pass
+                    context_str = "\n".join(ctx_lines) if ctx_lines else "(nessun dato aggiuntivo)"
+
                     prompt_edit_path = os.path.join(prompts_dir, "prompt-edit.txt")
                     if os.path.exists(prompt_edit_path):
                         with open(prompt_edit_path, 'r', encoding='utf-8') as pef:
                             prompt_edit_template = pef.read()
                     else:
                         prompt_edit_template = (
-                            "Sei un Voxel Artist AI esperto. Devi MODIFICARE il modello voxel esistente.\n\n"
+                            "Sei un Voxel Artist AI esperto. Restituisci SOLO una patch "
+                            "JSON { \"palette\": {...}, \"ops\": [...] } che modifica il modello.\n\n"
+                            "Contesto:\n[INSERISCI QUI IL CONTESTO]\n\n"
                             "Modello attuale:\n[INSERISCI QUI IL MODELLO ATTUALE]\n\n"
                             "Richiesta:\n[INSERISCI QUI LA RICHIESTA DI MODIFICA]"
                         )
-                    final_prompt = prompt_edit_template.replace("[INSERISCI QUI IL MODELLO ATTUALE]", current_model_str)
+                    final_prompt = prompt_edit_template.replace("[INSERISCI QUI IL CONTESTO]", context_str)
+                    final_prompt = final_prompt.replace("[INSERISCI QUI IL MODELLO ATTUALE]", current_model_str)
                     final_prompt = final_prompt.replace("[INSERISCI QUI LA RICHIESTA DI MODIFICA]", prompt)
+
                 else:
                     prompt_template_path = os.path.join(prompts_dir, "prompt.txt")
                     if os.path.exists(prompt_template_path):
@@ -884,30 +1702,29 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                             "Sfrutta tutta la griglia per aggiungere dettagli!]"
                         )
 
-                cookies_dict = app_settings.load_cookies()
-                if cookies_dict:
-                    client = Gemini(cookies=cookies_dict, timeout=180)
-                else:
-                    client = Gemini(auto_cookies=True, timeout=180)
-
-                response = client.generate_content(final_prompt)
-                answer = response.text if hasattr(response, 'text') else str(response)
+                # Stessa creazione client / gestione cookie / classificazione
+                # errori di /api/animate e della coda pack: nessuna duplicazione.
+                answer = ai_answer_text_retrying(final_prompt, payload.get("model"))
 
                 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
                 from parser import extract_and_parse_json
-                model_data = extract_and_parse_json(answer)
+                try:
+                    model_data = extract_and_parse_json(answer)
+                except Exception as e:                          # noqa: BLE001
+                    self._log_ai_answer("GENERAZIONE", answer, e)
+                    self._send_json(400, {
+                        "error": "Il modello non ha restituito JSON. Riprova. "
+                                 "Dettaglio: %s" % e,
+                        "rawPreview": (answer or "")[:400],
+                    })
+                    return
 
                 self._send_json(200, model_data)
 
-            except Exception as e:
-                import traceback
-                print("\n=== ERRORE GENERAZIONE ===")
-                try:
-                    print(answer)
-                except NameError:
-                    print("[Risposta non disponibile]")
-                print("===========================")
-                traceback.print_exc()
+            except (AIAuthError, AITransientError) as e:
+                self._send_ai_error(e, "GENERAZIONE")
+            except Exception as e:                              # noqa: BLE001
+                self._log_ai_answer("GENERAZIONE", answer, e)
                 self._send_json(500, {"error": str(e)})
         else:
             super().do_POST()
@@ -964,6 +1781,14 @@ class MainWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
+        # Anti-flicker all'avvio: NON mostriamo la finestra finche' la prima pagina
+        # non ha finito di caricare, cosi' l'utente non vede il frame bianco/vuoto
+        # iniziale. Un timer di sicurezza la mostra comunque se loadFinished non
+        # arrivasse (es. errore di rete locale), per non lasciare l'app invisibile.
+        self._shown = False
+        self.browser.loadFinished.connect(self._reveal_when_ready)
+        QTimer.singleShot(4000, self._force_reveal)
+
         self._build_menu()
         self.reload_page()
 
@@ -971,6 +1796,17 @@ class MainWindow(QMainWindow):
         reload_action.setShortcuts([QKeySequence("F5"), QKeySequence("Ctrl+R")])
         reload_action.triggered.connect(self.reload_page)
         self.addAction(reload_action)
+
+    def _reveal_when_ready(self, ok):
+        if not self._shown:
+            self._shown = True
+            self.show()
+
+    def _force_reveal(self):
+        if not self._shown:
+            self._shown = True
+            self.show()
+
 
     def _build_menu(self):
         menubar = self.menuBar()
@@ -986,28 +1822,30 @@ class MainWindow(QMainWindow):
         settings_action.triggered.connect(self.open_settings)
         file_menu.addAction(settings_action)
 
-    def _inject_api_base(self, html_content):
-        inject = f"<script>window.__API_BASE__ = 'http://127.0.0.1:{PORT}'; window.__IS_DESKTOP__ = true;</script>"
-        return html_content.replace("</head>", inject + "\n</head>", 1)
-
-    def _load_html(self, html_path):
-        with open(html_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        content = content.replace("fetch('/api/generate'", f"fetch('http://127.0.0.1:{PORT}/api/generate'")
-        content = self._inject_api_base(content)
-        self.browser.setHtml(content, QUrl.fromLocalFile(html_path))
+    def _page_url(self, name):
+        """URL HTTP della pagina desktop. Il flag ?desktop=1 dice al server di
+        iniettare window.__IS_DESKTOP__/__API_BASE__ (vedi _serve_html_injected)."""
+        rel = "ui/settings.html" if name == "settings" else "ui/index.html"
+        return QUrl(f"http://127.0.0.1:{PORT}/{rel}?desktop=1")
 
     def reload_page(self):
-        html_path = os.path.join(BASE_DIR, "ui", "index.html")
-        if os.path.exists(html_path):
-            self._load_html(html_path)
-        else:
-            self.browser.setHtml("<h1>ui/index.html non trovato!</h1>")
+        self.browser.setUrl(self._page_url("index"))
 
     def open_settings(self):
-        html_path = os.path.join(BASE_DIR, "ui", "settings.html")
-        if os.path.exists(html_path):
-            self._load_html(html_path)
+        """Impostazioni: apre il pannello NATIVO (FASE 3a migrazione). Il dialog
+        nativo compare SOPRA il viewport 3D senza far navigare via la webview e usa
+        uno "Sfoglia" nativo che funziona sempre. Se l'import fallisce, fallback
+        alla vecchia pagina HTML."""
+        try:
+            from native.settings_dialog import SettingsDialog
+            dlg = SettingsDialog(self, app_settings, open_web_settings=self.open_settings_web)
+            dlg.exec()
+        except Exception as e:
+            print(f"[native] pannello impostazioni nativo non disponibile: {e}")
+            self.open_settings_web()
+
+    def open_settings_web(self):
+        self.browser.setUrl(self._page_url("settings"))
 
     def save_project_dialog(self):
         """Apre 'Salva con nome' (filtro .voxai) sul thread GUI. Ritorna il path
@@ -1019,6 +1857,23 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(
             self, "Salva progetto", default_name, "Progetto VoxelAI (*.voxai)"
         )
+        return path or None
+
+    def choose_dir_dialog(self):
+        """Apre il selettore cartella NATIVO sul thread GUI e ritorna il path
+        scelto (o None se annullato). Chiamare SOLO via _run_on_gui."""
+        start_dir = app_settings.get_setting("default_save_dir")
+        if not start_dir or not os.path.exists(start_dir):
+            start_dir = ""
+        # Porta la finestra in primo piano: su Windows un dialog nativo puo'
+        # comparire DIETRO la surface GPU della webview se la finestra non ha il
+        # focus. raise_()/activateWindow() forzano il dialog in foreground.
+        try:
+            self.raise_()
+            self.activateWindow()
+        except Exception:
+            pass
+        path = QFileDialog.getExistingDirectory(self, "Seleziona cartella", start_dir)
         return path or None
 
     def open_project_dialog(self):
@@ -1070,35 +1925,110 @@ class MainWindow(QMainWindow):
             downloadItem.accept()
 
 
+def _print_cookie_hint():
+    """Avvisa a console se non ci sono cookie salvati.
+
+    Prima qui si apriva d'autorita' la vecchia pagina ui/settings.html: in
+    modalita' web avrebbe dirottato la pagina appena aperta e comunque la UI ha
+    ora il suo modale Impostazioni interno, che si apre da se' leggendo
+    `needsCookies` da GET /api/settings. Quindi: solo un avviso, niente
+    navigazione forzata.
+    """
+    try:
+        if app_settings.has_cookies():
+            return
+    except Exception as e:  # noqa: BLE001 - un errore qui non deve bloccare l'avvio
+        print(f"[cookie] impossibile verificare i cookie: {e}")
+        return
+    print("-" * 78)
+    print(" Nessun cookie salvato: la generazione AI non funzionera' finche' non")
+    print(" li incolli in Impostazioni (dentro l'app).")
+    try:
+        print(f" Cartella dati: {app_settings.get_appdata_dir()}")
+    except Exception:
+        pass
+    print("-" * 78)
+
+
+def run_web_mode():
+    """Modalita' "web": nessuna finestra Qt, la UI si apre nel browser.
+
+    Il server e' gia' avviato dal chiamante (PORT valorizzato). Qui apriamo la
+    pagina e teniamo vivo il processo: il server gira su un thread daemon, se il
+    main thread finisse morirebbe tutto insieme a lui.
+    """
+    url = f"http://127.0.0.1:{PORT}/ui/index.html"
+    print("")
+    print("=" * 78)
+    print(" VoxelAI Artist - MODALITA' WEB (nessuna finestra Qt, niente flicker)")
+    print(f" Interfaccia: {url}")
+    print(f" Server:      http://127.0.0.1:{PORT}")
+    print(" Per chiudere: premi Ctrl+C in questa finestra.")
+    print(" Per la finestra desktop: python main.py --py")
+    print("=" * 78)
+    print("")
+    try:
+        webbrowser.open(url)
+    except Exception as e:  # noqa: BLE001 - senza browser il server resta usabile
+        print(f"[web] impossibile aprire il browser ({e}): apri a mano {url}")
+    try:
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        # Ctrl+C pulito: senza questo si vede un traceback su time.sleep.
+        print("\nServer arrestato. A presto.")
+    return 0
+
+
+def run_py_mode():
+    """Modalita' "py": finestra desktop Qt con la webview embedded."""
+    # ANTI-FLICKER (causa radice). Il QWebEngineView usa una surface OpenGL/ANGLE
+    # composita da Chromium. Senza contesto GL condiviso, quando la view passa in
+    # modalita' GPU Qt RICREA la finestra nativa: e' il "sparisce e riappare" che
+    # si vede a schermo. AA_ShareOpenGLContexts va impostato PRIMA di creare la
+    # QApplication, altrimenti non ha effetto. Fallback getattr per PyQt5/6/PySide6.
+    try:
+        _aa = getattr(Qt, 'ApplicationAttribute', Qt)
+        QApplication.setAttribute(getattr(_aa, 'AA_ShareOpenGLContexts'), True)
+    except Exception as _e:
+        print(f"[gl] AA_ShareOpenGLContexts non impostabile: {_e}")
+    app = QApplication(sys.argv)
+    _apply_dark_palette(app)
+    window = MainWindow()  # noqa: F841 - il riferimento vive in MAIN_WINDOW
+    # NIENTE apertura automatica delle impostazioni: se mancano i cookie e' la UI
+    # ad aprire il proprio modale (vedi needsCookies in /api/settings).
+    # La finestra si mostra da sola dopo il primo loadFinished (anti-flicker):
+    # vedi MainWindow._reveal_when_ready. Niente window.show() qui.
+    try:
+        return app.exec()
+    except KeyboardInterrupt:
+        return 0
+
+
 if __name__ == '__main__':
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 
-    import time
+    # PORT = 0 -> l'OS sceglie una porta libera; il thread server la pubblica.
     while PORT == 0:
         time.sleep(0.1)
 
-    if GUI_AVAILABLE:
-        app = QApplication(sys.argv)
-        _apply_dark_palette(app)
-        window = MainWindow()
-        if not app_settings.has_cookies():
-            window.open_settings()
-        if not app_settings.has_cookies():
-            window.open_settings()
-        window.show()
-        sys.exit(app.exec())
+    _print_cookie_hint()
+
+    mode = APP_MODE
+    if mode == "py" and not GUI_AVAILABLE:
+        # Nessun binding Qt importabile: invece di morire, degradiamo a web.
+        print("")
+        print("=" * 78)
+        print(" ATTENZIONE: modalita' 'py' richiesta ma nessun binding Qt disponibile.")
+        print(" Installa PyQt6 (pip install PyQt6 PyQt6-WebEngine) oppure usa la")
+        print(" modalita' web. Passo automaticamente a 'web'.")
+        print("=" * 78)
+        mode = "web"
+
+    if mode == "py":
+        print(f"[avvio] modalita' 'py' (finestra desktop, {GUI_LIBRARY})")
+        sys.exit(run_py_mode())
     else:
-        import webbrowser
-        url = f"http://localhost:{PORT}/ui/index.html"
-        print("\n" + "="*80)
-        print(" ATTENZIONE: GUI non disponibile.")
-        print(f" Apertura nel browser: {url}")
-        print(" Installa PySide6: pip install PySide6")
-        print("="*80 + "\n")
-        webbrowser.open(url)
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\nServer arrestato.")
+        sys.exit(run_web_mode())
+

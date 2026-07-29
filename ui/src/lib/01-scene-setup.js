@@ -84,7 +84,11 @@
                 modelPivot.rotation.set(0, 0, 0);
             }
 
-            // Global Gizmo (Ctrl+A)
+            // Global Gizmo (Ctrl+A o auto in Modalita' Oggetto)
+            // In Modalita' Oggetto si attacca automaticamente alla selezione corrente:
+            //   - se e' attiva una PARTE (activePartName), sposta solo i voxel di quella parte;
+            //   - altrimenti sposta tutti i voxel dell'oggetto attivo.
+            // Ctrl+A lo toglie/attacca manualmente anche in Modalita' Modifica.
             const globalGizmoProxy = new THREE.Object3D();
             globalGizmoProxy.userData = { startPos: new THREE.Vector3() };
             scene.add(globalGizmoProxy);
@@ -105,8 +109,12 @@
                     const dz = Math.round(delta.z);
                     if (dx !== 0 || dy !== 0 || dz !== 0) {
                         pushHistory();
+                        // Se c'e' una parte attiva, sposta solo i voxel di quella parte;
+                        // altrimenti sposta tutti i voxel dell'oggetto attivo.
+                        const part = (typeof activePartName !== 'undefined') ? activePartName : null;
                         let moved = false;
                         currentModelData.voxels.forEach(v => {
+                            if (part && v.part !== part) return;
                             v.x += dx; v.y += dy; v.z += dz;
                             moved = true;
                         });
@@ -117,15 +125,54 @@
                     } else {
                         modelPivot.position.copy(originalModelPivotPos);
                     }
-                    globalGizmoProxy.position.copy(modelPivot.position);
+                    // Riposiziona il proxy sul nuovo centro (o lo stacca se in Object Mode
+                    // per lasciare che attachSelectionGizmo lo riposizioni correttamente).
+                    if (typeof editorMode !== 'undefined' && editorMode === 'object') {
+                        attachSelectionGizmo();
+                    } else {
+                        globalGizmoProxy.position.copy(modelPivot.position);
+                    }
                 }
             });
             globalTransformControls.addEventListener('objectChange', () => {
                 if (!globalTransformControls.dragging) return;
+                // Anteprima live solo quando si sposta l'INTERO oggetto: muovere il
+                // modelPivot con una parte selezionata farebbe scivolare tutto il modello
+                // (anteprima fuorviante), quindi la parte si aggiorna solo al rilascio.
+                if (typeof editorMode !== 'undefined' && editorMode === 'object'
+                    && typeof activePartName !== 'undefined' && activePartName) return;
                 const delta = new THREE.Vector3().copy(globalGizmoProxy.position).sub(globalGizmoProxy.userData.startPos);
                 modelPivot.position.copy(originalModelPivotPos).add(delta);
             });
             scene.add(globalTransformControls);
+
+            // Calcola il centro dei voxel da spostare (parte attiva o tutti).
+            function selectionGizmoCenter() {
+                const part = (typeof activePartName !== 'undefined') ? activePartName : null;
+                const voxels = (currentModelData && currentModelData.voxels) || [];
+                let minX = Infinity, minY = Infinity, minZ = Infinity;
+                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                let count = 0;
+                voxels.forEach(v => {
+                    if (part && v.part !== part) return;
+                    if (v._hidden) return;
+                    if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+                    if (v.y < minY) minY = v.y; if (v.y > maxY) maxY = v.y;
+                    if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+                    count++;
+                });
+                if (!count) return null;
+                return new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
+            }
+
+            // Attacca il gizmo globale al centro della selezione corrente.
+            // Chiamata da applyEditorMode, selectActiveObjectAndRefresh e click parte.
+            function attachSelectionGizmo() {
+                const center = selectionGizmoCenter();
+                if (!center) { globalTransformControls.detach(); return; }
+                globalGizmoProxy.position.copy(center);
+                globalTransformControls.attach(globalGizmoProxy);
+            }
 
             /* --- KEYMAP: mappa centrale degli shortcut (T6) --------------------
              * Fondamenta per il rebinding configurabile: tutti gli shortcut degli
@@ -165,21 +212,42 @@
 
                 if ((e.key === 'Delete' || e.key === 'Backspace') && globalTransformControls.object) {
                     e.preventDefault();
+                    // In Modalita' Oggetto il gizmo e' agganciato alla selezione: Delete
+                    // elimina l'oggetto (o la PARTE) attiva rispettando la selezione,
+                    // invece di azzerare tutti i voxel.
+                    if (typeof editorMode !== 'undefined' && editorMode === 'object'
+                        && typeof objDelete === 'function') {
+                        objDelete();
+                        return;
+                    }
                     pushHistory();
                     currentModelData.voxels = [];
-                    rig = null;
+                    // Il rig vive sull'oggetto: azzerare solo la variabile non bastava,
+                    // il buildModel() qui sotto lo riadotterebbe da obj.rig (scheletro
+                    // di un modello che non esiste piu').
+                    discardRigOfActiveObject();
                     globalTransformControls.detach();
                     if (typeof updateRigUI === 'function') updateRigUI();
                     buildModel();
                 }
             });
 
+            // Butta via il rig dell'oggetto attivo (dati inclusi). Usato quando i voxel
+            // vengono azzerati: lo scheletro non ha piu' nulla da deformare.
+            function discardRigOfActiveObject() {
+                rig = null;
+                selectedBoneIndex = -1;
+                if (typeof clearRigPreview === 'function') clearRigPreview();
+                const o = (typeof getActiveObject === 'function') ? getActiveObject() : null;
+                if (o) delete o.rig;
+            }
+
             // Add tool logic for Clear All and Fill Floor
             document.getElementById('clearAllBtn').addEventListener('click', () => {
                 if (!confirm('Sei sicuro di voler rimuovere tutti i voxel e azzerare il modello?')) return;
                 pushHistory();
                 currentModelData.voxels = [];
-                rig = null;
+                discardRigOfActiveObject();
                 globalTransformControls.detach();
                 if (typeof updateRigUI === 'function') updateRigUI();
                 buildModel();
@@ -212,8 +280,13 @@
             function resizeCanvas() {
                 const container = document.querySelector('.canvas-container');
                 if (container) {
+                    // La timeline (33-timeline.js) e' un dock in position:absolute DENTRO
+                    // .canvas-container: il container non si stringe da solo, quindi la sua
+                    // altezza va scalata a mano o il renderer finirebbe sotto al dock.
+                    // timelineHeight() torna 0 quando la timeline e' nascosta.
+                    const dock = (typeof timelineHeight === 'function') ? (timelineHeight() || 0) : 0;
                     const width = container.clientWidth;
-                    const height = container.clientHeight;
+                    const height = container.clientHeight - dock;
                     if (width <= 0 || height <= 0 || isNaN(width) || isNaN(height)) return;
                     camera.aspect = width / height;
                     camera.updateProjectionMatrix();

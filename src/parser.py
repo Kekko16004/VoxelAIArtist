@@ -377,7 +377,56 @@ def parse_with_recovery(s):
     repaired = clean_json_string(repaired)
     return json.loads(repaired)
 
+def _scan_balanced_end(b, start_idx):
+    """Indice di chiusura del valore JSON che inizia a `start_idx`, o -1.
+
+    Scansione consapevole delle stringhe (e degli escape) identica a quella
+    storica di extract_json_candidate: serve sia per gli oggetti `{...}` che per
+    gli array `[...]`.
+    """
+    opener = b[start_idx]
+    closer = '}' if opener == '{' else ']'
+    stack = []
+    in_string = False
+    escaped = False
+    for idx in range(start_idx, len(b)):
+        c = b[idx]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif c == '\\':
+                escaped = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+        elif c in ('{', '['):
+            stack.append(c)
+        elif c in ('}', ']'):
+            if stack:
+                stack.pop()
+            if not stack:
+                # Chiudiamo solo sul delimitatore coerente con l'apertura,
+                # altrimenti un `]` spaiato troncherebbe un oggetto.
+                if c == closer:
+                    return idx
+                return -1
+    return -1
+
+
 def extract_json_candidate(text):
+    """Ritaglia dal testo del modello tutti i possibili payload JSON.
+
+    Vengono emessi PIU' candidati, nell'ordine in cui vanno provati:
+      1. il primo `{` di ogni blocco (comportamento storico);
+      2. gli eventuali `{`/`[` successivi NON annidati in un candidato gia'
+         emesso.
+    Il punto 2 copre due casi reali: prosa che contiene graffe prima del JSON
+    vero (es. "Uso la struttura {name, duration, tracks}. Ecco:\\n{...}"), che
+    prima faceva fallire tutto sull'unico candidato sbagliato, e una risposta
+    con array JSON al top level (nessun `{` iniziale valido).
+    """
     import re
     blocks = []
     matches = list(re.finditer(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL))
@@ -391,42 +440,30 @@ def extract_json_candidate(text):
         blocks = [text]
     candidates = []
     for b in blocks:
-        start_idx = b.find('{')
-        if start_idx == -1:
-            continue
-        stack = []
-        in_string = False
-        escaped = False
-        json_end_idx = -1
-        for idx in range(start_idx, len(b)):
-            c = b[idx]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif c == '\\':
-                    escaped = True
-                elif c == '"':
-                    in_string = False
+        spans = []          # (start, end_or_len) dei candidati accettati
+        first_brace = b.find('{')
+        if first_brace != -1:
+            end = _scan_balanced_end(b, first_brace)
+            if end != -1:
+                candidates.append(b[first_brace:end + 1])
+                spans.append((first_brace, end))
             else:
-                if c == '"':
-                    in_string = True
-                elif c == '{':
-                    stack.append('{')
-                elif c == '}':
-                    if stack:
-                        stack.pop()
-                    if not stack:
-                        json_end_idx = idx
-                        break
-                elif c == '[':
-                    stack.append('[')
-                elif c == ']':
-                    if stack and stack[-1] == '[':
-                        stack.pop()
-        if json_end_idx != -1:
-            candidates.append(b[start_idx:json_end_idx+1])
-        else:
-            candidates.append(b[start_idx:])
+                candidates.append(b[first_brace:])
+                spans.append((first_brace, len(b) - 1))
+        for idx, c in enumerate(b):
+            if c not in ('{', '['):
+                continue
+            if idx == first_brace:
+                continue
+            if any(s <= idx <= e for s, e in spans):
+                continue    # annidato in un candidato gia' emesso
+            end = _scan_balanced_end(b, idx)
+            if end != -1:
+                candidates.append(b[idx:end + 1])
+                spans.append((idx, end))
+            else:
+                candidates.append(b[idx:])
+                spans.append((idx, len(b) - 1))
     return candidates
 
 def extract_and_parse_json(text):
@@ -437,17 +474,26 @@ def extract_and_parse_json(text):
             candidates = [text[start_idx:]]
     last_error = None
     parsed_objects = []
+    parsed_arrays = []
     for cand in candidates:
         try:
             parsed = parse_with_recovery(cand)
-            if isinstance(parsed, dict):
-                if "voxels" in parsed or "ops" in parsed or "parts" in parsed:
-                    return expand_ops(parsed)
-                parsed_objects.append(parsed)
         except Exception as e:
             last_error = e
+            continue
+        if isinstance(parsed, dict):
+            if "voxels" in parsed or "ops" in parsed or "parts" in parsed:
+                return expand_ops(parsed)
+            parsed_objects.append(parsed)
+        elif isinstance(parsed, list) and parsed:
+            # Risposta con array al top level (tipico delle animazioni: una
+            # lista di track). expand_ops lascia passare i non-dict, quindi la
+            # restituiamo solo se non c'e' nessun oggetto utilizzabile.
+            parsed_arrays.append(parsed)
     if parsed_objects:
         return expand_ops(parsed_objects[0])
+    if parsed_arrays:
+        return parsed_arrays[0]
     if last_error:
         raise last_error
     raise ValueError("No valid JSON found in response.")
