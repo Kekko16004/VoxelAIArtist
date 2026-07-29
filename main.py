@@ -1549,9 +1549,11 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:                              # noqa: BLE001
                 self._log_ai_answer("ANIMAZIONE AI", answer, e)
                 self._send_json(400, {
+                    "code": "badJson",
                     "error": "Il modello non ha restituito JSON. Riprova, "
                              "eventualmente riformulando la descrizione. "
                              "Dettaglio: %s" % e,
+                    "detail": str(e),
                     "rawPreview": (answer or "")[:400],
                 })
                 return
@@ -1559,18 +1561,15 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             anim = normalize_anim_data(raw, bones)
             if not anim.get("tracks"):
                 self._log_ai_answer("ANIMAZIONE AI", answer, None)
-                detail = ["Il modello ha risposto ma nessun track e' utilizzabile."]
-                if anim.get("unknownBones"):
-                    detail.append("Ossa inventate dall'AI: %s."
-                                  % ", ".join(anim["unknownBones"][:12]))
-                if bones:
-                    detail.append("Ossa disponibili: %s."
-                                  % ", ".join(str(b) for b in list(bones)[:20]))
-                for w in (anim.get("warnings") or [])[:5]:
-                    detail.append(w + ".")
-                detail.append("Riprova: spesso basta rigenerare.")
+                # `error` resta una frase italiana per i client vecchi, ma le
+                # liste (ossa inventate, ossa disponibili, avvisi) NON vanno
+                # concatenate qui: la UI e' tradotta in 6 lingue e le impagina
+                # da sola partendo dagli array. Concatenandole si otteneva un
+                # alert meta' italiano meta' lingua dell'utente, e ripetuto.
                 self._send_json(400, {
-                    "error": " ".join(detail),
+                    "code": "noUsableTracks",
+                    "error": "Il modello ha risposto ma nessun track e' "
+                             "utilizzabile. Riprova: spesso basta rigenerare.",
                     "unknownBones": anim.get("unknownBones", []),
                     "availableBones": [str(b) for b in bones],
                     "warnings": anim.get("warnings", []),

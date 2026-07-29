@@ -154,6 +154,12 @@ for f in sorted(glob.glob('ui/locales/*.json')):
 print('%d lingue, %d chiavi ciascuna (riferimento it.json)' % (langs, len(ref)))
 "
 
+# 6b. Ogni chiave citata dal codice esiste davvero in it.json.
+#     Il test 6 confronta i locali FRA LORO: una `t('chiave.inventata')` passava
+#     inosservata e in UI compariva la chiave al posto del testo (succedeva con
+#     t('rig.anim.errGeneric'), mai esistita).
+run "Chiavi i18n usate dal codice" python3 tests/test_i18n_keys_used.py
+
 echo ""
 echo "=============================================="
 if [ "$fails" -eq 0 ]; then

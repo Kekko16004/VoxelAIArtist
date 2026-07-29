@@ -420,7 +420,7 @@
 
             function rigToolsReady() {
                 if (!rig || !rig.bones || !rig.bones.length) {
-                    alert('Prima crea uno scheletro con Auto-Rig.');
+                    alert(t('rig.needAutoRig'));
                     return false;
                 }
                 return true;

@@ -87,12 +87,16 @@ global.scene = { add() { }, remove() { } };
 
 const rigSrc = fs.readFileSync(path.join(REPO_ROOT, 'ui/src/lib/15-rig.js'), 'latin1');
 const toolsSrc = fs.readFileSync(path.join(REPO_ROOT, 'ui/src/lib/32-rig-tools.js'), 'latin1');
+// Stub di i18n: qui non si verificano le traduzioni ma la COMPOSIZIONE del
+// messaggio, quindi t() restituisce chiave + variabili in chiaro.
+global.t = (key, vars) => (vars ? key + '(' + JSON.stringify(vars) + ')' : key);
 const api = new Function(rigSrc + '\n' + toolsSrc + `
  ;return {mirrorBoneName, boneSideOf, uniqueBoneName, mirrorPoseData, mirrorWeightsData,
           remapWeightEntry,
           symmetrizeBonesData, rigAddChildBone, rigRenameBone, rigDeleteBone,
           solveTwoBoneIK, ikChainForBone, poseForBones, poseLibLoad, poseLibSave,
-          rigForwardZ, ikBendHint, buildHumanoidSkeleton, POSE_LIB_KEY, POSE_LIB_MAX};`)();
+          rigForwardZ, ikBendHint, buildHumanoidSkeleton, animErrorMessage,
+          POSE_LIB_KEY, POSE_LIB_MAX};`)();
 
 const dup = o => JSON.parse(JSON.stringify(o));
 
@@ -336,6 +340,41 @@ for (let x = 0; x <= 10; x++) for (let y = 0; y <= 10; y++) voxels.push({ x, y, 
     ok(api.poseLibLoad().length === api.POSE_LIB_MAX, 'la libreria e\' limitata a ' + api.POSE_LIB_MAX + ' pose');
     store.set(api.POSE_LIB_KEY, '{non-json');
     ok(api.poseLibLoad().length === 0, 'localStorage corrotto non fa esplodere la UI');
+}
+
+// --- messaggio di errore dell'animazione AI -------------------------------------
+// /api/animate manda `code` + array di diagnostica: il messaggio va composto
+// nella lingua attiva, e le liste vuote non devono produrre righe fantasma.
+{
+    const noTracks = Object.assign(new Error('frase italiana del backend'), {
+        code: 'noUsableTracks',
+        unknownBones: ['tail_01', 'wing_R'],
+        availableBones: ['hips', 'spine'],
+        warnings: [],
+    });
+    const msg = api.animErrorMessage(noTracks);
+    const lines = msg.split('\n');
+    ok(lines[0].indexOf('rig.animNoUsableTracks') !== -1,
+        'con un code noto la frase del backend viene sostituita dalla chiave tradotta');
+    ok(lines[0].indexOf('frase italiana del backend') === -1,
+        'il testo italiano del backend non finisce nell\'alert quando il code e\' noto');
+    ok(lines.some(l => l.indexOf('rig.animUnknownBones') !== -1 && l.indexOf('tail_01') !== -1),
+        'le ossa inventate sono elencate su una riga propria');
+    ok(lines.some(l => l.indexOf('rig.animAvailableBones') !== -1),
+        'le ossa disponibili sono elencate');
+    ok(!lines.some(l => l.indexOf('rig.animWarnings') !== -1),
+        'array vuoto -> nessuna riga di avvisi');
+
+    const badJson = Object.assign(new Error('boh'), { code: 'badJson', detail: 'Expecting value: line 1' });
+    const m2 = api.animErrorMessage(badJson);
+    ok(m2.indexOf('rig.animBadJson') !== -1 && m2.indexOf('Expecting value') !== -1,
+        'badJson: chiave tradotta + dettaglio del parser');
+
+    const sconosciuto = api.animErrorMessage(new Error('HTTP 503 dal proxy'));
+    ok(sconosciuto.indexOf('HTTP 503 dal proxy') !== -1,
+        'code assente -> si mostra il messaggio grezzo, non si perde la diagnosi');
+    ok(api.animErrorMessage(new Error('')).indexOf('rig.animErrGeneric') !== -1,
+        'errore senza messaggio -> fallback generico tradotto');
 }
 
 console.log(fail ? `\nFALLITI: ${fail} (pass=${pass})` : `\nTUTTI I TEST PASSATI  (pass=${pass})`);

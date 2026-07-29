@@ -8455,7 +8455,7 @@
             });
 
             if (weightPaintToggle) weightPaintToggle.addEventListener('click', () => {
-                if (!rig || !rig.bones.length) { alert('Prima crea uno scheletro con Auto-Rig.'); return; }
+                if (!rig || !rig.bones.length) { alert(t('rig.needAutoRig')); return; }
                 setWeightPaint(!weightPaintActive);
             });
             // Le modalita' del pennello stanno su DUE barre segmentate (mix/add/sub e
@@ -9069,7 +9069,7 @@
             }
 
             if (addAnimBtn) addAnimBtn.addEventListener('click', () => {
-                if (!rig || !rig.bones || !rig.bones.length) { alert("Prima crea uno scheletro (Rig) per l'oggetto."); return; }
+                if (!rig || !rig.bones || !rig.bones.length) { alert(t('rig.needRigForObject')); return; }
                 const show = animForm.style.display === 'none' || !animForm.style.display;
                 animForm.style.display = show ? 'flex' : 'none';
                 if (show) animPromptInput.focus();
@@ -9079,14 +9079,45 @@
                 animNameInput.value = ''; animPromptInput.value = '';
             });
 
+            // /api/animate risponde con `code` (causa leggibile a macchina), `error`
+            // (frase italiana, utile solo come fallback) e tre array di diagnostica.
+            // Qui la frase viene ricostruita nella lingua attiva: il testo del
+            // backend si usa solo per i codici che non conosciamo.
+            const ANIM_ERR_KEYS = {
+                noUsableTracks: 'rig.animNoUsableTracks',
+                badJson: 'rig.animBadJson'
+            };
+
+            function animErrorMessage(err) {
+                const raw = String((err && err.message) || '') || t('rig.animErrGeneric');
+                const key = (err && err.code) ? ANIM_ERR_KEYS[err.code] : null;
+                const lines = [t('rig.animError', { error: key ? t(key) : raw })];
+                // `detail` esiste solo per i codici noti (es. il messaggio del parser
+                // JSON): senza traduzione possibile, ma va mostrato comunque.
+                if (key && err.detail) lines.push(String(err.detail));
+                const listLine = (dictKey, varName, arr, limit) => {
+                    const list = (Array.isArray(arr) ? arr : [])
+                        .filter(v => v !== null && v !== undefined && v !== '')
+                        .map(String);
+                    if (!list.length) return;
+                    const vars = {};
+                    vars[varName] = list.slice(0, limit).join(', ');
+                    lines.push(t(dictKey, vars));
+                };
+                listLine('rig.animUnknownBones', 'bones', err && err.unknownBones, 12);
+                listLine('rig.animAvailableBones', 'bones', err && err.availableBones, 20);
+                listLine('rig.animWarnings', 'warnings', err && err.warnings, 5);
+                return lines.join('\n');
+            }
+
             if (animGenerateBtn) animGenerateBtn.addEventListener('click', () => {
-                if (!rig || !skeleton) { alert("Scheletro non pronto."); return; }
+                if (!rig || !skeleton) { alert(t('rig.skeletonNotReady')); return; }
                 const desc = animPromptInput.value.trim();
-                if (!desc) { alert("Descrivi l'animazione da generare."); return; }
+                if (!desc) { alert(t('rig.describeAnim')); return; }
                 const boneNames = rig.bones.map(b => b.name);
                 const origHtml = animGenerateBtn.innerHTML;
                 animGenerateBtn.disabled = true;
-                animGenerateBtn.innerHTML = '<span class="spinner"></span> Genero...';
+                animGenerateBtn.innerHTML = '<span class="spinner"></span> ' + t('rig.animGenerating');
                 fetch(animApiUrl(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -9096,23 +9127,25 @@
                         // /api/animate risponde con diagnostica ricca (ossa inventate
                         // dall'AI, ossa realmente disponibili, avvisi): la portiamo
                         // sull'Error cosi' il catch la puo' mostrare all'utente.
-                        const ex = new Error(e.error || t('rig.anim.errGeneric'));
+                        const ex = new Error(e.error || t('rig.animErrGeneric'));
+                        ex.code           = e.code || '';
+                        ex.detail         = e.detail || '';
                         ex.unknownBones   = Array.isArray(e.unknownBones) ? e.unknownBones : [];
                         ex.availableBones = Array.isArray(e.availableBones) ? e.availableBones : [];
                         ex.warnings       = Array.isArray(e.warnings) ? e.warnings : [];
                         throw ex;
                     }))
                     .then(anim => {
-                        if (!anim || !Array.isArray(anim.tracks) || !anim.tracks.length) throw new Error("L'AI non ha restituito track validi.");
+                        if (!anim || !Array.isArray(anim.tracks) || !anim.tracks.length) throw new Error(t('rig.aiNoTracks'));
                         if (animNameInput.value.trim()) anim.name = animNameInput.value.trim();
                         const test = buildClipFromAnimData(anim);
-                        if (!test) throw new Error("Nessun osso valido nei track generati.");
+                        if (!test) throw new Error(t('rig.aiNoValidBones'));
                         const finalName = addCustomAnim(anim);
                         animForm.style.display = 'none';
                         animNameInput.value = ''; animPromptInput.value = '';
-                        rigHint.textContent = `Animazione "${finalName}" creata e in riproduzione.`;
+                        rigHint.textContent = t('rig.animCreated', { name: finalName });
                     })
-                    .catch(err => alert('Errore animazione: ' + err.message))
+                    .catch(err => alert(animErrorMessage(err)))
                     .finally(() => { animGenerateBtn.disabled = false; animGenerateBtn.innerHTML = origHtml; });
             });
 
@@ -14924,7 +14957,7 @@ async function voxelizeScene(gltfScene, options) {
 
             function rigToolsReady() {
                 if (!rig || !rig.bones || !rig.bones.length) {
-                    alert('Prima crea uno scheletro con Auto-Rig.');
+                    alert(t('rig.needAutoRig'));
                     return false;
                 }
                 return true;

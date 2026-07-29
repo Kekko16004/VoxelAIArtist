@@ -312,6 +312,10 @@ NEXT_ANSWER[0] = "Mi dispiace, non posso generare animazioni."
 s, d = _req({"prompt": "saluta", "bones": BONES})
 check(s == 400 and "JSON" in d.get("error", ""), "risposta senza JSON -> 400 parlante")
 check(d.get("rawPreview", "").startswith("Mi dispiace"), "rawPreview per diagnosi")
+# `code` e `detail` sono il contratto che permette alla UI di scrivere il
+# messaggio nella lingua dell'utente invece di mostrare `error` in italiano.
+check(d.get("code") == "badJson", "il 400 di formato porta code=badJson")
+check(bool(d.get("detail")), "detail contiene il messaggio del parser")
 
 NEXT_ANSWER[0] = ('{"duration":1.0,"tracks":[{"bone":"tail_01","keys":['
                   '{"t":0,"rot":[0,0,0]},{"t":1,"rot":[0,0,30]}]}]}')
@@ -319,6 +323,11 @@ s, d = _req({"prompt": "muovi la coda", "bones": BONES})
 check(s == 400 and d.get("unknownBones") == ["tail_01"],
       "solo ossa inventate -> 400 con l'elenco")
 check(d.get("availableBones") == BONES, "400 elenca anche le ossa disponibili")
+check(d.get("code") == "noUsableTracks", "il 400 senza track porta code=noUsableTracks")
+# Le liste NON vanno anche concatenate dentro `error`: la UI le impagina da
+# sola (tradotte), e prima l'alert le mostrava due volte.
+check("tail_01" not in d.get("error", ""),
+      "error e' la sola frase-titolo, senza le liste duplicate")
 
 NEXT_ANSWER[0] = RuntimeError("Failed to fetch SNlM0e: cookies expired")
 s, d = _req({"prompt": "saluta", "bones": BONES})
