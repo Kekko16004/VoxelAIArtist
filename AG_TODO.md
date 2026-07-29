@@ -70,3 +70,7 @@
 - [x] shrink rig gizmo to 0.65 (global transform gizmo stays 1.2) (100%)
 - [x] fix ai animation error handler: dead i18n key, localized backend diagnostics, unknown/available bones shown (100%)
 - [x] add i18n test for keys cited by the code (t('rig.anim.errGeneric') never existed in any locale) (100%)
+- [x] wire the 89 remaining hardcoded italian messages to the keys that already existed in all 6 locales (100%)
+- [x] autosave/recent list notes built with textContent instead of innerHTML (translations contain quotes) (100%)
+- [x] dates in autosave history and recent projects follow the ui language instead of a fixed it-IT (100%)
+- [x] add i18n tests: no hardcoded italian message, and t(key, {...}) vars must match the {placeholders} (100%)

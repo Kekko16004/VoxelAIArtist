@@ -114,7 +114,7 @@
                         objDelete();
                     } else if (activePartName) {
                         const active = getActiveObject();
-                        if (active && confirm('Eliminare la parte "' + activePartName + '"?')) {
+                        if (active && confirm(t('objects.confirmDeletePart', { name: activePartName }))) {
                             active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                             activePartName = null;
                             buildModel(false);

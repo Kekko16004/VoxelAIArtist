@@ -327,7 +327,7 @@
                     const s = document.createElement('div');
                     s.className = 'swatch';
                     s.style.backgroundColor = c;
-                    s.title = c + ' — clic per usarlo come colore attivo';
+                    s.title = t('palette.swatchTitle', { color: c });
                     s.addEventListener('click', () => setActiveColor(c));
                     paletteEl.appendChild(s);
                 });

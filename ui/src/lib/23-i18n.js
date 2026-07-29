@@ -92,6 +92,12 @@
                     // Per le altre lingue il testo deve davvero cambiare, quindi si
                     // applica normalmente.
                     if (!sameAsDom) applyI18n(document);
+                    // I testi scritti da JS (non annotati con data-i18n) applyI18n non li
+                    // vede: i tooltip dei campioni di palette nascono al primo buildModel(),
+                    // cioe' prima che il dizionario sia arrivato. Si ridisegnano qui.
+                    if (typeof renderPaletteSwatches === 'function') {
+                        try { renderPaletteSwatches(); } catch (e) { }
+                    }
                     i18nApplied = true;
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
@@ -103,6 +109,12 @@
             }
 
             function currentLanguage() { return i18nLang; }
+
+            // Codice lingua per Date#toLocaleString e Intl: le date della cronologia
+            // e dei progetti recenti erano fissate su 'it-IT' anche in inglese.
+            function uiLocale() {
+                return (typeof i18nLang === 'string' && i18nLang) ? i18nLang : I18N_FALLBACK;
+            }
 
             // Popola il <select id="languageSelect"> (creato da 22-screens nel tab Vista, o
             // qui se assente) leggendo locales/index.json. Nessun hardcode delle lingue.

@@ -3467,7 +3467,7 @@
 
             // Add tool logic for Clear All and Fill Floor
             document.getElementById('clearAllBtn').addEventListener('click', () => {
-                if (!confirm('Sei sicuro di voler rimuovere tutti i voxel e azzerare il modello?')) return;
+                if (!confirm(t('confirm.clearAll'))) return;
                 pushHistory();
                 currentModelData.voxels = [];
                 discardRigOfActiveObject();
@@ -3559,7 +3559,7 @@
                     currentModelData.metadata.grid_size = parts;
                     buildModel(false);
                 } else {
-                    alert("Formato non valido. Usa 'X,Y,Z' (es: 64,64,64)");
+                    alert(t('alert.invalidGridFormat'));
                 }
             });
 
@@ -3609,7 +3609,7 @@
                     breader.onload = (e) => {
                         importBinaryFormat(file, e.target.result).then(parsed => {
                             if (!parsed || !Array.isArray(parsed.voxels)) {
-                                alert('Il file non contiene voxel validi.');
+                                alert(t('alert.fileNoValidVoxels'));
                                 return;
                             }
                             if (!parsed.metadata) parsed.metadata = {};
@@ -3619,7 +3619,7 @@
                             else loadSceneFromParsed(parsed);
                             buildModel();
                         }).catch(err => {
-                            alert('Errore nel caricamento del file binario: ' + err.message);
+                            alert(t('alert.binaryLoadError', { error: err.message }));
                         });
                     };
                     breader.readAsArrayBuffer(file);
@@ -3629,7 +3629,7 @@
                 // Formati poligonali (GLB/GLTF): inviamo al voxelizer
                 if (nameLc.endsWith('.glb') || nameLc.endsWith('.gltf')) {
                     if (typeof importGlbFormat !== 'function') {
-                        alert("Il modulo import-glb.js non è stato caricato.");
+                        alert(t('alert.glbModuleMissing'));
                         return;
                     }
                     // Opzioni lette dalla UI (con default sensati se i campi non
@@ -3651,7 +3651,7 @@
                         const hasOps = Array.isArray(parsed.ops) && parsed.ops.length;
                         const hasVox = Array.isArray(parsed.voxels) && parsed.voxels.length;
                         if (!hasOps && !hasVox) {
-                            alert('Il modello importato non contiene voxel.');
+                            alert(t('alert.importedNoVoxels'));
                             return;
                         }
                         if (!parsed.metadata) parsed.metadata = {};
@@ -3661,7 +3661,7 @@
                         else loadSceneFromParsed(parsed);
                         buildModel();
                     }).catch(err => {
-                        alert('Errore importazione GLB: ' + err.message);
+                        alert(t('alert.glbImportError', { error: err.message }));
                     });
                     return;
                 }
@@ -3700,10 +3700,10 @@
                                 restoreRigForActiveObject();
                             }
                         } else {
-                            alert("File non valido: deve contenere un array 'voxels', 'ops' o 'objects'.");
+                            alert(t('alert.fileNoVoxels'));
                         }
                     } catch (err) {
-                        alert("Errore nel caricamento del file: " + err.message);
+                        alert(t('alert.fileLoadError', { error: err.message }));
                     }
                 };
                 reader.readAsText(file);
@@ -3742,7 +3742,7 @@
                 e.stopPropagation();
                 const jsonText = pasteTextarea.value.trim();
                 if (!jsonText) {
-                    alert("Per favore, incolla del testo JSON prima di caricare.");
+                    alert(t('alert.pasteEmpty'));
                     return;
                 }
                 if (loadJSONString(jsonText)) {
@@ -3811,11 +3811,11 @@
                         }
                         return true;
                     } else {
-                        alert("Formato non valido: deve contenere un array 'voxels', 'ops', 'objects' o un oggetto 'parts'.");
+                        alert(t('alert.parseNoVoxels'));
                         return false;
                     }
                 } catch (err) {
-                    alert("Errore nel parsing: " + err.message);
+                    alert(t('alert.parseError', { error: err.message }));
                     return false;
                 }
             }
@@ -4456,7 +4456,7 @@
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = selectedObjectIds.indexOf(obj.id) !== -1;
-                    chk.title = 'Seleziona per Unisci';
+                    chk.title = t('objects.selectForMerge');
                     chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary,#475569);';
                     chk.addEventListener('click', (ev) => {
                         ev.stopPropagation();
@@ -4560,7 +4560,7 @@
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
-                                if (!confirm('Eliminare la parte "' + partName + '"?')) return;
+                                if (!confirm(t('objects.confirmDeletePart', { name: partName }))) return;
                                 if (typeof pushHistory === 'function') pushHistory();
                                 obj.data.voxels = obj.data.voxels.filter(v => v.part !== partName);
                                 if (activePartName === partName) activePartName = null;
@@ -4619,7 +4619,7 @@
             function objNew() {
                 const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
                 if (hasContent) {
-                    if (!confirm('Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)')) return;
+                    if (!confirm(t('objects.confirmNew'))) return;
                 }
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
                 const obj = createObject({ metadata: { name: 'Oggetto ' + nextObjectId, grid_size: gSize.slice() }, voxels: [] });
@@ -4646,7 +4646,7 @@
             function objRename() {
                 const active = getActiveObject();
                 if (!active) return;
-                const name = prompt('Nuovo nome per l\'oggetto:', active.name);
+                const name = prompt(t('objects.promptRename'), active.name);
                 if (name === null) return;
                 const trimmed = name.trim();
                 if (trimmed) { active.name = trimmed; buildModel(false); }
@@ -4656,7 +4656,7 @@
                 const active = getActiveObject();
                 if (!active) return;
                 if (activePartName) {
-                    if (!confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return;
+                    if (!confirm(t('objects.confirmDeleteChild', { name: activePartName }))) return;
                     if (typeof pushHistory === 'function') pushHistory();
                     active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                     activePartName = null;
@@ -4665,7 +4665,7 @@
                     renderObjectsList();
                     return;
                 }
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"?')) return;
+                if (!confirm(t('objects.confirmDelete', { name: active.name }))) return;
                 if (typeof pushHistory === 'function') pushHistory();
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
                 if (idx === -1) return;
@@ -4695,14 +4695,14 @@
                     // fallback: attivo + primo altro visibile
                     const others = sceneObjects.filter(o => o.id !== activeObjectId);
                     if (!getActiveObject() || !others.length) {
-                        alert('Servono almeno due oggetti da unire. Spunta le caselle nell\'outliner.');
+                        alert(t('objects.mergeNeedTwo'));
                         return;
                     }
                     ids = [activeObjectId, others[0].id];
                 }
                 // Ordina secondo l'ordine di scena per un merge deterministico.
                 const toMerge = sceneObjects.filter(o => ids.indexOf(o.id) !== -1);
-                if (toMerge.length < 2) { alert('Selezione non valida per l\'unione.'); return; }
+                if (toMerge.length < 2) { alert(t('objects.mergeInvalid')); return; }
 
                 const map = new Map(); // "x,y,z" -> color (ultimo vince)
                 toMerge.forEach(o => {
@@ -4792,7 +4792,7 @@
 
                 visibleVoxels = computeVisibility(voxels);
 
-                modelNameEl.textContent = meta.name || "Senza Nome";
+                modelNameEl.textContent = meta.name || t('info.nameDefault');
                 const gSize = meta.grid_size || [16, 16, 16];
                 gridSizeEdit.value = `${gSize[0]},${gSize[1]},${gSize[2]}`;
                 voxelCountEl.textContent = voxels.length;
@@ -5368,11 +5368,11 @@
 
             modeSelect.addEventListener('change', () => {
                 if (modeSelect.value === 'modify') {
-                    promptInput.placeholder = "Descrivi le modifiche (es. Aggiungi ali rosse)";
-                    generateBtn.textContent = "Modifica Modello";
+                    promptInput.placeholder = t('generate.promptPlaceholderModify');
+                    generateBtn.textContent = t('generate.modifyBtn');
                 } else {
-                    promptInput.placeholder = "Cosa generiamo? (es. Dinosauro)";
-                    generateBtn.textContent = "Genera Modello";
+                    promptInput.placeholder = t('generate.promptPlaceholder');
+                    generateBtn.textContent = t('generate.generateBtn');
                 }
             });
 
@@ -5448,7 +5448,7 @@
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
-                    alert("Inserisci una descrizione prima di procedere!");
+                    alert(t('alert.promptEmpty'));
                     return;
                 }
 
@@ -5499,7 +5499,7 @@
                         buildModel();
                     })
                     .catch(err => {
-                        alert("Errore nella generazione: " + err.message);
+                        alert(t('alert.generateError', { error: err.message }));
                     })
                     .finally(() => {
                         generateBtn.disabled = false;
@@ -5964,7 +5964,7 @@
                         objDelete();
                     } else if (activePartName) {
                         const active = getActiveObject();
-                        if (active && confirm('Eliminare la parte "' + activePartName + '"?')) {
+                        if (active && confirm(t('objects.confirmDeletePart', { name: activePartName }))) {
                             active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                             activePartName = null;
                             buildModel(false);
@@ -7757,7 +7757,7 @@
                 }
                 if (typeof updateGizmo === 'function') updateGizmo();
                 const nSel = rig.bones.filter(bd => !bd.helper).length;
-                rigHint.textContent = `Rig "${rig.type}" pronto: ${nSel} ossa. Clic sul PALLINO di un giunto per selezionarlo, poi R per ruotare (posa) o G per spostare il giunto. Ctrl+Z annulla.`;
+                rigHint.textContent = t('rig.ready', { type: rig.type, count: nSel });
                 updateWeightPaintUI();
             }
 
@@ -8718,7 +8718,7 @@
                     row.addEventListener('click', () => selectBone(i));
                     // Doppio clic = rinomina (32-rig-tools.js). Il nome dell'osso e' la sua
                     // identita': la rinomina migra posa, pesi e track delle animazioni.
-                    row.title = 'Doppio clic per rinominare';
+                    row.title = t('rig.dblClickRename');
                     row.addEventListener('dblclick', () => {
                         if (typeof rigRenameBonePrompt === 'function') rigRenameBonePrompt(i);
                     });
@@ -9160,7 +9160,7 @@
 
             autoRigBtn.addEventListener('click', () => {
                 const voxels = currentModelData.voxels || [];
-                if (!voxels.length) { rigHint.textContent = 'Nessun voxel da riggare. Genera o carica un modello prima.'; return; }
+                if (!voxels.length) { rigHint.textContent = t('rig.hintNoVoxels'); return; }
                 pushHistory();
                 rig = rigType === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
                 selectedBoneIndex = -1;
@@ -9963,7 +9963,7 @@
                 shortcutListeningId = binding.id;
                 showShortcutConflict('');
                 btnEl.classList.add('listening');
-                btnEl.textContent = 'premi un tasto…';
+                btnEl.textContent = t('shortcut.pressKey');
                 shortcutListenHandler = function (e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -9989,8 +9989,8 @@
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'shortcut-key' + (shortcutListeningId === binding.id ? ' listening' : '');
-                    btn.textContent = shortcutListeningId === binding.id ? 'premi un tasto…' : keyDisplay(binding.key);
-                    btn.title = 'Clicca e premi la nuova combinazione (Esc per annullare)';
+                    btn.textContent = shortcutListeningId === binding.id ? t('shortcut.pressKey') : keyDisplay(binding.key);
+                    btn.title = t('shortcut.rebindTitle');
                     btn.addEventListener('click', () => {
                         if (shortcutListeningId === binding.id) { stopShortcutListening(); return; }
                         startShortcutListening(binding, btn);
@@ -10612,7 +10612,7 @@
                         const data = encodeVox(getFormatExportVoxels());
                         downloadBinary(data, getFormatExportName() + '.vox', 'application/octet-stream');
                     } catch (e) {
-                        alert('Errore export .vox: ' + e.message);
+                        alert(t('formats.voxExportError', { error: e.message }));
                     }
                 });
 
@@ -10623,11 +10623,10 @@
                         const res = await gzipBytes(nbt);
                         downloadBinary(res.data, getFormatExportName() + '.schem', 'application/octet-stream');
                         if (!res.gzipped) {
-                            alert('.schem esportato SENZA compressione gzip (gzip non disponibile qui). ' +
-                                'La maggior parte dei tool WorldEdit/Litematica legge comunque NBT non compresso, ma alcuni potrebbero rifiutarlo.');
+                            alert(t('formats.schemNoGzip'));
                         }
                     } catch (e) {
-                        alert('Errore export .schem: ' + e.message);
+                        alert(t('formats.schemExportError', { error: e.message }));
                     }
                 });
             })();
@@ -10700,9 +10699,9 @@
             // Carica (SOSTITUISCE la scena) un oggetto-dati progetto già deserializzato.
             // Accetta scena multi-oggetto ({objects:[...]}) o modello singolo (flat/compact).
             function loadProjectData(data) {
-                if (!data || typeof data !== 'object') { alert('Dati progetto non validi.'); return false; }
+                if (!data || typeof data !== 'object') { alert(t('project.invalidData')); return false; }
                 if (!Array.isArray(data.objects) && !Array.isArray(data.ops) && !Array.isArray(data.voxels)) {
-                    alert('Formato progetto non valido: manca "objects", "ops" o "voxels".');
+                    alert(t('project.invalidFormat'));
                     return false;
                 }
                 if (!data.metadata) data.metadata = {};
@@ -10775,7 +10774,7 @@
                     }
                     const j = await res.json();
                     if (j && j.cancelled) return;      // dialog annullato: nessun cambiamento
-                    if (j && j.error) { alert('Errore salvataggio progetto: ' + j.error); return; }
+                    if (j && j.error) { alert(t('project.saveError', { error: j.error })); return; }
                     if (j && j.path) {
                         currentProjectPath = j.path;
                         markProjectSaved();
@@ -10804,10 +10803,10 @@
                 }
                 try {
                     const res = await fetch(projectApi('/api/project/open'));
-                    if (!res || !res.ok) { alert('Apertura progetto non disponibile.'); return; }
+                    if (!res || !res.ok) { alert(t('project.openUnavailable')); return; }
                     const j = await res.json();
                     if (!j || j.cancelled) return;
-                    if (j.error) { alert('Errore apertura progetto: ' + j.error); return; }
+                    if (j.error) { alert(t('project.openError', { error: j.error })); return; }
 
                     if (j.encoding === 'json') {
                         const content = j.content;
@@ -10824,7 +10823,7 @@
                         const buf = base64ToArrayBuffer(j.content);
                         const ext = (j.ext || '').toLowerCase();
                         const done = (parsed) => {
-                            if (!parsed || !Array.isArray(parsed.voxels)) { alert('Il file non contiene voxel validi.'); return; }
+                            if (!parsed || !Array.isArray(parsed.voxels)) { alert(t('alert.fileNoValidVoxels')); return; }
                             if (!parsed.metadata) parsed.metadata = {};
                             if (!parsed.metadata.name && j.path) parsed.metadata.name = String(j.path).split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
                             loadSceneFromParsed(parsed);
@@ -10838,13 +10837,13 @@
                             const parsed = await decodeSchem(buf);
                             done(parsed);
                         } else {
-                            alert('Formato binario non riconosciuto: ' + ext);
+                            alert(t('project.unknownBinary', { ext: ext }));
                         }
                     } else {
-                        alert('Risposta apertura progetto non riconosciuta.');
+                        alert(t('project.openBadResponse'));
                     }
                 } catch (e) {
-                    alert('Errore apertura progetto: ' + e.message);
+                    alert(t('project.openError', { error: e.message }));
                 }
             }
 
@@ -10935,24 +10934,34 @@
                 return (n / (1024 * 1024)).toFixed(1) + ' MB';
             }
             function fmtSavedAt(iso) {
-                try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString('it-IT'); } catch (e) { }
+                try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString(uiLocale()); } catch (e) { }
                 return iso || '';
+            }
+
+            // Le note della lista autosave sono testo tradotto: si costruiscono con
+            // textContent perche' le traduzioni contengono apostrofi e virgolette.
+            function autosaveListNote(listEl, msg) {
+                listEl.innerHTML = '';
+                const note = document.createElement('div');
+                note.style.cssText = 'opacity:0.7; font-size:12px; padding:8px;';
+                note.textContent = msg;
+                listEl.appendChild(note);
             }
 
             async function refreshAutosaveList() {
                 const listEl = document.getElementById('autosaveList');
                 if (!listEl) return;
                 if (!hasLocalBackend()) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi richiede l\'app avviata (python main.py): aperta come file locale non c\'è il backend che la conserva.</div>';
+                    autosaveListNote(listEl, t('autosave.needsApp'));
                     return;
                 }
-                listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Caricamento…</div>';
+                autosaveListNote(listEl, t('common.loading'));
                 try {
                     const res = await fetch(projectApi('/api/autosave/list'));
-                    if (!res || !res.ok) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Impossibile caricare la cronologia.</div>'; return; }
+                    if (!res || !res.ok) { autosaveListNote(listEl, t('autosave.loadFailed')); return; }
                     const j = await res.json();
                     const items = (j && Array.isArray(j.autosaves)) ? j.autosaves : [];
-                    if (!items.length) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Nessun salvataggio automatico presente.</div>'; return; }
+                    if (!items.length) { autosaveListNote(listEl, t('autosave.empty')); return; }
                     listEl.innerHTML = '';
                     items.forEach(it => {
                         const row = document.createElement('div');
@@ -10971,16 +10980,16 @@
                         listEl.appendChild(row);
                     });
                 } catch (e) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Errore nel caricamento della cronologia.</div>';
+                    autosaveListNote(listEl, t('autosave.loadError'));
                 }
             }
 
             async function restoreAutosave(name) {
                 if (!name) return;
-                if (!confirm('Ripristinare questo salvataggio automatico? La scena corrente verrà sostituita.')) return;
+                if (!confirm(t('autosave.confirmRestore'))) return;
                 try {
                     const res = await fetch(projectApi('/api/autosave/get?name=' + encodeURIComponent(name)));
-                    if (!res || !res.ok) { alert('Impossibile caricare il salvataggio selezionato.'); return; }
+                    if (!res || !res.ok) { alert(t('autosave.restoreLoadFailed')); return; }
                     const j = await res.json();
                     const wrapper = j && j.content;
                     const data = (wrapper && wrapper.format === 'voxai' && wrapper.data) ? wrapper.data : wrapper;
@@ -10989,14 +10998,14 @@
                         closeAutosaveHistory();
                     }
                 } catch (e) {
-                    alert('Errore nel ripristino: ' + e.message);
+                    alert(t('autosave.restoreError', { error: e.message }));
                 }
             }
 
             async function openAutosaveFolder() {
-                if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
+                if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                 try { await fetch(projectApi('/api/autosave/open-folder')); }
-                catch (e) { alert('Impossibile aprire la cartella: ' + e.message); }
+                catch (e) { alert(t('autosave.folderError', { error: e.message })); }
             }
 
             function openAutosaveHistory() {
@@ -11156,7 +11165,10 @@
                     if (!entry) return;
                     if (hasNativeDialogs()) {
                         if (typeof openProject === 'function') {
-                            alert('Seleziona "' + (entry.name || entry.path || 'il progetto') + '" nella finestra che sta per aprirsi.\n\n(Percorso: ' + (entry.path || '') + ')');
+                            alert(t('launcher.selectInDialog', {
+                                name: entry.name || entry.path || t('launcher.theProject'),
+                                path: entry.path || ''
+                            }));
                             try { await openProject(); } catch (e) { }
                         }
                         return;
@@ -11182,21 +11194,32 @@
                 }
 
                 function fmtRecentDate(iso) {
-                    try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString('it-IT'); } catch (e) { }
+                    try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString(uiLocale()); } catch (e) { }
                     return '';
+                }
+
+                // Nota tradotta: si scrive con textContent, non con innerHTML, perche'
+                // le traduzioni contengono apostrofi e virgolette.
+                function screensListNote(listEl, msg) {
+                    listEl.innerHTML = '';
+                    const note = document.createElement('div');
+                    note.className = 'screens-section-note';
+                    note.style.padding = '8px';
+                    note.textContent = msg;
+                    listEl.appendChild(note);
                 }
 
                 async function refreshLauncherRecent() {
                     const listEl = document.getElementById('launcherRecentList');
                     if (!listEl) return;
                     if (!hasLocalBackend()) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Senza l\'app avviata (python main.py) i progetti recenti non sono disponibili. Usa "Apri progetto…".</div>';
+                        screensListNote(listEl, t('launcher.recentNeedsApp'));
                         return;
                     }
-                    listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Caricamento…</div>';
+                    screensListNote(listEl, t('common.loading'));
                     const items = await fetchRecent();
                     if (!items.length) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Nessun progetto recente. Creane uno nuovo o aprine uno esistente.</div>';
+                        screensListNote(listEl, t('launcher.recentEmpty'));
                         return;
                     }
                     listEl.innerHTML = '';
@@ -11276,12 +11299,12 @@
                     }
                     const chooseDirBtn = document.getElementById('settingsChooseDirBtn');
                     if (chooseDirBtn) chooseDirBtn.addEventListener('click', async () => {
-                        if (!hasNativeDialogs()) { alert('La finestra di scelta cartella è un dialog di sistema: serve la modalità desktop (avvia con "python main.py --py").'); return; }
+                        if (!hasNativeDialogs()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
                         try {
                             const res = await fetch(screensApi('/api/settings/choose-dir'));
                             const data = await res.json().catch(() => ({}));
                             if (!res.ok || data.error) {
-                                alert('Impossibile aprire la finestra di selezione cartella: ' + (data.error || ('HTTP ' + res.status)));
+                                alert(t('screens.chooseDirError', { error: data.error || ('HTTP ' + res.status) }));
                                 return;
                             }
                             if (data.folder) {
@@ -11290,7 +11313,7 @@
                             }
                         } catch(e) {
                             console.error('Errore scelta cartella', e);
-                            alert('Errore nell\'apertura della finestra di selezione cartella.');
+                            alert(t('screens.chooseDirFailed'));
                         }
                     });
 
@@ -11306,7 +11329,7 @@
                     const folderBtn = document.getElementById('settingsOpenAutosaveFolderBtn');
                     if (folderBtn) folderBtn.addEventListener('click', async () => {
                         if (typeof openAutosaveFolder === 'function') { try { await openAutosaveFolder(); } catch (e) { } return; }
-                        if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
+                        if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
                     });
 
@@ -11476,6 +11499,12 @@
                     // Per le altre lingue il testo deve davvero cambiare, quindi si
                     // applica normalmente.
                     if (!sameAsDom) applyI18n(document);
+                    // I testi scritti da JS (non annotati con data-i18n) applyI18n non li
+                    // vede: i tooltip dei campioni di palette nascono al primo buildModel(),
+                    // cioe' prima che il dizionario sia arrivato. Si ridisegnano qui.
+                    if (typeof renderPaletteSwatches === 'function') {
+                        try { renderPaletteSwatches(); } catch (e) { }
+                    }
                     i18nApplied = true;
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
@@ -11487,6 +11516,12 @@
             }
 
             function currentLanguage() { return i18nLang; }
+
+            // Codice lingua per Date#toLocaleString e Intl: le date della cronologia
+            // e dei progetti recenti erano fissate su 'it-IT' anche in inglese.
+            function uiLocale() {
+                return (typeof i18nLang === 'string' && i18nLang) ? i18nLang : I18N_FALLBACK;
+            }
 
             // Popola il <select id="languageSelect"> (creato da 22-screens nel tab Vista, o
             // qui se assente) leggendo locales/index.json. Nessun hardcode delle lingue.
@@ -12857,7 +12892,7 @@
                     const s = document.createElement('div');
                     s.className = 'swatch';
                     s.style.backgroundColor = c;
-                    s.title = c + ' — clic per usarlo come colore attivo';
+                    s.title = t('palette.swatchTitle', { color: c });
                     s.addEventListener('click', () => setActiveColor(c));
                     paletteEl.appendChild(s);
                 });
@@ -15022,13 +15057,13 @@ async function voxelizeScene(gltfScene, options) {
                 const res = mirrorPoseData(rig.bones, rigEffectivePose(), mirrorDir);
                 if (!res.changed) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Nessuna posa da specchiare (' + mirrorDirLabel() + '): le ossa gemelle non esistono o sono a zero.';
+                    if (rigHint) rigHint.textContent = t('rigTools.mirrorPoseNone', { dir: mirrorDirLabel() });
                     return;
                 }
                 rigSetEffectivePose(res.pose);
                 stashRigToActiveObject();
                 refreshPoseUI();
-                if (rigHint) rigHint.textContent = 'Posa specchiata su X (' + mirrorDirLabel() + '): ' + res.changed + ' ossa aggiornate.';
+                if (rigHint) rigHint.textContent = t('rigTools.mirrorPoseOk', { dir: mirrorDirLabel(), n: res.changed });
             });
 
             // --- Idea 1: specchia pesi dipinti ---
@@ -15039,13 +15074,13 @@ async function voxelizeScene(gltfScene, options) {
                 const res = mirrorWeightsData(voxels, rig.bones, rig.weights, mirrorDir);
                 if (!res.copied) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Nessuna correzione da specchiare (' + mirrorDirLabel() + '): dipingi prima un lato.';
+                    if (rigHint) rigHint.textContent = t('rigTools.mirrorWeightsNone', { dir: mirrorDirLabel() });
                     return;
                 }
                 rig.weights = res.weights;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Pesi specchiati (' + mirrorDirLabel() + '): ' + res.copied + ' voxel'
-                    + (res.skipped ? ', ' + res.skipped + ' senza gemello' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.mirrorWeightsOk', { dir: mirrorDirLabel(), n: res.copied })
+                    + (res.skipped ? t('rigTools.mirrorWeightsSkipped', { n: res.skipped }) : '') + '.';
             });
 
             // --- Idea 2: simmetrizza lo scheletro ---
@@ -15075,21 +15110,20 @@ async function voxelizeScene(gltfScene, options) {
             function rigAddBonePrompt() {
                 if (!rigToolsReady()) return;
                 const pi = rigSelectedIndex();
-                if (pi < 0) { alert('Seleziona prima l\'osso genitore nella lista.'); return; }
+                if (pi < 0) { alert(t('rigTools.selectParentFirst')); return; }
                 const parentName = rig.bones[pi].name;
                 const suggested = uniqueBoneName(rig.bones, parentName + '_extra');
-                const answer = prompt('Nome del nuovo osso (figlio di ' + parentName + '):', suggested);
+                const answer = prompt(t('rigTools.newBonePrompt', { parent: parentName }), suggested);
                 if (answer === null) return;
                 const name = String(answer).trim().replace(/\s+/g, '_');
                 if (!name) return;
-                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) { alert('Usa solo lettere, numeri, _ . e -'); return; }
-                if (rig.bones.some(o => o.name === name)) { alert('Nome gia\' usato da un altro osso.'); return; }
+                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) { alert(t('rigTools.nameCharset')); return; }
+                if (rig.bones.some(o => o.name === name)) { alert(t('rigTools.nameTaken')); return; }
                 pushHistory();
                 const idx = rigAddChildBone(rig, pi, name);
                 if (idx < 0) { dropLastHistory(); return; }
                 rebuildRigPreserving(idx);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" aggiunto sotto ' + parentName
-                    + '. Con [G] sposti la sua articolazione, poi assegnagli i voxel con la pittura pesi.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneAdded', { name: name, parent: parentName });
             }
 
             function rigRenameBonePrompt(index) {
@@ -15097,7 +15131,7 @@ async function voxelizeScene(gltfScene, options) {
                 const i = (index === undefined || index < 0) ? rigSelectedIndex() : index;
                 const bd = rig.bones[i];
                 if (!bd) return;
-                const answer = prompt('Nuovo nome per "' + bd.name + '":', bd.name);
+                const answer = prompt(t('rigTools.renamePrompt', { name: bd.name }), bd.name);
                 if (answer === null) return;
                 const before = bd.name;
                 pushHistory();
@@ -15242,7 +15276,7 @@ async function voxelizeScene(gltfScene, options) {
             if (ikToggleBtn) ikToggleBtn.addEventListener('click', () => {
                 if (!ikActive) {
                     if (!rigToolsReady()) return;
-                    if (!skeleton || !rigPreviewActive) { alert('Attiva prima l\'anteprima del rig (Mostra rig).'); return; }
+                    if (!skeleton || !rigPreviewActive) { alert(t('rigTools.needPreview')); return; }
                     if (weightPaintActive) setWeightPaint(false);
                     if (selectedBoneIndex < 0) {
                         const f = firstSelectableBone();
@@ -15250,9 +15284,8 @@ async function voxelizeScene(gltfScene, options) {
                     }
                     ikActive = true;
                     ikToggleBtn.classList.add('active');
-                    if (ikHintEl) ikHintEl.textContent = 'Trascina la mano, il piede o l\'osso che vuoi puntare: la catena lo segue.';
-                    if (rigHint) rigHint.textContent = 'IK attiva: trascina con il tasto sinistro l\'estremita\' dell\'arto verso il punto voluto. '
-                        + 'Ogni trascinamento e\' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire.';
+                    if (ikHintEl) ikHintEl.textContent = t('rigTools.ikHint');
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOn');
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
@@ -15311,21 +15344,23 @@ async function voxelizeScene(gltfScene, options) {
                 const res = poseForBones(entry.pose, rig.bones);
                 if (!res.applied) {
                     dropLastHistory();
-                    alert('Nessun osso in comune con la posa "' + entry.name + '": serve uno scheletro con gli stessi nomi.');
+                    alert(t('rigTools.poseNoCommonBones', { name: entry.name }));
                     return;
                 }
                 rigSetEffectivePose(res.pose);
                 stashRigToActiveObject();
                 refreshPoseUI();
-                if (rigHint) rigHint.textContent = 'Posa "' + entry.name + '" applicata a ' + res.applied + ' ossa'
-                    + (res.missing.length ? ' (' + res.missing.length + ' ossa della posa non esistono qui: ' + res.missing.slice(0, 4).join(', ') + ')' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseApplied', { name: entry.name, n: res.applied })
+                    + (res.missing.length ? t('rigTools.poseMissingBones', {
+                        n: res.missing.length, names: res.missing.slice(0, 4).join(', ')
+                    }) : '') + '.';
             }
 
             function deletePoseFromLib(idx) {
                 const list = poseLibLoad();
                 const entry = list[idx];
                 if (!entry) return;
-                if (!confirm('Eliminare la posa "' + entry.name + '" dalla libreria?')) return;
+                if (!confirm(t('rigTools.poseConfirmDelete', { name: entry.name }))) return;
                 list.splice(idx, 1);
                 poseLibSave(list);
                 renderPoseLib();
@@ -15344,7 +15379,7 @@ async function voxelizeScene(gltfScene, options) {
                     label.className = 'pose-lib-name';
                     label.style.cssText = 'flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
                     label.textContent = entry.name;
-                    label.title = Object.keys(entry.pose || {}).length + ' ossa nella posa';
+                    label.title = t('rigTools.poseBoneCount', { n: Object.keys(entry.pose || {}).length });
                     const use = document.createElement('button');
                     use.className = 'btn btn-secondary';
                     use.style.cssText = 'padding:5px 10px; font-size:11px;';
@@ -15354,7 +15389,7 @@ async function voxelizeScene(gltfScene, options) {
                     del.className = 'btn btn-secondary';
                     del.style.cssText = 'padding:5px 9px; font-size:12px; line-height:1;';
                     del.textContent = '×';
-                    del.title = 'Elimina questa posa';
+                    del.title = t('rigTools.poseDeleteTitle');
                     del.addEventListener('click', () => deletePoseFromLib(idx));
                     row.appendChild(label);
                     row.appendChild(use);
@@ -15368,8 +15403,8 @@ async function voxelizeScene(gltfScene, options) {
                 const pose = rigEffectivePose();
                 const names = Object.keys(pose || {}).filter(k => Array.isArray(pose[k])
                     && pose[k].some(v => Math.abs(Number(v) || 0) > 1e-4));
-                if (!names.length) { alert('La posa e\' a zero: muovi qualche osso prima di salvarla.'); return; }
-                const answer = prompt('Nome della posa da salvare:', 'Posa ' + (poseLibLoad().length + 1));
+                if (!names.length) { alert(t('rigTools.poseZero')); return; }
+                const answer = prompt(t('rigTools.poseSavePrompt'), t('rigTools.poseDefaultName', { n: poseLibLoad().length + 1 }));
                 if (answer === null) return;
                 const name = String(answer).trim();
                 if (!name) return;

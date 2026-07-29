@@ -297,7 +297,7 @@
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = selectedObjectIds.indexOf(obj.id) !== -1;
-                    chk.title = 'Seleziona per Unisci';
+                    chk.title = t('objects.selectForMerge');
                     chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary,#475569);';
                     chk.addEventListener('click', (ev) => {
                         ev.stopPropagation();
@@ -401,7 +401,7 @@
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
-                                if (!confirm('Eliminare la parte "' + partName + '"?')) return;
+                                if (!confirm(t('objects.confirmDeletePart', { name: partName }))) return;
                                 if (typeof pushHistory === 'function') pushHistory();
                                 obj.data.voxels = obj.data.voxels.filter(v => v.part !== partName);
                                 if (activePartName === partName) activePartName = null;
@@ -460,7 +460,7 @@
             function objNew() {
                 const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
                 if (hasContent) {
-                    if (!confirm('Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)')) return;
+                    if (!confirm(t('objects.confirmNew'))) return;
                 }
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
                 const obj = createObject({ metadata: { name: 'Oggetto ' + nextObjectId, grid_size: gSize.slice() }, voxels: [] });
@@ -487,7 +487,7 @@
             function objRename() {
                 const active = getActiveObject();
                 if (!active) return;
-                const name = prompt('Nuovo nome per l\'oggetto:', active.name);
+                const name = prompt(t('objects.promptRename'), active.name);
                 if (name === null) return;
                 const trimmed = name.trim();
                 if (trimmed) { active.name = trimmed; buildModel(false); }
@@ -497,7 +497,7 @@
                 const active = getActiveObject();
                 if (!active) return;
                 if (activePartName) {
-                    if (!confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return;
+                    if (!confirm(t('objects.confirmDeleteChild', { name: activePartName }))) return;
                     if (typeof pushHistory === 'function') pushHistory();
                     active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                     activePartName = null;
@@ -506,7 +506,7 @@
                     renderObjectsList();
                     return;
                 }
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"?')) return;
+                if (!confirm(t('objects.confirmDelete', { name: active.name }))) return;
                 if (typeof pushHistory === 'function') pushHistory();
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
                 if (idx === -1) return;
@@ -536,14 +536,14 @@
                     // fallback: attivo + primo altro visibile
                     const others = sceneObjects.filter(o => o.id !== activeObjectId);
                     if (!getActiveObject() || !others.length) {
-                        alert('Servono almeno due oggetti da unire. Spunta le caselle nell\'outliner.');
+                        alert(t('objects.mergeNeedTwo'));
                         return;
                     }
                     ids = [activeObjectId, others[0].id];
                 }
                 // Ordina secondo l'ordine di scena per un merge deterministico.
                 const toMerge = sceneObjects.filter(o => ids.indexOf(o.id) !== -1);
-                if (toMerge.length < 2) { alert('Selezione non valida per l\'unione.'); return; }
+                if (toMerge.length < 2) { alert(t('objects.mergeInvalid')); return; }
 
                 const map = new Map(); // "x,y,z" -> color (ultimo vince)
                 toMerge.forEach(o => {

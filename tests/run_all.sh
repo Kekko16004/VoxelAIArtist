@@ -160,6 +160,11 @@ print('%d lingue, %d chiavi ciascuna (riferimento it.json)' % (langs, len(ref)))
 #     t('rig.anim.errGeneric'), mai esistita).
 run "Chiavi i18n usate dal codice" python3 tests/test_i18n_keys_used.py
 
+# 6c. Nessun messaggio italiano scritto a mano: la direzione opposta del 6b.
+#     Serviva: 89 alert/confirm/prompt/title erano rimasti hardcoded mentre la
+#     chiave giusta esisteva gia' in tutti e 6 i locali.
+run "Nessuna stringa italiana hardcoded" python3 tests/test_i18n_no_hardcoded.py
+
 echo ""
 echo "=============================================="
 if [ "$fails" -eq 0 ]; then

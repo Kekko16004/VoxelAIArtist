@@ -942,7 +942,7 @@
                 }
                 if (typeof updateGizmo === 'function') updateGizmo();
                 const nSel = rig.bones.filter(bd => !bd.helper).length;
-                rigHint.textContent = `Rig "${rig.type}" pronto: ${nSel} ossa. Clic sul PALLINO di un giunto per selezionarlo, poi R per ruotare (posa) o G per spostare il giunto. Ctrl+Z annulla.`;
+                rigHint.textContent = t('rig.ready', { type: rig.type, count: nSel });
                 updateWeightPaintUI();
             }
 
@@ -1903,7 +1903,7 @@
                     row.addEventListener('click', () => selectBone(i));
                     // Doppio clic = rinomina (32-rig-tools.js). Il nome dell'osso e' la sua
                     // identita': la rinomina migra posa, pesi e track delle animazioni.
-                    row.title = 'Doppio clic per rinominare';
+                    row.title = t('rig.dblClickRename');
                     row.addEventListener('dblclick', () => {
                         if (typeof rigRenameBonePrompt === 'function') rigRenameBonePrompt(i);
                     });
@@ -2345,7 +2345,7 @@
 
             autoRigBtn.addEventListener('click', () => {
                 const voxels = currentModelData.voxels || [];
-                if (!voxels.length) { rigHint.textContent = 'Nessun voxel da riggare. Genera o carica un modello prima.'; return; }
+                if (!voxels.length) { rigHint.textContent = t('rig.hintNoVoxels'); return; }
                 pushHistory();
                 rig = rigType === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
                 selectedBoneIndex = -1;

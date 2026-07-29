@@ -244,7 +244,7 @@
 
             // Add tool logic for Clear All and Fill Floor
             document.getElementById('clearAllBtn').addEventListener('click', () => {
-                if (!confirm('Sei sicuro di voler rimuovere tutti i voxel e azzerare il modello?')) return;
+                if (!confirm(t('confirm.clearAll'))) return;
                 pushHistory();
                 currentModelData.voxels = [];
                 discardRigOfActiveObject();

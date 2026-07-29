@@ -21,7 +21,7 @@
                     currentModelData.metadata.grid_size = parts;
                     buildModel(false);
                 } else {
-                    alert("Formato non valido. Usa 'X,Y,Z' (es: 64,64,64)");
+                    alert(t('alert.invalidGridFormat'));
                 }
             });
 
@@ -71,7 +71,7 @@
                     breader.onload = (e) => {
                         importBinaryFormat(file, e.target.result).then(parsed => {
                             if (!parsed || !Array.isArray(parsed.voxels)) {
-                                alert('Il file non contiene voxel validi.');
+                                alert(t('alert.fileNoValidVoxels'));
                                 return;
                             }
                             if (!parsed.metadata) parsed.metadata = {};
@@ -81,7 +81,7 @@
                             else loadSceneFromParsed(parsed);
                             buildModel();
                         }).catch(err => {
-                            alert('Errore nel caricamento del file binario: ' + err.message);
+                            alert(t('alert.binaryLoadError', { error: err.message }));
                         });
                     };
                     breader.readAsArrayBuffer(file);
@@ -91,7 +91,7 @@
                 // Formati poligonali (GLB/GLTF): inviamo al voxelizer
                 if (nameLc.endsWith('.glb') || nameLc.endsWith('.gltf')) {
                     if (typeof importGlbFormat !== 'function') {
-                        alert("Il modulo import-glb.js non è stato caricato.");
+                        alert(t('alert.glbModuleMissing'));
                         return;
                     }
                     // Opzioni lette dalla UI (con default sensati se i campi non
@@ -113,7 +113,7 @@
                         const hasOps = Array.isArray(parsed.ops) && parsed.ops.length;
                         const hasVox = Array.isArray(parsed.voxels) && parsed.voxels.length;
                         if (!hasOps && !hasVox) {
-                            alert('Il modello importato non contiene voxel.');
+                            alert(t('alert.importedNoVoxels'));
                             return;
                         }
                         if (!parsed.metadata) parsed.metadata = {};
@@ -123,7 +123,7 @@
                         else loadSceneFromParsed(parsed);
                         buildModel();
                     }).catch(err => {
-                        alert('Errore importazione GLB: ' + err.message);
+                        alert(t('alert.glbImportError', { error: err.message }));
                     });
                     return;
                 }
@@ -162,10 +162,10 @@
                                 restoreRigForActiveObject();
                             }
                         } else {
-                            alert("File non valido: deve contenere un array 'voxels', 'ops' o 'objects'.");
+                            alert(t('alert.fileNoVoxels'));
                         }
                     } catch (err) {
-                        alert("Errore nel caricamento del file: " + err.message);
+                        alert(t('alert.fileLoadError', { error: err.message }));
                     }
                 };
                 reader.readAsText(file);
@@ -204,7 +204,7 @@
                 e.stopPropagation();
                 const jsonText = pasteTextarea.value.trim();
                 if (!jsonText) {
-                    alert("Per favore, incolla del testo JSON prima di caricare.");
+                    alert(t('alert.pasteEmpty'));
                     return;
                 }
                 if (loadJSONString(jsonText)) {
@@ -273,11 +273,11 @@
                         }
                         return true;
                     } else {
-                        alert("Formato non valido: deve contenere un array 'voxels', 'ops', 'objects' o un oggetto 'parts'.");
+                        alert(t('alert.parseNoVoxels'));
                         return false;
                     }
                 } catch (err) {
-                    alert("Errore nel parsing: " + err.message);
+                    alert(t('alert.parseError', { error: err.message }));
                     return false;
                 }
             }

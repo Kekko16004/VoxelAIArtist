@@ -39,6 +39,9 @@ global.setActiveColor=()=>{};
 global.disposeMesh=(m)=>{ if(m&&m.geometry&&m.geometry.dispose)m.geometry.dispose();
   if(m&&m.material&&m.material.dispose)m.material.dispose(); };
 global.requestRender=()=>{};
+// t() vive in 23-i18n.js, non caricato qui: senza stub la palette tradotta
+// lancerebbe e applyVoxelEdits tornerebbe false (fallback a buildModel).
+global.t=(key,vars)=>(vars?key+'('+JSON.stringify(vars)+')':key);
 // buildModel fornisce la geometria CONDIVISA: lo stub la simula, altrimenti
 // l'incrementale ne creerebbe una nuova per colore.
 let _sg=null;

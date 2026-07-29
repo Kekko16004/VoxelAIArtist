@@ -201,7 +201,7 @@
                 shortcutListeningId = binding.id;
                 showShortcutConflict('');
                 btnEl.classList.add('listening');
-                btnEl.textContent = 'premi un tasto…';
+                btnEl.textContent = t('shortcut.pressKey');
                 shortcutListenHandler = function (e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -227,8 +227,8 @@
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'shortcut-key' + (shortcutListeningId === binding.id ? ' listening' : '');
-                    btn.textContent = shortcutListeningId === binding.id ? 'premi un tasto…' : keyDisplay(binding.key);
-                    btn.title = 'Clicca e premi la nuova combinazione (Esc per annullare)';
+                    btn.textContent = shortcutListeningId === binding.id ? t('shortcut.pressKey') : keyDisplay(binding.key);
+                    btn.title = t('shortcut.rebindTitle');
                     btn.addEventListener('click', () => {
                         if (shortcutListeningId === binding.id) { stopShortcutListening(); return; }
                         startShortcutListening(binding, btn);

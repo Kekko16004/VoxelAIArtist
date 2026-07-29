@@ -36,7 +36,7 @@
 
                 visibleVoxels = computeVisibility(voxels);
 
-                modelNameEl.textContent = meta.name || "Senza Nome";
+                modelNameEl.textContent = meta.name || t('info.nameDefault');
                 const gSize = meta.grid_size || [16, 16, 16];
                 gridSizeEdit.value = `${gSize[0]},${gSize[1]},${gSize[2]}`;
                 voxelCountEl.textContent = voxels.length;

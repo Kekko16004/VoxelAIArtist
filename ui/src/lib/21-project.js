@@ -58,9 +58,9 @@
             // Carica (SOSTITUISCE la scena) un oggetto-dati progetto già deserializzato.
             // Accetta scena multi-oggetto ({objects:[...]}) o modello singolo (flat/compact).
             function loadProjectData(data) {
-                if (!data || typeof data !== 'object') { alert('Dati progetto non validi.'); return false; }
+                if (!data || typeof data !== 'object') { alert(t('project.invalidData')); return false; }
                 if (!Array.isArray(data.objects) && !Array.isArray(data.ops) && !Array.isArray(data.voxels)) {
-                    alert('Formato progetto non valido: manca "objects", "ops" o "voxels".');
+                    alert(t('project.invalidFormat'));
                     return false;
                 }
                 if (!data.metadata) data.metadata = {};
@@ -133,7 +133,7 @@
                     }
                     const j = await res.json();
                     if (j && j.cancelled) return;      // dialog annullato: nessun cambiamento
-                    if (j && j.error) { alert('Errore salvataggio progetto: ' + j.error); return; }
+                    if (j && j.error) { alert(t('project.saveError', { error: j.error })); return; }
                     if (j && j.path) {
                         currentProjectPath = j.path;
                         markProjectSaved();
@@ -162,10 +162,10 @@
                 }
                 try {
                     const res = await fetch(projectApi('/api/project/open'));
-                    if (!res || !res.ok) { alert('Apertura progetto non disponibile.'); return; }
+                    if (!res || !res.ok) { alert(t('project.openUnavailable')); return; }
                     const j = await res.json();
                     if (!j || j.cancelled) return;
-                    if (j.error) { alert('Errore apertura progetto: ' + j.error); return; }
+                    if (j.error) { alert(t('project.openError', { error: j.error })); return; }
 
                     if (j.encoding === 'json') {
                         const content = j.content;
@@ -182,7 +182,7 @@
                         const buf = base64ToArrayBuffer(j.content);
                         const ext = (j.ext || '').toLowerCase();
                         const done = (parsed) => {
-                            if (!parsed || !Array.isArray(parsed.voxels)) { alert('Il file non contiene voxel validi.'); return; }
+                            if (!parsed || !Array.isArray(parsed.voxels)) { alert(t('alert.fileNoValidVoxels')); return; }
                             if (!parsed.metadata) parsed.metadata = {};
                             if (!parsed.metadata.name && j.path) parsed.metadata.name = String(j.path).split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
                             loadSceneFromParsed(parsed);
@@ -196,13 +196,13 @@
                             const parsed = await decodeSchem(buf);
                             done(parsed);
                         } else {
-                            alert('Formato binario non riconosciuto: ' + ext);
+                            alert(t('project.unknownBinary', { ext: ext }));
                         }
                     } else {
-                        alert('Risposta apertura progetto non riconosciuta.');
+                        alert(t('project.openBadResponse'));
                     }
                 } catch (e) {
-                    alert('Errore apertura progetto: ' + e.message);
+                    alert(t('project.openError', { error: e.message }));
                 }
             }
 
@@ -293,24 +293,34 @@
                 return (n / (1024 * 1024)).toFixed(1) + ' MB';
             }
             function fmtSavedAt(iso) {
-                try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString('it-IT'); } catch (e) { }
+                try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString(uiLocale()); } catch (e) { }
                 return iso || '';
+            }
+
+            // Le note della lista autosave sono testo tradotto: si costruiscono con
+            // textContent perche' le traduzioni contengono apostrofi e virgolette.
+            function autosaveListNote(listEl, msg) {
+                listEl.innerHTML = '';
+                const note = document.createElement('div');
+                note.style.cssText = 'opacity:0.7; font-size:12px; padding:8px;';
+                note.textContent = msg;
+                listEl.appendChild(note);
             }
 
             async function refreshAutosaveList() {
                 const listEl = document.getElementById('autosaveList');
                 if (!listEl) return;
                 if (!hasLocalBackend()) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi richiede l\'app avviata (python main.py): aperta come file locale non c\'è il backend che la conserva.</div>';
+                    autosaveListNote(listEl, t('autosave.needsApp'));
                     return;
                 }
-                listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Caricamento…</div>';
+                autosaveListNote(listEl, t('common.loading'));
                 try {
                     const res = await fetch(projectApi('/api/autosave/list'));
-                    if (!res || !res.ok) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Impossibile caricare la cronologia.</div>'; return; }
+                    if (!res || !res.ok) { autosaveListNote(listEl, t('autosave.loadFailed')); return; }
                     const j = await res.json();
                     const items = (j && Array.isArray(j.autosaves)) ? j.autosaves : [];
-                    if (!items.length) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Nessun salvataggio automatico presente.</div>'; return; }
+                    if (!items.length) { autosaveListNote(listEl, t('autosave.empty')); return; }
                     listEl.innerHTML = '';
                     items.forEach(it => {
                         const row = document.createElement('div');
@@ -329,16 +339,16 @@
                         listEl.appendChild(row);
                     });
                 } catch (e) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Errore nel caricamento della cronologia.</div>';
+                    autosaveListNote(listEl, t('autosave.loadError'));
                 }
             }
 
             async function restoreAutosave(name) {
                 if (!name) return;
-                if (!confirm('Ripristinare questo salvataggio automatico? La scena corrente verrà sostituita.')) return;
+                if (!confirm(t('autosave.confirmRestore'))) return;
                 try {
                     const res = await fetch(projectApi('/api/autosave/get?name=' + encodeURIComponent(name)));
-                    if (!res || !res.ok) { alert('Impossibile caricare il salvataggio selezionato.'); return; }
+                    if (!res || !res.ok) { alert(t('autosave.restoreLoadFailed')); return; }
                     const j = await res.json();
                     const wrapper = j && j.content;
                     const data = (wrapper && wrapper.format === 'voxai' && wrapper.data) ? wrapper.data : wrapper;
@@ -347,14 +357,14 @@
                         closeAutosaveHistory();
                     }
                 } catch (e) {
-                    alert('Errore nel ripristino: ' + e.message);
+                    alert(t('autosave.restoreError', { error: e.message }));
                 }
             }
 
             async function openAutosaveFolder() {
-                if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
+                if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                 try { await fetch(projectApi('/api/autosave/open-folder')); }
-                catch (e) { alert('Impossibile aprire la cartella: ' + e.message); }
+                catch (e) { alert(t('autosave.folderError', { error: e.message })); }
             }
 
             function openAutosaveHistory() {

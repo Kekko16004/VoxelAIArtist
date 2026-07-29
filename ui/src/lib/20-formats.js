@@ -536,7 +536,7 @@
                         const data = encodeVox(getFormatExportVoxels());
                         downloadBinary(data, getFormatExportName() + '.vox', 'application/octet-stream');
                     } catch (e) {
-                        alert('Errore export .vox: ' + e.message);
+                        alert(t('formats.voxExportError', { error: e.message }));
                     }
                 });
 
@@ -547,11 +547,10 @@
                         const res = await gzipBytes(nbt);
                         downloadBinary(res.data, getFormatExportName() + '.schem', 'application/octet-stream');
                         if (!res.gzipped) {
-                            alert('.schem esportato SENZA compressione gzip (gzip non disponibile qui). ' +
-                                'La maggior parte dei tool WorldEdit/Litematica legge comunque NBT non compresso, ma alcuni potrebbero rifiutarlo.');
+                            alert(t('formats.schemNoGzip'));
                         }
                     } catch (e) {
-                        alert('Errore export .schem: ' + e.message);
+                        alert(t('formats.schemExportError', { error: e.message }));
                     }
                 });
             })();

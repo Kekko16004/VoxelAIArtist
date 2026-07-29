@@ -59,11 +59,11 @@
 
             modeSelect.addEventListener('change', () => {
                 if (modeSelect.value === 'modify') {
-                    promptInput.placeholder = "Descrivi le modifiche (es. Aggiungi ali rosse)";
-                    generateBtn.textContent = "Modifica Modello";
+                    promptInput.placeholder = t('generate.promptPlaceholderModify');
+                    generateBtn.textContent = t('generate.modifyBtn');
                 } else {
-                    promptInput.placeholder = "Cosa generiamo? (es. Dinosauro)";
-                    generateBtn.textContent = "Genera Modello";
+                    promptInput.placeholder = t('generate.promptPlaceholder');
+                    generateBtn.textContent = t('generate.generateBtn');
                 }
             });
 
@@ -139,7 +139,7 @@
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
-                    alert("Inserisci una descrizione prima di procedere!");
+                    alert(t('alert.promptEmpty'));
                     return;
                 }
 
@@ -190,7 +190,7 @@
                         buildModel();
                     })
                     .catch(err => {
-                        alert("Errore nella generazione: " + err.message);
+                        alert(t('alert.generateError', { error: err.message }));
                     })
                     .finally(() => {
                         generateBtn.disabled = false;

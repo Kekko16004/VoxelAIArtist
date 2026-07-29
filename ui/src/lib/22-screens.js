@@ -126,7 +126,10 @@
                     if (!entry) return;
                     if (hasNativeDialogs()) {
                         if (typeof openProject === 'function') {
-                            alert('Seleziona "' + (entry.name || entry.path || 'il progetto') + '" nella finestra che sta per aprirsi.\n\n(Percorso: ' + (entry.path || '') + ')');
+                            alert(t('launcher.selectInDialog', {
+                                name: entry.name || entry.path || t('launcher.theProject'),
+                                path: entry.path || ''
+                            }));
                             try { await openProject(); } catch (e) { }
                         }
                         return;
@@ -152,21 +155,32 @@
                 }
 
                 function fmtRecentDate(iso) {
-                    try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString('it-IT'); } catch (e) { }
+                    try { const d = new Date(iso); if (!isNaN(d.getTime())) return d.toLocaleString(uiLocale()); } catch (e) { }
                     return '';
+                }
+
+                // Nota tradotta: si scrive con textContent, non con innerHTML, perche'
+                // le traduzioni contengono apostrofi e virgolette.
+                function screensListNote(listEl, msg) {
+                    listEl.innerHTML = '';
+                    const note = document.createElement('div');
+                    note.className = 'screens-section-note';
+                    note.style.padding = '8px';
+                    note.textContent = msg;
+                    listEl.appendChild(note);
                 }
 
                 async function refreshLauncherRecent() {
                     const listEl = document.getElementById('launcherRecentList');
                     if (!listEl) return;
                     if (!hasLocalBackend()) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Senza l\'app avviata (python main.py) i progetti recenti non sono disponibili. Usa "Apri progetto…".</div>';
+                        screensListNote(listEl, t('launcher.recentNeedsApp'));
                         return;
                     }
-                    listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Caricamento…</div>';
+                    screensListNote(listEl, t('common.loading'));
                     const items = await fetchRecent();
                     if (!items.length) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Nessun progetto recente. Creane uno nuovo o aprine uno esistente.</div>';
+                        screensListNote(listEl, t('launcher.recentEmpty'));
                         return;
                     }
                     listEl.innerHTML = '';
@@ -246,12 +260,12 @@
                     }
                     const chooseDirBtn = document.getElementById('settingsChooseDirBtn');
                     if (chooseDirBtn) chooseDirBtn.addEventListener('click', async () => {
-                        if (!hasNativeDialogs()) { alert('La finestra di scelta cartella è un dialog di sistema: serve la modalità desktop (avvia con "python main.py --py").'); return; }
+                        if (!hasNativeDialogs()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
                         try {
                             const res = await fetch(screensApi('/api/settings/choose-dir'));
                             const data = await res.json().catch(() => ({}));
                             if (!res.ok || data.error) {
-                                alert('Impossibile aprire la finestra di selezione cartella: ' + (data.error || ('HTTP ' + res.status)));
+                                alert(t('screens.chooseDirError', { error: data.error || ('HTTP ' + res.status) }));
                                 return;
                             }
                             if (data.folder) {
@@ -260,7 +274,7 @@
                             }
                         } catch(e) {
                             console.error('Errore scelta cartella', e);
-                            alert('Errore nell\'apertura della finestra di selezione cartella.');
+                            alert(t('screens.chooseDirFailed'));
                         }
                     });
 
@@ -276,7 +290,7 @@
                     const folderBtn = document.getElementById('settingsOpenAutosaveFolderBtn');
                     if (folderBtn) folderBtn.addEventListener('click', async () => {
                         if (typeof openAutosaveFolder === 'function') { try { await openAutosaveFolder(); } catch (e) { } return; }
-                        if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
+                        if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
                     });
 
