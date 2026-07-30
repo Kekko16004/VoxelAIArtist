@@ -54,7 +54,7 @@
                 } else {
                     controls.mouseButtons.LEFT = null;
                 }
-                editHint.textContent = HINTS[tool];
+                refreshEditHint();
                 clearPreview();
                 renderer.domElement.style.cursor = tool === 'view' ? 'grab' : 'crosshair';
             }

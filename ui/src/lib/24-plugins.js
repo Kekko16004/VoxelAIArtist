@@ -41,8 +41,9 @@
             const BUILTIN_PLUGINS = [
                 {
                     id: 'mirror-x',
-                    name: 'Specchia su X',
-                    desc: 'Duplica i voxel riflettendoli sull\'asse X (crea simmetria).',
+                    // nameKey/descKey: tradotti al rendering (vedi refreshPluginLabels).
+                    nameKey: 'plugins.builtinMirrorX',
+                    descKey: 'plugins.builtinMirrorXDesc',
                     code:
 "// Specchia il modello sull'asse X.\n" +
 "function transform(voxels, api) {\n" +
@@ -60,8 +61,8 @@
                 },
                 {
                     id: 'grayscale',
-                    name: 'Scala di grigi',
-                    desc: 'Converte i colori di tutti i voxel in scala di grigi (luminanza).',
+                    nameKey: 'plugins.builtinGrayscale',
+                    descKey: 'plugins.builtinGrayscaleDesc',
                     code:
 "// Converte ogni voxel in grigio secondo la luminanza percepita.\n" +
 "function transform(voxels, api) {\n" +
@@ -74,8 +75,8 @@
                 },
                 {
                     id: 'hollow',
-                    name: 'Svuota interno',
-                    desc: 'Rimuove i voxel completamente circondati (mantiene solo il guscio).',
+                    nameKey: 'plugins.builtinHollow',
+                    descKey: 'plugins.builtinHollowDesc',
                     code:
 "// Mantiene solo i voxel esposti: rimuove quelli con tutti e 6 i vicini pieni.\n" +
 "function transform(voxels, api) {\n" +
@@ -86,6 +87,21 @@
 "}\n"
                 }
             ];
+
+            // Ritraduce tendina e descrizione: nascono a load, cioe' prima che il
+            // dizionario i18n sia arrivato. Chiamata da setLanguage() (23-i18n.js).
+            function refreshPluginLabels() {
+                const sel = document.getElementById('pluginSelect');
+                if (sel) {
+                    Array.from(sel.options).forEach(o => {
+                        const p = BUILTIN_PLUGINS.find(x => x.id === o.value);
+                        if (p) o.textContent = t(p.nameKey);
+                    });
+                }
+                const descEl = document.getElementById('pluginDesc');
+                const cur = sel ? BUILTIN_PLUGINS.find(x => x.id === sel.value) : null;
+                if (descEl && cur) descEl.textContent = t(cur.descKey);
+            }
 
             // --- Sorgente del bootstrap del Worker (stringa: gira in un contesto isolato) ---
             // Riceve {code, voxels, metadata}; azzera le API pericolose; definisce l'api
@@ -141,14 +157,14 @@
                 }
                 function loadIntoEditor(p) {
                     codeEl.value = p.code;
-                    if (descEl) descEl.textContent = p.desc || '';
+                    if (descEl) descEl.textContent = p.descKey ? t(p.descKey) : '';
                     setStatus('', null);
                 }
 
                 // Popola la tendina.
                 BUILTIN_PLUGINS.forEach(p => {
                     const o = document.createElement('option');
-                    o.value = p.id; o.textContent = p.name;
+                    o.value = p.id; o.textContent = t(p.nameKey);
                     sel.appendChild(o);
                 });
                 sel.value = BUILTIN_PLUGINS[0].id;
@@ -158,9 +174,9 @@
 
                 // Valida e normalizza i voxel restituiti dal plugin.
                 function sanitize(list) {
-                    if (!Array.isArray(list)) throw new Error('lo script deve restituire un array di voxel');
+                    if (!Array.isArray(list)) throw new Error(t('plugins.notArray'));
                     if (list.length > PLUGIN_MAX_VOXELS)
-                        throw new Error('troppi voxel restituiti (' + list.length + ' > ' + PLUGIN_MAX_VOXELS + ')');
+                        throw new Error(t('plugins.tooManyVoxels', { n: list.length, max: PLUGIN_MAX_VOXELS }));
                     const out = [];
                     let dropped = 0;
                     const hex = /^#[0-9a-fA-F]{6}$/;
@@ -184,8 +200,8 @@
                     if (typeof pushHistory === 'function') pushHistory();
                     currentModelData.voxels = out;
                     if (typeof buildModel === 'function') buildModel(false, true);
-                    let msg = (typeof t === 'function' ? t('plugins.done') : 'Fatto') + ': ' + out.length + ' voxel';
-                    if (dropped) msg += ' (' + dropped + ' scartati non validi)';
+                    let msg = t('plugins.doneCount', { n: out.length });
+                    if (dropped) msg += ' ' + t('plugins.dropped', { n: dropped });
                     if (logs && logs.length) msg += ' — ' + logs.join(' | ');
                     setStatus(msg, 'ok');
                 }
@@ -242,14 +258,14 @@
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
                             const d = ev.data || {};
-                            if (!d.ok) { setStatus('Errore plugin: ' + (d.error || '?'), 'error'); return; }
+                            if (!d.ok) { setStatus(t('plugins.pluginError', { error: d.error || '?' }), 'error'); return; }
                             try { applyResult(d.voxels, d.logs); }
-                            catch (e) { setStatus('Errore: ' + e.message, 'error'); }
+                            catch (e) { setStatus(t('plugins.genericError', { error: e.message }), 'error'); }
                         };
                         worker.onerror = (e) => {
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
-                            setStatus('Errore plugin: ' + (e.message || 'esecuzione fallita'), 'error');
+                            setStatus(t('plugins.pluginError', { error: e.message || t('plugins.execFailed') }), 'error');
                         };
                         worker.postMessage(payload);
                         return;
@@ -260,9 +276,9 @@
                         try {
                             const { result, logs } = runInline(code, payload);
                             applyResult(result, logs);
-                            if (statusEl && statusEl.textContent) statusEl.textContent += ' [fallback senza worker]';
+                            if (statusEl && statusEl.textContent) statusEl.textContent += ' ' + t('plugins.noWorkerFallback');
                         } catch (e) {
-                            setStatus('Errore plugin: ' + e.message, 'error');
+                            setStatus(t('plugins.pluginError', { error: e.message }), 'error');
                         } finally { done(); }
                     }, 0);
                 }

@@ -25,6 +25,18 @@
              * hanno un dato sorgente da editare. Il pulsante "Rendi modificabile" le
              * converte in una clip personalizzata leggendo i keyframe reali dalle
              * tracce THREE (non ricampionandole), cosi' non si perde nulla.
+             *
+             * PRESET IN SOLA LETTURA (non piu' righe vuote)
+             * Anche senza dato modificabile i keyframe di una preset si VEDONO: si
+             * ricavano dalla clip THREE con tlAnimDataFromClip() - lo stesso convertitore
+             * di "Rendi modificabile" - e si memorizzano in tlPresetCache (derivarli
+             * legge tutte le tracce, non va rifatto a ogni redraw). I diamanti prendono
+             * la classe .tl-key-ro: grigi, cursore normale, non selezionabili.
+             * Lo scrub campiona quel dato e scrive in rig.pose come per le clip
+             * modificabili, quindi il mixer va ZITTITO prima (tlSilenceMixer): un'action
+             * in pausa continua a scrivere sulle ossa a ogni mixer.update, e le due
+             * sorgenti si sovrascriverebbero a vicenda. Premendo Play il controllo torna
+             * al mixer (tlPlayPreset) e la timeline si limita a rispecchiare action.time.
              * ===================================================================== */
 
             const TL_DEFAULT_FPS = 24;
@@ -47,6 +59,7 @@
             let tlKeyDrag = null;           // {startX, moved, orig:[{bone,t}]}
             let tlDockHeight = 190;
             let tlRowsBuilt = '';           // firma dell'ultimo render (evita rebuild inutili)
+            let tlPresetCache = null;       // {clip, data}: animData derivato dalla preset mostrata
 
             const tlDock = document.getElementById('timelineDock');
             const tlClipSel = document.getElementById('tlClip');
@@ -73,6 +86,24 @@
             const tlResizeEl = document.getElementById('tlResizer');
             const tlBodyEl = document.getElementById('tlBody');
 
+            // Badge "sola lettura" per le clip predefinite. Nasce da JS perche' la barra
+            // della timeline non ha un posto suo nel markup: si infila accanto a #tlStatus.
+            // Il testo lo scrive tlUpdateToolbar() (a modulo caricato t() e' ancora vuota),
+            // gli attributi data-i18n servono al ripasso di applyI18n() al cambio lingua.
+            const tlRoBadge = tlStatusEl ? document.createElement('span') : null;
+            if (tlRoBadge) {
+                tlRoBadge.id = 'tlRoBadge';
+                tlRoBadge.className = 'tl-label';
+                tlRoBadge.setAttribute('data-i18n', 'timeline.readOnly');
+                tlRoBadge.setAttribute('data-i18n-title', 'timeline.statusPreset');
+                tlRoBadge.style.display = 'none';
+                tlRoBadge.style.border = '1px solid var(--glass-border)';
+                tlRoBadge.style.borderRadius = '4px';
+                tlRoBadge.style.padding = '1px 6px';
+                tlRoBadge.style.opacity = '0.8';
+                if (tlStatusEl.parentNode) tlStatusEl.parentNode.insertBefore(tlRoBadge, tlStatusEl);
+            }
+
             function tlHasDom() { return !!(tlDock && tlRulerEl && tlRowsEl); }
 
             // --- helpers sul dato -----------------------------------------------------
@@ -90,6 +121,32 @@
                 if (!tlClipName || tlClipName === 'none') return null;
                 return tlFindAnim(tlClipName);
             }
+
+            // La clip THREE mostrata quando NON esiste un dato modificabile: e' una preset.
+            // (buildAnimationClips() mette in rigClips anche le personalizzate, quindi il
+            // controllo su tlFindAnim e' quello che distingue i due casi.)
+            function tlPresetClip() {
+                if (!tlClipName || tlClipName === 'none') return null;
+                if (tlFindAnim(tlClipName)) return null;
+                const list = (typeof rigClips !== 'undefined' ? rigClips : []);
+                return list.find(c => c && c.name === tlClipName) || null;
+            }
+
+            // animData derivato dalla preset mostrata, in SOLA LETTURA. Con cache per
+            // identita' della clip: ricavarlo scorre tutte le tracce e crea quaternioni,
+            // e tlRedraw() viene chiamato anche a ogni pixel di resize del dock.
+            function tlPresetAnim() {
+                const clip = tlPresetClip();
+                if (!clip) { tlPresetCache = null; return null; }
+                if (tlPresetCache && tlPresetCache.clip === clip) return tlPresetCache.data;
+                tlPresetCache = { clip: clip, data: tlAnimDataFromClip(clip, tlClipName) };
+                return tlPresetCache.data;
+            }
+
+            // Il dato da DISEGNARE/CAMPIONARE: la clip personalizzata se c'e', altrimenti
+            // quella derivata dalla preset. Prima di questo le righe delle preset erano
+            // vuote (tlActiveAnim() null -> nessun tempo di chiave).
+            function tlDisplayAnim() { return tlActiveAnim() || tlPresetAnim(); }
 
             function tlFps() {
                 const a = tlActiveAnim();
@@ -261,13 +318,32 @@
 
             // --- applicazione della posa ----------------------------------------------
 
+            // Ferma l'action del mixer e ne restituisce il controllo alla timeline.
+            // NON basta metterla in pausa: un'action in pausa continua ad applicare il
+            // suo valore alle ossa a ogni mixer.update(), quindi il frame dopo lo scrub
+            // la posa tornerebbe quella dell'animazione.
+            function tlSilenceMixer() {
+                if (typeof currentAction === 'undefined' || !currentAction) return false;
+                try { currentAction.stop(); } catch (e) { }
+                currentAction = null;
+                if (typeof animSelect !== 'undefined' && animSelect) animSelect.value = 'none';
+                // Per una preset il "play" ERA il mixer: spento quello, non si sta piu'
+                // riproducendo nulla.
+                if (!tlActiveAnim()) tlStopPlayback();
+                return true;
+            }
+
             // Scrive nel rig la posa dell'animazione al frame corrente. Le ossa senza
             // traccia restano dove sono: cosi' una clip che anima solo un braccio non
             // azzera il resto della posa (in Blender e' lo stesso).
             function tlApplyAt(t) {
                 if (typeof rig === 'undefined' || !rig || typeof skeleton === 'undefined' || !skeleton) return;
-                const anim = tlActiveAnim();
+                const editable = tlActiveAnim();
+                const anim = editable || tlPresetAnim();
                 if (!anim) return;
+                // Preset: la posa la stava scrivendo il mixer, che qui va zittito perche'
+                // la sorgente diventa il dato campionato (una sola verita' in rig.pose).
+                if (!editable) tlSilenceMixer();
                 const s = tlSampleAnim(anim, t);
                 rig.pose = rig.pose || {};
                 Object.keys(s.rot).forEach(name => { rig.pose[name] = s.rot[name]; });
@@ -388,13 +464,16 @@
                 if (!tlRowsEl || !tlLabelsEl) return;
                 tlRowsEl.textContent = '';
                 tlLabelsEl.textContent = '';
-                const anim = tlActiveAnim();
-                const readOnly = !anim;
+                const editable = tlActiveAnim();
+                const readOnly = !editable;
 
                 if (!rig || !rig.bones || !rig.bones.length) return;
 
-                const times = tlKeyTimesByBone(anim);
-                const bones = anim ? tlRowBones(anim) : tlPresetRowBones();
+                // Per una preset il dato arriva da tlPresetAnim() (derivato dalla clip
+                // THREE): senza questo le righe restavano senza un solo keyframe.
+                const shown = editable || tlPresetAnim();
+                const times = tlKeyTimesByBone(shown);
+                const bones = shown ? tlRowBones(shown) : tlPresetRowBones();
 
                 // Riga di riepilogo: l'unione di tutte le chiavi, come il "Summary" di Blender.
                 const allT = [];
@@ -446,7 +525,13 @@
                     const k = document.createElement('div');
                     k.className = 'tl-key' + (isSummary ? ' tl-key-sum' : '');
                     if (!isSummary && tlIsSelectedKey(boneName, t)) k.classList.add('tl-key-sel');
-                    if (readOnly) k.classList.add('tl-key-ro');
+                    if (readOnly) {
+                        // .tl-key-ro esiste gia' nel CSS del template (cursore normale,
+                        // opacita' ridotta): qui si aggiunge solo il grigio, cosi' anche i
+                        // diamanti della riga di riepilogo si leggono come "non tuoi".
+                        k.classList.add('tl-key-ro');
+                        k.style.background = 'var(--text-secondary)';
+                    }
                     k.style.left = tlXOfFrame(tlFrameOfTime(t)) + 'px';
                     k.dataset.t = String(t);
                     k.dataset.bone = boneName || '';
@@ -483,9 +568,15 @@
                 if (tlDurInput) { tlDurInput.disabled = !editable; tlDurInput.value = String(Math.round(tlDuration() * 100) / 100); }
                 if (tlLoopBtn) tlLoopBtn.classList.toggle('active', tlLoop);
                 if (tlEditableBtn) tlEditableBtn.style.display = (hasClip && !editable) ? '' : 'none';
+                // Badge: spiega perche' i keyframe che si vedono non si possono toccare.
+                if (tlRoBadge) {
+                    tlRoBadge.textContent = t('timeline.readOnly');
+                    tlRoBadge.title = t('timeline.statusPreset');
+                    tlRoBadge.style.display = (hasClip && !editable) ? '' : 'none';
+                }
                 if (tlStatusEl) {
                     if (!hasClip) tlStatusEl.textContent = t('timeline.statusNone');
-                    else if (!editable) tlStatusEl.textContent = t('timeline.statusPreset');
+                    else if (!editable) tlStatusEl.textContent = t('timeline.statusPresetKeys', { n: tlCountKeys(tlPresetAnim()) });
                     else tlStatusEl.textContent = t('timeline.statusKeys', { n: tlCountKeys(anim) });
                 }
             }
@@ -545,6 +636,7 @@
                 tlStopPlayback();
                 if (name === 'none') {
                     tlClipName = 'none';
+                    tlSilenceMixer();
                     tlRelease();
                     tlSelected = [];
                     tlFrame = 0;
@@ -555,14 +647,20 @@
                 tlClipName = name;
                 tlSelected = [];
                 tlFrame = 0;
+                tlPresetCache = null;
                 if (anim) {
                     tlTakeOver();
                     tlApplyAt(0);
                 } else {
-                    // Preset: nessun dato da editare, si usa il mixer come sempre.
+                    // Preset: il dato non si edita, ma i keyframe si vedono (derivati dalla
+                    // clip) e la riproduzione resta in mano al mixer. tlTakeOver() serve
+                    // comunque: appena si scrubba si scrive in rig.pose, e senza backup la
+                    // posa dell'utente sarebbe persa.
                     tlRelease();
+                    tlTakeOver();
                     if (typeof animSelect !== 'undefined' && animSelect) animSelect.value = name;
                     if (typeof playClip === 'function') playClip(name);
+                    tlPlaying = !!(typeof currentAction !== 'undefined' && currentAction);
                 }
                 tlRedraw();
             }
@@ -577,18 +675,41 @@
                 }
             }
 
+            // Riproduzione di una PRESET: il motore e' il mixer (il dato derivato serve solo
+            // a vedere e a scrubbare), quindi qui si restituisce il controllo all'action e si
+            // riparte dal playhead, come fa il trasporto delle clip modificabili.
+            function tlPlayPreset() {
+                const t0 = tlTimeOfFrame(tlFrame);
+                const act = () => ((typeof currentAction !== 'undefined') ? currentAction : null);
+                const cur = act();
+                const same = !!(cur && typeof cur.getClip === 'function'
+                    && cur.getClip() && cur.getClip().name === tlClipName);
+                if (!same) {
+                    if (typeof animSelect !== 'undefined' && animSelect) animSelect.value = tlClipName;
+                    if (typeof playClip === 'function') playClip(tlClipName);
+                }
+                const a = act();
+                if (!a) { tlPlaying = false; return false; }
+                a.paused = false;
+                if (isFinite(t0)) a.time = Math.max(0, Math.min(tlDuration(), t0));
+                tlPlaying = true;
+                return true;
+            }
+
+            // Pausa di una preset: l'action in pausa TIENE la posa dov'e' (continua ad
+            // applicarla), quindi non serve altro. Al primo scrub tlSilenceMixer() la ferma
+            // e la posa torna a venire da rig.pose.
+            function tlPausePreset() {
+                if (typeof currentAction !== 'undefined' && currentAction) currentAction.paused = true;
+                tlStopPlayback();
+            }
+
             function tlTogglePlay() {
                 if (!tlClipName || tlClipName === 'none') return;
                 const anim = tlActiveAnim();
                 if (!anim) {
-                    // Preset: delega al mixer (play/stop dell'action corrente).
-                    if (typeof currentAction !== 'undefined' && currentAction) {
-                        currentAction.paused = !currentAction.paused;
-                        tlPlaying = !currentAction.paused;
-                    } else if (typeof playClip === 'function') {
-                        playClip(tlClipName);
-                        tlPlaying = true;
-                    }
+                    if (tlPlaying) tlPausePreset();
+                    else tlPlayPreset();
                 } else {
                     tlPlaying = !tlPlaying;
                     if (tlPlaying) tlTakeOver();
@@ -601,7 +722,7 @@
             function tlTick(dt) {
                 if (!tlVisible || !tlPlaying) return;
                 const anim = tlActiveAnim();
-                if (!anim) return;                       // le preset le muove il mixer
+                if (!anim) { tlTickPreset(); return; }
                 const n = tlFrameCount();
                 let f = tlFrame + dt * tlFps();
                 if (f > n) {
@@ -611,6 +732,24 @@
                 tlFrame = f;
                 tlUpdatePlayhead();
                 tlApplyAt(tlTimeOfFrame(tlFrame));
+            }
+
+            // Le preset le muove il mixer: qui la timeline RISPECCHIA soltanto il tempo
+            // dell'action (letto dopo mixer.update(), quindi e' il frame davvero disegnato).
+            // Nessuna scrittura sulla posa: il playhead segue, non guida.
+            function tlTickPreset() {
+                const a = (typeof currentAction !== 'undefined') ? currentAction : null;
+                const running = !!a && !a.paused
+                    && (typeof a.isRunning !== 'function' || a.isRunning());
+                if (!running) { tlStopPlayback(); tlUpdateToolbar(); return; }
+                const dur = tlDuration();
+                let time = Number(a.time);
+                if (!isFinite(time) || time < 0) time = 0;
+                // Le clip in ciclo hanno action.time gia' avvolto dal mixer; l'avvolgimento
+                // qui e' una rete di sicurezza (e ferma il playhead in fondo se non cicla).
+                if (dur > 1e-6 && time > dur) time = tlLoop ? (time % dur) : dur;
+                tlFrame = Math.max(0, Math.min(tlFrameCount(), tlFrameOfTime(time)));
+                tlUpdatePlayhead();
             }
 
             function tlIsPlaying() { return tlVisible && tlPlaying; }
@@ -847,8 +986,10 @@
                     tlSelected = [];
                 }
                 // Firma: se cambia lo scheletro, la clip o la selezione, ridisegna.
+                // Il conteggio usa il dato MOSTRATO (anche derivato da una preset), cosi'
+                // una preset ricostruita da buildAnimationClips() fa ridisegnare le righe.
                 const sig = [tlClipName, rig ? rig.bones.length : 0, selectedBoneIndex,
-                tlCountKeys(tlActiveAnim())].join('|');
+                tlCountKeys(tlDisplayAnim())].join('|');
                 if (sig !== tlRowsBuilt) { tlRowsBuilt = sig; tlRedraw(); }
                 else tlUpdateToolbar();
             }
@@ -881,7 +1022,9 @@
                 if (tlLastBtn) tlLastBtn.addEventListener('click', () => { tlStopPlayback(); tlSetFrame(tlFrameCount()); tlUpdateToolbar(); });
 
                 const jumpKey = dir => {
-                    const anim = tlActiveAnim();
+                    // Anche in sola lettura: saltare da un keyframe all'altro di una preset
+                    // e' navigazione, non modifica.
+                    const anim = tlDisplayAnim();
                     const times = [];
                     if (anim) {
                         const m = tlKeyTimesByBone(anim);

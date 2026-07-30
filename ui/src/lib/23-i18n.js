@@ -98,6 +98,28 @@
                     if (typeof renderPaletteSwatches === 'function') {
                         try { renderPaletteSwatches(); } catch (e) { }
                     }
+                    // Stesso motivo per le altre parti costruite da JS: liste, badge e
+                    // suggerimenti nascono prima del dizionario (o vengono ridisegnati
+                    // solo a fronte di un'azione dell'utente), quindi resterebbero nella
+                    // lingua precedente. Le funzioni vivono nello stesso scope condiviso
+                    // dei moduli (non su window), quindi si citano per nome con la
+                    // guardia typeof: un modulo assente o un errore interno non deve
+                    // fermare il cambio lingua.
+                    if (typeof renderObjectsList === 'function') {          // 04-objects.js
+                        try { renderObjectsList(); } catch (e) { }
+                    }
+                    if (typeof updateEditorModeBadge === 'function') {      // 04-objects.js
+                        try { updateEditorModeBadge(); } catch (e) { }
+                    }
+                    if (typeof refreshEditHint === 'function') {            // 09-editing-engine.js
+                        try { refreshEditHint(); } catch (e) { }
+                    }
+                    if (typeof renderShortcutsPanel === 'function') {       // 19-prefs.js
+                        try { renderShortcutsPanel(); } catch (e) { }
+                    }
+                    if (typeof refreshPluginLabels === 'function') {        // 24-plugins.js
+                        try { refreshPluginLabels(); } catch (e) { }
+                    }
                     i18nApplied = true;
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');

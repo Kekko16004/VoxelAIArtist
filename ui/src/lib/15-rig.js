@@ -1800,10 +1800,8 @@
                 if (showRigBtn) showRigBtn.style.display = (has && !rigPreviewActive) ? 'block' : 'none';
                 if (rigHint && !rigPreviewActive) {
                     rigHint.textContent = has
-                        ? `Rig salvato su questo oggetto: ${rig.bones.filter(b => !b.helper).length} ossa, posa e pesi inclusi. `
-                          + 'Viene esportato in JSON e GLB. Premi "Mostra rig" per rientrare in anteprima, '
-                          + 'oppure Auto-Rig per rigenerarlo da zero (perdi posa e correzioni dei pesi).'
-                        : 'Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un solo osso, cosi\' i cubi non si deformano).';
+                        ? t('rig.hintSaved', { count: rig.bones.filter(b => !b.helper).length })
+                        : t('rig.hintNoRig');
                 }
                 updateWeightPaintUI();
             }
@@ -1994,6 +1992,66 @@
                 if (typeof updateGizmo === 'function') updateGizmo();
             });
 
+            // --- Frame del personaggio (facing) -------------------------------------
+            // Le clip preimpostate sono scritte in un frame CANONICO: personaggio in
+            // piedi (+Y su) che guarda verso +Z, lato _R a X alta. In buildSkinnedMesh
+            // ogni osso nasce con rotazione IDENTITA' (solo la posizione cambia), quindi
+            // gli assi LOCALI di ogni osso coincidono con quelli del MONDO: le rotazioni
+            // delle clip sono di fatto rotazioni mondo. Se lo scheletro e' orientato
+            // diversamente (correzioni a mano col gizmo G, scheletri importati, file
+            // vecchi) quel frame non vale piu' e le gambe oscillano di fianco.
+            //
+            // rigFacingYaw() ricava l'imbardata (rotazione attorno a Y) dalle ossa:
+            //   1. PIEDI: la coda del piede (o del toeTip) e' la punta -> il davanti.
+            //      E' il segnale piu' affidabile perche' il piede e' l'unico osso
+            //      dell'umanoide autorato lungo l'asse frontale.
+            //   2. Se non ci sono piedi: ASSE LATERALE fra le ossa gemelle _R/_L
+            //      (destra = testa_R - testa_L). Con su = +Y vale avanti = destra x su,
+            //      che su questo scheletro (destra a X alta, davanti a +Z) si riduce a
+            //      avanti = (-rz, 0, rx). Non ha l'ambiguita' di 180 gradi che avrebbe
+            //      il solo asse delle spalle.
+            //   3. Nessuno dei due (scheletro generico, catena qualsiasi) -> 0 = canonico.
+            // Il risultato e' snappato al multiplo di 90 gradi piu' vicino: lo scheletro
+            // e' autorato sugli assi, tutto il resto sarebbe rumore di misura.
+            function rigFacingYaw(bones) {
+                const list = Array.isArray(bones) ? bones : [];
+                const vec = b => (b && Array.isArray(b.head) && Array.isArray(b.tail));
+                let fx = 0, fz = 0;
+                list.forEach(b => {
+                    if (!vec(b) || !/^(foot|toeTip)_[LR]$/.test(b.name || '')) return;
+                    fx += b.tail[0] - b.head[0];
+                    fz += b.tail[2] - b.head[2];
+                });
+                if (Math.hypot(fx, fz) < 1e-3) {
+                    let rx = 0, rz = 0, n = 0;
+                    list.forEach(b => {
+                        const m = /^(.*)_R$/.exec((b && b.name) || '');
+                        if (!m || !vec(b)) return;
+                        const twin = list.find(o => o && o.name === m[1] + '_L');
+                        if (!vec(twin)) return;
+                        rx += b.head[0] - twin.head[0];
+                        rz += b.head[2] - twin.head[2];
+                        n++;
+                    });
+                    if (n && Math.hypot(rx, rz) > 1e-3) { fx = -rz; fz = rx; }
+                }
+                if (Math.hypot(fx, fz) < 1e-3) return 0;
+                // yaw = angolo attorno a Y che porta il davanti canonico (+Z) sul davanti
+                // reale: R_y(yaw) * (0,0,1) = (sin yaw, 0, cos yaw).
+                const steps = ((Math.round(Math.atan2(fx, fz) / (Math.PI / 2)) % 4) + 4) % 4;
+                return steps * 90;
+            }
+
+            // Porta una rotazione scritta nel frame canonico in quello del personaggio:
+            // q' = qFace * q * qFace^-1 (coniugazione). Essendo un omomorfismo, coniugare
+            // ogni rotazione LOCALE equivale a coniugare l'intera posa mondo, quindi il
+            // movimento resta lo stesso "visto dal personaggio". qFace null = identita'
+            // (nessun calcolo: cosi' il caso canonico resta bit-identico a prima).
+            function faceRotate(q, qFace) {
+                if (!qFace) return q;
+                return qFace.clone().multiply(q).multiply(qFace.clone().invert());
+            }
+
             // --- Preset animations --------------------------------------------------
             // Build a few clips procedurally from the bone names present. These are for
             // preview and are embedded into the exported GLB.
@@ -2004,6 +2062,26 @@
                 rig.bones.forEach((bd, i) => byName[bd.name] = skeleton.bones[i]);
                 const q = (rx, ry, rz) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
 
+                // Imbardata del personaggio, dedotta dalle ossa e snappata a 90 gradi.
+                // I due orientamenti STORICI (+Z e -Z) restano gestiti dalla vecchia
+                // convenzione di segni: per gli arti coniugare con un'imbardata di 180
+                // gradi cambia esattamente il segno di X e Z, cioe' produce gli stessi
+                // numeri di legSign/kneeSign. Tenerli evita di toccare anche i pochi
+                // gradi di inclinazione del busto, quindi per gli scheletri esistenti
+                // questa generalizzazione e' un no-op esatto. Per 90/270 i segni non
+                // bastano piu' (le gambe oscillerebbero DI FIANCO) e allora si coniuga.
+                const faceYaw = rigFacingYaw(rig.bones);
+                const legSign = (faceYaw === 180) ? -1 : 1;
+                const kneeSign = (faceYaw === 180) ? 1 : -1;
+                const yawRad = (faceYaw === 90 || faceYaw === 270) ? faceYaw * Math.PI / 180 : 0;
+                const qFace = yawRad
+                    ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawRad)
+                    : null;
+                // Rotazione dell'imbardata applicata a uno spostamento sul piano XZ
+                // (le traslazioni sono vettori, non rotazioni: niente coniugazione).
+                const fCos = Math.cos(yawRad), fSin = Math.sin(yawRad);
+                const faceVec = (dx, dz) => [dx * fCos + dz * fSin, -dx * fSin + dz * fCos];
+
                 // Helper: quaternion track for a bone from keyframes [{t, e:[x,y,z]}].
                 const track = (boneName, keys) => {
                     const bone = byName[boneName];
@@ -2011,7 +2089,7 @@
                     const times = [], values = [];
                     keys.forEach(k => {
                         times.push(k.t);
-                        const qq = q(k.e[0], k.e[1], k.e[2]);
+                        const qq = faceRotate(q(k.e[0], k.e[1], k.e[2]), qFace);
                         values.push(qq.x, qq.y, qq.z, qq.w);
                     });
                     return new THREE.QuaternionKeyframeTrack(`${bone.name}.quaternion`, times, values);
@@ -2020,7 +2098,9 @@
                     tracks.filter(Boolean));
 
                 // Vertical bob: offset the hips bone up/down from its rest position. Keys
-                // are relative dy (in voxel units), added to the bone's rest y.
+                // are relative dy (in voxel units), added to the bone's rest y. Un
+                // eventuale spostamento orizzontale (dx/dz) passa per faceVec: il bob
+                // verticale puro e' invariante per imbardata, quindi qui non cambia nulla.
                 const hipsBone = byName['hips'];
                 const hipsRest = hipsBone ? hipsBone.position.clone() : null;
                 const bob = (keys) => {
@@ -2028,18 +2108,13 @@
                     const times = [], values = [];
                     keys.forEach(k => {
                         times.push(k.t);
-                        values.push(hipsRest.x, hipsRest.y + k.dy, hipsRest.z);
+                        const d = faceVec(k.dx || 0, k.dz || 0);
+                        values.push(hipsRest.x + d[0], hipsRest.y + k.dy, hipsRest.z + d[1]);
                     });
                     return new THREE.VectorKeyframeTrack(`${hipsBone.name}.position`, times, values);
                 };
 
                 const rad = d => d * Math.PI / 180;
-
-                // Detect foot facing direction from the foot bone orientation in rest space.
-                const ftBone = rig.bones.find(b => b.name === 'foot_R' || b.name === 'foot_L');
-                const isFacingNegZ = ftBone ? (ftBone.tail[2] < ftBone.head[2]) : false;
-                const legSign = isFacingNegZ ? -1 : 1;
-                const kneeSign = isFacingNegZ ? 1 : -1;
 
                 // Idle: gentle chest/arm breathing.
                 rigClips.push(clip('idle', 2.4, [
@@ -2185,7 +2260,8 @@
             const PRESET_ANIM_NAMES = ['none', 'idle', 'walk', 'run', 'jump', 'wave'];
 
             function uniqueAnimName(base) {
-                base = (base || 'Animazione').trim() || 'Animazione';
+                const fallback = t('rig.animDefaultName');
+                base = (base || fallback).trim() || fallback;
                 const taken = new Set(PRESET_ANIM_NAMES.map(n => n.toLowerCase()));
                 (rig && rig.customAnims ? rig.customAnims : []).forEach(a => taken.add(String(a.name).toLowerCase()));
                 if (!taken.has(base.toLowerCase())) return base;
@@ -2223,7 +2299,7 @@
                     const delBtn = document.createElement('button');
                     delBtn.className = 'btn btn-secondary';
                     delBtn.textContent = 'X';
-                    delBtn.title = 'Elimina animazione';
+                    delBtn.title = t('rig.deleteAnim');
                     delBtn.style.cssText = 'padding:4px 9px; font-size:11px;';
                     delBtn.addEventListener('click', () => removeCustomAnim(a.name));
                     row.appendChild(label); row.appendChild(playBtn); row.appendChild(delBtn);
@@ -2360,32 +2436,138 @@
                 if (!restoreRigForActiveObject()) updateRigUI();
             });
 
-            function rotateSkeletonY(deg) {
-                if (!rig || !rig.bones || !rig.bones.length) return;
-                pushHistory();
-                const rad = deg * Math.PI / 180;
-                const voxels = currentModelData.voxels || [];
+            /* ===================== RUOTA MODELLO =====================
+               Prima qui c'era rotateSkeletonY(): ruotava SOLO teste e code delle ossa.
+               Era una trappola: le clip preimpostate sono rotazioni MONDO (ogni osso
+               nasce con rotazione identita', vedi buildSkinnedMesh), quindi girare lo
+               scheletro non girava le animazioni - braccia che si aprivano dal lato
+               sbagliato, oscillazione invertita, _L/_R fisicamente scambiati.
+
+               Ora si gira il PERSONAGGIO: i voxel ruotano davvero, lo scheletro resta
+               nella sua orientazione canonica e il rig viene ri-legato (pesi ricalcolati,
+               mesh e clip rifatte). La rotazione e' a passi esatti di 90 gradi e sfrutta
+               solo aritmetica INTERA (rotazione attorno all'origine + traslazione), per
+               cui e' senza perdite e perfettamente reversibile: quattro click di +90
+               riportano esattamente ai voxel di partenza. */
+
+            // Piano di rotazione: restituisce la mappa (x,z) -> (x,z) e la nuova
+            // grid_size, oppure null se non c'e' niente da fare. Funzione PURA (nessuna
+            // scrittura), cosi' e' verificabile: vedi tests/test_rig_rotate.mjs.
+            //   steps 1..3 = 90/180/270 gradi antiorari attorno a +Y.
+            // La traslazione viene scelta in modo che:
+            //   - se la griglia e' nota E tutti i voxel stanno dentro la scatola
+            //     [0,gx-1] x [0,gz-1], la scatola ruotata torna sulla scatola (scambiata
+            //     su X/Z per 90/270). E' equivalente a ruotare attorno al centro della
+            //     GRIGLIA (gx-1)/2, e nessuna coordinata puo' uscire dai limiti;
+            //   - altrimenti (voxel fuori scatola, griglia assente) si ruota attorno al
+            //     bounding box e si trasla perche' l'angolo minimo del modello resti
+            //     dov'era, poi si rientra a forza nei limiti se conosciuti. In nessun
+            //     caso si scende sotto zero.
+            function planRotationY(voxels, steps, gridSize) {
+                steps = ((Math.round(steps) % 4) + 4) % 4;
+                if (!steps || !voxels || !voxels.length) return null;
+                const cos = [1, 0, -1, 0][steps];
+                const sin = [0, 1, 0, -1][steps];
+                const rx = (x, z) => x * cos - z * sin;
+                const rz = (x, z) => x * sin + z * cos;
+
+                const g = Array.isArray(gridSize) ? gridSize.map(n => Math.round(Number(n) || 0)) : null;
+                const gx = g && g[0] > 0 ? g[0] : 0;
+                const gy = g && g[1] > 0 ? g[1] : 0;
+                const gz = g && g[2] > 0 ? g[2] : 0;
                 const b = voxelBounds(voxels);
-                const cx = b.cx, cz = b.cz;
-                const cos = Math.cos(rad), sin = Math.sin(rad);
+                const inGrid = gx > 0 && gz > 0 &&
+                    b.minX >= 0 && b.minZ >= 0 && b.maxX <= gx - 1 && b.maxZ <= gz - 1;
+                // Su 90/270 la scatola si scambia: una griglia 32x16 diventa 16x32.
+                const swap = (steps === 1 || steps === 3);
+                const ngx = swap ? gz : gx, ngz = swap ? gx : gz;
 
-                rig.bones.forEach(bone => {
-                    const hx = bone.head[0] - cx, hz = bone.head[2] - cz;
-                    bone.head[0] = cx + (hx * cos - hz * sin);
-                    bone.head[2] = cz + (hx * sin + hz * cos);
+                let tx, tz;
+                if (inGrid) {
+                    // Angoli della scatola ruotati: la traslazione e' quella che li
+                    // riporta a 0 (aritmetica intera, quindi esatta).
+                    const cs = [[0, 0], [gx - 1, 0], [0, gz - 1], [gx - 1, gz - 1]];
+                    tx = -Math.min(...cs.map(c => rx(c[0], c[1])));
+                    tz = -Math.min(...cs.map(c => rz(c[0], c[1])));
+                } else {
+                    const cs = [[b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.maxZ]];
+                    tx = b.minX - Math.min(...cs.map(c => rx(c[0], c[1])));
+                    tz = b.minZ - Math.min(...cs.map(c => rz(c[0], c[1])));
+                    // Rientro nei limiti quando la griglia e' nota: prima il fondo scala
+                    // (mai coordinate negative), poi il tetto se il modello ci sta.
+                    const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+                    const nw = swap ? d : w, nd = swap ? w : d;
+                    if (ngx > 0 && b.minX + nw > ngx - 1) tx -= (b.minX + nw) - (ngx - 1);
+                    if (ngz > 0 && b.minZ + nd > ngz - 1) tz -= (b.minZ + nd) - (ngz - 1);
+                    tx = Math.round(tx); tz = Math.round(tz);
+                    const shiftX = Math.min(...cs.map(c => rx(c[0], c[1]))) + tx;
+                    const shiftZ = Math.min(...cs.map(c => rz(c[0], c[1]))) + tz;
+                    if (shiftX < 0) tx -= shiftX;
+                    if (shiftZ < 0) tz -= shiftZ;
+                }
+                return {
+                    steps: steps,
+                    map: (x, z) => [rx(x, z) + tx, rz(x, z) + tz],
+                    grid: (gx > 0 && gz > 0) ? [ngx, gy || 0, ngz] : null
+                };
+            }
 
-                    const tx = bone.tail[0] - cx, tz = bone.tail[2] - cz;
-                    bone.tail[0] = cx + (tx * cos - tz * sin);
-                    bone.tail[2] = cz + (tx * sin + tz * cos);
+            // Applica il piano ai DATI dell'oggetto attivo: voxel, grid_size e le
+            // sovrascritture del weight paint (rig.weights e' indicizzato "x,y,z", quindi
+            // ogni chiave deve seguire il suo voxel). Le ossa e la posa NON si toccano:
+            // e' esattamente il punto di questa funzione, lo scheletro resta canonico.
+            // Nessuna UI qui dentro, cosi' i test possono verificare solo i dati.
+            function applyModelRotation(steps) {
+                const voxels = (currentModelData && currentModelData.voxels) || [];
+                const meta = (currentModelData && currentModelData.metadata) || null;
+                const plan = planRotationY(voxels, steps, meta && meta.grid_size);
+                if (!plan) return false;
+                voxels.forEach(v => {
+                    const p = plan.map(v.x, v.z);
+                    v.x = p[0]; v.z = p[1];
                 });
+                if (meta && plan.grid) meta.grid_size = plan.grid;
+                if (rig && rig.weights) {
+                    const moved = {};
+                    Object.keys(rig.weights).forEach(k => {
+                        const c = k.split(',').map(Number);
+                        if (c.length !== 3 || c.some(n => !Number.isFinite(n))) return;
+                        const p = plan.map(c[0], c[2]);
+                        moved[p[0] + ',' + c[1] + ',' + p[1]] = rig.weights[k];
+                    });
+                    rig.weights = Object.keys(moved).length ? moved : null;
+                }
+                return true;
+            }
 
-                applyRig();
+            // Ruota il modello attivo di `deg` gradi (multipli di 90) attorno a Y e
+            // ri-lega il rig. Ritorna false se non c'era nulla da ruotare.
+            function rotateModelY(deg) {
+                const steps = ((Math.round((Number(deg) || 0) / 90) % 4) + 4) % 4;
+                if (!steps) return false;
+                if (!((currentModelData && currentModelData.voxels) || []).length) return false;
+                pushHistory();
+                if (!applyModelRotation(steps)) return false;
+                // Stessa sequenza delle altre operazioni che riscrivono TUTTI i voxel
+                // (vedi objDelete / bake del pannello Proprieta'): l'indice incrementale
+                // punta ai voxel vecchi, quindi va invalidato prima del rebuild.
+                const sel = selectedBoneIndex;
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                buildModel(false);      // ricostruisce voxelMap, visibilita', mesh e palette
+                if (rig && rig.bones && rig.bones.length) {
+                    applyRig();         // re-bind: pesi ricalcolati sul corpo ruotato, clip rifatte
+                    if (sel >= 0 && sel < rig.bones.length) selectBone(sel);
+                }
+                if (typeof requestRender === 'function') requestRender();
+                return true;
             }
 
             const rotateRig90Btn = document.getElementById('rotateRig90Btn');
             const rotateRig180Btn = document.getElementById('rotateRig180Btn');
-            if (rotateRig90Btn) rotateRig90Btn.addEventListener('click', () => rotateSkeletonY(90));
-            if (rotateRig180Btn) rotateRig180Btn.addEventListener('click', () => rotateSkeletonY(180));
+            const rotateRigM90Btn = document.getElementById('rotateRigM90Btn');
+            if (rotateRig90Btn) rotateRig90Btn.addEventListener('click', () => rotateModelY(90));
+            if (rotateRig180Btn) rotateRig180Btn.addEventListener('click', () => rotateModelY(180));
+            if (rotateRigM90Btn) rotateRigM90Btn.addEventListener('click', () => rotateModelY(-90));
 
             toggleSkeleton.addEventListener('change', updateRigVisibility);
             toggleWeightColors.addEventListener('change', updateRigVisibility);

@@ -20,8 +20,10 @@
                     return;
                 }
 
-                const t = obj.transform || (typeof makeDefaultTransform === 'function' ? makeDefaultTransform() : { position: { x: 0, y: 0, z: 0 }, rotationY: 0, scale: 1 });
-                const rotDeg = Math.round(((t.rotationY || 0) * 180 / Math.PI));
+                // NB: la variabile del transform si chiama `xf`, NON `t`: `t()` e' la
+                // funzione di traduzione (23-i18n.js) e qui dentro serve.
+                const xf = obj.transform || (typeof makeDefaultTransform === 'function' ? makeDefaultTransform() : { position: { x: 0, y: 0, z: 0 }, rotationY: 0, scale: 1 });
+                const rotDeg = Math.round(((xf.rotationY || 0) * 180 / Math.PI));
                 const voxCount = (obj.data && obj.data.voxels ? obj.data.voxels.length : 0);
 
                 panel.innerHTML =
@@ -50,27 +52,33 @@
                     '</div>' +
                     ((typeof rig !== 'undefined' && rig && rig.bones) ?
                         '<div class="menu-sep"></div>' +
-                        '<div class="menu-label">Ruota Scheletro (Rig)</div>' +
+                        '<div class="menu-label" data-i18n="rig.rotateModel">Ruota Modello</div>' +
                         '<div class="control-row">' +
-                            '<label title="Ruota solo le ossa rispetto alla mesh">Orientamento</label>' +
+                            '<label data-i18n="properties.orientation" data-i18n-title="rig.rotateModelTitle">Orientamento</label>' +
                             '<div style="display:flex; gap:4px;">' +
+                                '<button class="btn btn-secondary" id="propRotRigM90Btn" style="padding:4px 8px; font-size:11px;">-90°</button>' +
                                 '<button class="btn btn-secondary" id="propRotRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>' +
                                 '<button class="btn btn-secondary" id="propRotRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>' +
                             '</div>' +
                         '</div>' : '') +
                     '<div class="screens-section-note" data-i18n="properties.liveNote">Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta nei voxel (coordinate intere, rotazione a 90°).</div>' +
-                    '<div class="screens-section-note" style="text-align:center;">' + voxCount + ' voxel</div>';
+                    '<div class="screens-section-note" style="text-align:center;" id="propVoxCount"></div>';
+
+                // Conteggio voxel: testo tradotto scritto con textContent (le traduzioni
+                // possono contenere apostrofi, quindi niente innerHTML).
+                const voxCountEl = document.getElementById('propVoxCount');
+                if (voxCountEl) voxCountEl.textContent = t('rig.voxelCount', { n: voxCount });
 
                 // Popola i valori.
                 const nameEl = document.getElementById('propName');
                 const visEl = document.getElementById('propVisible');
                 if (nameEl) nameEl.value = obj.name || '';
                 if (visEl) visEl.checked = !!obj.visible;
-                document.getElementById('propPosX').value = t.position.x || 0;
-                document.getElementById('propPosY').value = t.position.y || 0;
-                document.getElementById('propPosZ').value = t.position.z || 0;
+                document.getElementById('propPosX').value = xf.position.x || 0;
+                document.getElementById('propPosY').value = xf.position.y || 0;
+                document.getElementById('propPosZ').value = xf.position.z || 0;
                 document.getElementById('propRotY').value = rotDeg;
-                document.getElementById('propScale').value = (t.scale === undefined) ? 1 : t.scale;
+                document.getElementById('propScale').value = (xf.scale === undefined) ? 1 : xf.scale;
 
                 // Nome → applicazione immediata (aggiorna anche l'outliner).
                 if (nameEl) nameEl.addEventListener('change', () => {
@@ -109,19 +117,19 @@
                     // change (blur/invio) → COMMIT: cuoce la trasformazione nei voxel una
                     // sola volta, azzera l'anteprima e ricostruisce. Una voce di undo.
                     el.addEventListener('change', () => {
-                        const t = readFields();
+                        const nxf = readFields();
                         if (typeof clearLiveTransform === 'function') clearLiveTransform();
                         // Niente da cuocere se è l'identità (evita voci di undo inutili).
                         if (typeof isIdentityTransform === 'function' && isIdentityTransform(
-                            { position: { x: Math.round(t.position.x), y: Math.round(t.position.y), z: Math.round(t.position.z) },
-                              rotationY: t.rotationY, scale: t.scale })) {
+                            { position: { x: Math.round(nxf.position.x), y: Math.round(nxf.position.y), z: Math.round(nxf.position.z) },
+                              rotationY: nxf.rotationY, scale: nxf.scale })) {
                             return;
                         }
                         if (typeof pushHistory === 'function') { try { pushHistory(); } catch (e) {} }
                         obj.transform = {
-                            position: { x: Math.round(t.position.x), y: Math.round(t.position.y), z: Math.round(t.position.z) },
-                            rotationY: t.rotationY,
-                            scale: t.scale
+                            position: { x: Math.round(nxf.position.x), y: Math.round(nxf.position.y), z: Math.round(nxf.position.z) },
+                            rotationY: nxf.rotationY,
+                            scale: nxf.scale
                         };
                         if (typeof bakeTransform === 'function') bakeTransform(obj);
                         if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
@@ -131,10 +139,16 @@
                     });
                 });
 
+                // Ruota il MODELLO (non lo scheletro): i voxel girano davvero e il rig
+                // viene ri-legato, cosi' le animazioni restano corrette. Vedi
+                // rotateModelY() in 15-rig.js.
+                const pRigM90 = document.getElementById('propRotRigM90Btn');
                 const pRig90 = document.getElementById('propRotRig90Btn');
                 const pRig180 = document.getElementById('propRotRig180Btn');
-                if (pRig90) pRig90.addEventListener('click', () => { if (typeof rotateSkeletonY === 'function') rotateSkeletonY(90); });
-                if (pRig180) pRig180.addEventListener('click', () => { if (typeof rotateSkeletonY === 'function') rotateSkeletonY(180); });
+                const rotModel = deg => { if (typeof rotateModelY === 'function') rotateModelY(deg); };
+                if (pRigM90) pRigM90.addEventListener('click', () => rotModel(-90));
+                if (pRig90) pRig90.addEventListener('click', () => rotModel(90));
+                if (pRig180) pRig180.addEventListener('click', () => rotModel(180));
 
                 if (typeof applyI18n === 'function') applyI18n(panel);
             }

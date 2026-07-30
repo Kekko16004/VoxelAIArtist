@@ -110,6 +110,22 @@ run "Strumenti rig: specchio, IK, pose (Node)" node tests/test_rig_tools.mjs
 #            devono andare su disco; mancano solo i dialog nativi Qt.
 run "Capacita' backend: web vs desktop (Node)" node tests/test_backend_caps.mjs
 
+# 4c-septies. "Ruota modello": ruotare lo scheletro di 180 gradi lasciava le
+#            animazioni fuori asse (il personaggio camminava di lato). Ora si
+#            ruotano i VOXEL a passi esatti di 90 gradi, si rimappano i pesi
+#            dipinti e le clip tengono conto dell'orientamento delle ossa.
+run "Rotazione modello e clip orientate (Node)" node tests/test_rig_rotate.mjs
+
+# 4c-octies. Timeline: i keyframe delle clip predefinite (camminata, salto...)
+#            non erano disegnati perche' si leggevano solo da rig.customAnims:
+#            ora si ricavano dalla clip vera e restano in sola lettura.
+run "Timeline: keyframe clip predefinite (Node)" node tests/test_timeline_preset.mjs
+
+# 4c-nonies. Sezioni richiudibili della sidebar: le sezioni iniettate a runtime
+#            vanno promosse a <details>, lo stato va ricordato in localStorage e
+#            un JSON corrotto non deve lasciare la sidebar vuota.
+run "Sezioni sidebar richiudibili (Node)" node tests/test_sections.mjs
+
 # 4d-bis. Voxelizzazione GLB: i voxel DEVONO stare dentro la griglia. La
 #         versione a raggi ne produceva 0% dentro (vista vuota).
 run "Voxelizzazione GLB (Node)" node tests/test_import_glb.mjs
@@ -164,6 +180,11 @@ run "Chiavi i18n usate dal codice" python3 tests/test_i18n_keys_used.py
 #     Serviva: 89 alert/confirm/prompt/title erano rimasti hardcoded mentre la
 #     chiave giusta esisteva gia' in tutti e 6 i locali.
 run "Nessuna stringa italiana hardcoded" python3 tests/test_i18n_no_hardcoded.py
+
+# 6d. Nessun testo italiano non annotato nel MARKUP: il 6c guarda solo il JS,
+#     percio' le sezioni del rig, i tooltip della barra progetto e "Sposta"
+#     restavano in italiano in qualsiasi lingua (61 voci fra testi e title=).
+run "Template i18n: niente italiano nel markup" python3 tests/test_i18n_template.py
 
 echo ""
 echo "=============================================="

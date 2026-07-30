@@ -259,7 +259,7 @@
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore sconosciuto');
+                        if (!res.ok) throw new Error(data.error || t('common.unknownError'));
                         packRunId = data.id;
                         packActiveJobId = null;
                         Object.keys(packModelCache).forEach(k => delete packModelCache[k]);
@@ -520,7 +520,7 @@
                         const res = await fetch(packApi('/api/pack/result?runId=' +
                             encodeURIComponent(packRunId) + '&jobId=' + encodeURIComponent(jobId)));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Asset non disponibile');
+                        if (!res.ok) throw new Error(data.error || t('pack.assetUnavailable'));
                         model = data.model;
                         packModelCache[jobId] = model;
                     }
@@ -559,7 +559,7 @@
                     try {
                         const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!res.ok) throw new Error(data.error || t('common.error'));
                         if (!data.count) {
                             alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
                             return;
@@ -608,7 +608,7 @@
 
                         const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!res.ok) throw new Error(data.error || t('common.error'));
                         if (!data.count) {
                             alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
                             return;

@@ -340,6 +340,100 @@
         .rp-section > summary:hover { color: var(--text-primary); }
         .rp-body { padding: 12px; border-top: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 10px; }
 
+        /* ===== Sezioni a fisarmonica della sidebar (stessa convenzione di
+           .rp-section, ma il titolo conserva la tipografia di .section-title:
+           a sezioni tutte aperte la sidebar e' identica a prima).
+           Piu' sezioni possono restare aperte insieme; lo stato aperto/chiuso
+           e' persistito da 34-sections.js. */
+        .sb-section {
+            display: block;
+        }
+
+        .sb-section > summary {
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            border-radius: var(--radius-sm);
+            transition: color 0.15s;
+        }
+
+        .sb-section > summary::-webkit-details-marker { display: none; }
+
+        /* Chevron a destra: il quadratino di .section-title::before resta al suo posto. */
+        .sb-section > summary::after {
+            content: "";
+            width: 6px;
+            height: 6px;
+            margin-left: auto;
+            flex-shrink: 0;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(-45deg);
+            transition: transform 0.15s, opacity 0.15s;
+            opacity: 0.6;
+        }
+
+        .sb-section[open] > summary::after { transform: rotate(45deg); }
+        .sb-section > summary:hover { color: var(--text-primary); }
+        .sb-section > summary:hover::after { opacity: 1; }
+
+        .sb-section > summary:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 3px;
+            color: var(--text-primary);
+        }
+
+        /* A sezione chiusa il margine sotto il titolo sarebbe spazio morto. */
+        .sb-section:not([open]) > summary { margin-bottom: 0; }
+
+        .sb-body { display: block; }
+
+        /* Comando "Apri/Chiudi tutto" in testa a ogni tab (creato da 34-sections.js) */
+        .sb-toggle-all {
+            align-self: flex-end;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 9px;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            background: transparent;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+        }
+
+        .sb-toggle-all::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            flex-shrink: 0;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(-135deg);
+            transition: transform 0.15s;
+        }
+
+        /* .sb-collapsed = non tutto e' aperto, quindi il comando propone "Apri tutto". */
+        .sb-toggle-all.sb-collapsed::before { transform: rotate(45deg); }
+
+        .sb-toggle-all:hover {
+            color: var(--text-primary);
+            border-color: var(--glass-border-focus);
+            background: var(--hover-bg);
+        }
+
+        .sb-toggle-all:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 2px;
+        }
+
         /* Resizer del pannello destro (specchio di #sidebarResizer) */
         #rightResizer {
             width: 5px;
@@ -1838,6 +1932,34 @@
                     }
                 }
             } catch (e) { }
+
+            // --- Sezioni chiuse della sidebar (chiave allineata a 34-sections.js) ---
+            // Il markup nasce con tutte le sezioni details.sb-section aperte: senza
+            // questo blocco le sezioni chiuse nella sessione precedente si vedrebbero
+            // aperte per un istante e si richiuderebbero quando gira il bundle.
+            // Le regole valgono solo FINCHE' l'attributo [open] e' presente; appena
+            // 34-sections.js applica lo stato vero rimuove questo <style>.
+            try {
+                var rawSec = ls('voxelai-sections');
+                if (rawSec) {
+                    var st = JSON.parse(rawSec);
+                    var closed = [];
+                    if (st && typeof st === 'object') {
+                        Object.keys(st).forEach(function (id) {
+                            if (st[id] === false && /^[A-Za-z][\w-]*$/.test(id)) closed.push(id);
+                        });
+                    }
+                    if (closed.length) {
+                        var hide = closed.map(function (id) { return '#' + id + '[open] > .sb-body'; });
+                        var arrow = closed.map(function (id) { return '#' + id + '[open] > summary::after'; });
+                        var stEl = document.createElement('style');
+                        stEl.id = 'sbSectionsPrepaint';
+                        stEl.textContent = hide.join(',') + '{display:none}'
+                            + arrow.join(',') + '{transform:rotate(-45deg)}';
+                        document.head.appendChild(stEl);
+                    }
+                }
+            } catch (e) { }
         })();
     </script>
 </head>
@@ -1855,14 +1977,14 @@
         <div class="menu" id="menuFile">
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.file">File</button>
             <div class="menu-dropdown" id="menuFileDropdown">
-                <button class="menu-item" id="saveProjectBtn" title="Salva il progetto nativo (.voxai) — intera scena">
+                <button class="menu-item" id="saveProjectBtn" data-i18n-title="toolbar.saveProjectTitle" title="Salva il progetto nativo (.voxai) — intera scena">
                     <span class="mi-icon">💾</span><span data-i18n="file.saveProject">Salva progetto (.voxai)</span></button>
-                <button class="menu-item" id="saveProjectAsBtn" title="Salva il progetto con un nuovo nome (.voxai)">
+                <button class="menu-item" id="saveProjectAsBtn" data-i18n-title="toolbar.saveProjectAsTitle" title="Salva il progetto con un nuovo nome (.voxai)">
                     <span class="mi-icon"></span><span data-i18n="file.saveProjectAs">Salva con nome…</span></button>
-                <button class="menu-item" id="openProjectBtn" title="Apri un progetto (.voxai / .json / .vox / .schem)">
+                <button class="menu-item" id="openProjectBtn" data-i18n-title="toolbar.openProjectTitle" title="Apri un progetto (.voxai / .json / .vox / .schem)">
                     <span class="mi-icon">📂</span><span data-i18n="file.openProject">Apri progetto…</span></button>
                 <div class="menu-sep"></div>
-                <button class="menu-item" id="autosaveHistoryBtn" title="Mostra la cronologia dei salvataggi automatici">
+                <button class="menu-item" id="autosaveHistoryBtn" data-i18n-title="toolbar.autosaveHistoryTitle" title="Mostra la cronologia dei salvataggi automatici">
                     <span class="mi-icon">🕒</span><span data-i18n="file.autosaveHistory">Cronologia salvataggi</span></button>
                 <div id="autosaveStatus" class="menu-row" style="min-height:12px; opacity:0.7;"></div>
             </div>
@@ -1873,10 +1995,10 @@
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.import">Importa</button>
             <div class="menu-dropdown" id="menuImportDropdown">
                 <div class="menu-label" data-i18n="import.label">Importa file</div>
-                <button class="menu-item" id="importFileBtn" title="Importa .voxai / .json / .vox / .schem">
+                <button class="menu-item" id="importFileBtn" data-i18n-title="toolbar.importFileTitle" title="Importa .voxai / .json / .vox / .schem">
                     <span class="mi-icon">📥</span><span data-i18n="import.file">Da file…</span>
                     <span class="mi-hint">.vox .schem .voxai .json</span></button>
-                <button class="menu-item" id="importPasteBtn" title="Incolla un modello JSON">
+                <button class="menu-item" id="importPasteBtn" data-i18n-title="toolbar.importPasteTitle" title="Incolla un modello JSON">
                     <span class="mi-icon">📋</span><span data-i18n="import.paste">Incolla JSON…</span></button>
             </div>
         </div>
@@ -1895,9 +2017,9 @@
                     <span data-i18n="export.glbAutoscale">Autoscale GLB 1/100 (Unity/Blender)</span></label>
                 <div class="menu-sep"></div>
                 <div class="menu-label" data-i18n="export.labelVoxel">Voxel / Minecraft</div>
-                <button class="menu-item" id="exportVoxBtn" title="Esporta in formato MagicaVoxel (.vox)">
+                <button class="menu-item" id="exportVoxBtn" data-i18n-title="toolbar.exportVoxTitle" title="Esporta in formato MagicaVoxel (.vox)">
                     <span class="mi-icon">🧊</span><span data-i18n="export.vox">Esporta .vox (MagicaVoxel)</span></button>
-                <button class="menu-item" id="exportSchemBtn" title="Esporta in formato Minecraft Sponge Schematic (.schem) per WorldEdit/Litematica">
+                <button class="menu-item" id="exportSchemBtn" data-i18n-title="toolbar.exportSchemTitle" title="Esporta in formato Minecraft Sponge Schematic (.schem) per WorldEdit/Litematica">
                     <span class="mi-icon">⛏</span><span data-i18n="export.schem">Esporta .schem (Minecraft)</span></button>
                 <div class="menu-sep"></div>
                 <div class="menu-label" data-i18n="export.labelData">Dati</div>
@@ -1972,15 +2094,16 @@
 
                 <!-- ===== MODALITA' SINGOLA (invariata) ===== -->
                 <div id="genModeSingle">
-                <div>
-                    <div class="section-title" data-i18n="generate.sectionTitle">Generazione Voxel AI</div>
+                <details class="sb-section" id="sbSecGenerate" open>
+                    <summary class="section-title" data-i18n="generate.sectionTitle">Generazione Voxel AI</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass"
                         style="padding: 16px; display: flex; flex-direction: column; gap: 10px;">
                         <input type="text" id="promptInput" class="field" placeholder="Cosa generiamo? (es. Dinosauro)" data-i18n-placeholder="generate.promptPlaceholder"
                             style="width: 100%; padding: 10px; font-size: 13px;">
                         <div style="display: none; align-items: center; gap: 8px;">
                             <!-- Pulsante immagine temporaneamente disabilitato -->
-                            <button class="btn btn-secondary" id="uploadImageBtn" style="padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;" title="Aggiungi un'immagine di riferimento" data-i18n-title="generate.uploadImage">
+                            <button class="btn btn-secondary" id="uploadImageBtn" style="padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;" title="Aggiungi un'immagine di riferimento" data-i18n-title="generate.uploadImage" data-i18n="generate.refPhoto">
                                 📷 Riferimento Foto
                             </button>
                             <input type="file" id="imageInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
@@ -2072,7 +2195,8 @@
                         <button class="btn btn-primary" id="generateBtn"
                             style="width: 100%; font-size: 12px; padding: 10px;" data-i18n="generate.generateBtn">Genera Modello</button>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
 
                 <!-- Drag & Drop / Upload -->
                 <div class="dropzone" id="dropzone">
@@ -2140,7 +2264,7 @@
                                 </path>
                                 <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
                             </svg>
-                            Incolla JSON
+                            <span data-i18n="paste.toggleBtn">Incolla JSON</span>
                         </button>
                         <button id="newProjectBtn" class="btn btn-secondary"
                             style="flex: 1; font-size: 11px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -2149,7 +2273,7 @@
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
-                            Nuovo Modello
+                            <span data-i18n="newProject.btn">Nuovo Modello</span>
                         </button>
                     </div>
                     <div id="pasteContainer" class="glass"
@@ -2166,16 +2290,14 @@
                     <div id="newProjectContainer" class="glass"
                         style="display: none; flex-direction: column; gap: 8px; padding: 12px;">
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label
-                                style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Nome
-                                Modello</label>
+                            <label data-i18n="newProject.name"
+                                style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Nome Modello</label>
                             <input type="text" id="newProjectName" class="field-strong" value="Nuovo_Modello"
                                 style="width: 100%; padding: 6px; font-size: 11px;">
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label
-                                style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Dimensione
-                                Griglia</label>
+                            <label data-i18n="generate.gridSize"
+                                style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Dimensione Griglia</label>
                             <select id="newProjectGrid" class="field-strong"
                                 style="width: 100%; padding: 6px; font-size: 11px;">
                                 <option value="16,16,16" data-i18n="newProject.gridTiny">16x16x16 (Piccola)</option>
@@ -2197,7 +2319,9 @@
 
                 <!-- ===== MODALITA' PACK (multigenerazione) ===== -->
                 <div id="genModePack" style="display: none;">
-                    <div class="section-title" data-i18n="pack.sectionTitle">Asset Pack (multigenerazione)</div>
+                    <details class="sb-section" id="sbSecPack" open>
+                    <summary class="section-title" data-i18n="pack.sectionTitle">Asset Pack (multigenerazione)</summary>
+                    <div class="sb-body">
 
                     <div class="controls-group glass"
                         style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
@@ -2314,11 +2438,14 @@
                             style="width: 100%; font-size: 11px; padding: 8px; display: none;"
                             data-i18n="pack.cancelBtn">Annulla pack</button>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
                 </div>
 
                 <!-- Metadata Section -->
-                <div>
-                    <div class="section-title" data-i18n="info.sectionTitle">Informazioni Modello</div>
+                <details class="sb-section" id="sbSecModelInfo" open>
+                    <summary class="section-title" data-i18n="info.sectionTitle">Informazioni Modello</summary>
+                    <div class="sb-body">
                     <div class="meta-card glass">
                         <div class="meta-item full-width">
                             <span class="meta-label" data-i18n="info.name">Nome</span>
@@ -2353,13 +2480,15 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
             </div>
 
             <!-- ===== TAB: DISEGNA ===== -->
             <div class="tab-panel" data-panel="draw">
-                <div>
-                    <div class="section-title" data-i18n="tools.sectionTitle">Strumenti di Modifica</div>
+                <details class="sb-section" id="sbSecTools" open>
+                    <summary class="section-title" data-i18n="tools.sectionTitle">Strumenti di Modifica</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding: 16px;">
                         <div class="tool-grid">
                             <button class="tool-btn active" id="toolView" data-tool="view"
@@ -2410,7 +2539,7 @@
                                 title="Riempie il piano base col colore attivo" data-i18n-title="tools.fillPlaneTitle" data-i18n="tools.fillPlane">Riempi Piano</button>
                         </div>
                         <div class="control-row" style="margin-top: 8px;">
-                            <label>Colore Attivo</label>
+                            <label data-i18n="tools.activeColor">Colore Attivo</label>
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <span id="activeColorHex"
                                     style="font-size:12px; color:var(--text-secondary); font-variant-numeric:tabular-nums;">#6366F1</span>
@@ -2420,8 +2549,7 @@
                         </div>
                         <div class="control-row" style="margin-top: 4px;">
                             <label
-                                title="Raggio del pennello: 1 = un solo voxel, valori maggiori agiscono su una sfera di voxel" data-i18n-title="tools.brushSizeTitle">Dimensione
-                                pennello <span id="brushSizeVal"
+                                title="Raggio del pennello: 1 = un solo voxel, valori maggiori agiscono su una sfera di voxel" data-i18n-title="tools.brushSizeTitle"><span data-i18n="tools.brushSizeLabel">Dimensione pennello</span> <span id="brushSizeVal"
                                     style="color:var(--text-secondary); font-weight:400;">1</span></label>
                             <input type="range" id="brushSize" min="1" max="6" step="1" value="1" style="width:120px;">
                         </div>
@@ -2444,22 +2572,24 @@
                                 <button class="seg-btn" data-axis="z" title="Piano XY (Profondità Z fissa)" data-i18n-title="dragPlane.zTitle">Z</button>
                             </div>
                         </div>
-                        <p id="editHint"
+                        <p id="editHint" data-i18n="hint.view"
                             style="font-size:11px; color:var(--text-secondary); line-height:1.5; margin-top:2px;">
-                            Modalità Vista: trascina per orbitare. Scegli uno strumento per modificare il modello.
+                            Modalità Vista: trascina per orbitare, rotella per zoom.
                         </p>
                         <div class="btn-group" style="margin-top:4px; grid-template-columns:1fr 1fr;">
                             <button class="btn btn-secondary" id="undoBtn" disabled
-                                style="padding:8px; font-size:12px;">↶ Annulla</button>
+                                style="padding:8px; font-size:12px;" data-i18n="common.undoBtn">↶ Annulla</button>
                             <button class="btn btn-secondary" id="redoBtn" disabled
                                 style="padding:8px; font-size:12px;">↷ Ripeti</button>
                         </div>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
 
                 <!-- ===== Plugin / Script utente (API sandboxata) ===== -->
-                <div>
-                    <div class="section-title" data-i18n="plugins.sectionTitle">Plugin &amp; Script</div>
+                <details class="sb-section" id="sbSecPlugins" open>
+                    <summary class="section-title" data-i18n="plugins.sectionTitle">Plugin &amp; Script</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" id="pluginsPanel" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
                         <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;"
                             data-i18n="plugins.hint">
@@ -2480,13 +2610,15 @@
                         </div>
                         <div id="pluginStatus" style="display:none; font-size:11px; line-height:1.4; padding:6px 8px; border-radius:6px;"></div>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
             </div>
 
             <!-- ===== TAB: RIG ===== -->
             <div class="tab-panel" data-panel="rig">
-                <div>
-                    <div class="section-title">Scheletro & Rigging</div>
+                <details class="sb-section" id="sbSecSkeleton" open>
+                    <summary class="section-title" data-i18n="rig.sectionTitle">Scheletro & Rigging</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding: 16px;">
                         <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:8px;">
                             <label data-i18n="rig.skeletonType">Tipo di scheletro</label>
@@ -2503,12 +2635,15 @@
                         </button>
                         <button class="btn btn-secondary" id="showRigBtn"
                             style="width:100%; font-size:12px; padding:9px; margin-top:6px; display:none;"
-                            title="Rientra nell'anteprima del rig salvato su questo oggetto, senza rigenerarlo">
+                            title="Rientra nell'anteprima del rig salvato su questo oggetto, senza rigenerarlo"
+                            data-i18n-title="rig.showRigBtnTitle" data-i18n="rig.showRigBtn">
                             👁 Mostra rig
                         </button>
                         <div class="control-row" style="margin-top:6px;">
-                            <label title="Ruota le ossa dello scheletro rispetto ai voxel senza spostare la mesh">Ruota Scheletro</label>
+                            <label title="Gira il personaggio a passi di 90° e ri-lega il rig: i voxel ruotano davvero, lo scheletro resta nella sua orientazione canonica (così le animazioni restano corrette)"
+                                data-i18n-title="rig.rotateModelTitle" data-i18n="rig.rotateModel">Ruota Modello</label>
                             <div style="display:flex; gap:4px;">
+                                <button class="btn btn-secondary" id="rotateRigM90Btn" style="padding:4px 8px; font-size:11px;">-90°</button>
                                 <button class="btn btn-secondary" id="rotateRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>
                                 <button class="btn btn-secondary" id="rotateRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>
                             </div>
@@ -2521,64 +2656,80 @@
                             </label>
                         </div>
                         <div class="control-row">
-                            <label title="Colora ogni voxel in base all'osso che lo controlla" data-i18n-title="rig.weightColorsTitle">Colora pesi per
-                                osso</label>
+                            <label title="Colora ogni voxel in base all'osso che lo controlla" data-i18n-title="rig.weightColorsTitle" data-i18n="rig.weightColors">Colora pesi per osso</label>
                             <label class="switch">
                                 <input type="checkbox" id="toggleWeightColors">
                                 <span class="slider"></span>
                             </label>
                         </div>
-                        <p id="rigHint" class="hint-text" style="margin-top:2px;">
+                        <p id="rigHint" class="hint-text" style="margin-top:2px;" data-i18n="rig.hintNoRig">
                             Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un
                             solo osso, così i cubi non si deformano).
                         </p>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
 
                 <div id="rigDetails" style="display:none;">
-                    <div class="section-title" style="margin-top:16px;">Ossa <span id="boneCount"
-                            style="color:var(--text-secondary); font-weight:400;"></span></div>
+                    <details class="sb-section" id="sbSecBones" open>
+                    <summary class="section-title" style="margin-top:16px;"><span data-i18n="rig.bones">Ossa</span> <span id="boneCount"
+                            style="color:var(--text-secondary); font-weight:400;"></span></summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:12px;">
                         <div id="boneList" class="bone-list"></div>
                         <div style="display:flex; gap:6px; margin-top:10px;">
                             <button class="btn btn-secondary" id="boneAddBtn" style="flex:1; padding:7px; font-size:11px;"
-                                title="Aggiunge un osso figlio all'osso selezionato, partendo dallo scheletro automatico">+ Osso</button>
+                                title="Aggiunge un osso figlio all'osso selezionato, partendo dallo scheletro automatico"
+                                data-i18n-title="rigTools.boneAddTitle" data-i18n="rigTools.boneAdd">+ Osso</button>
                             <button class="btn btn-secondary" id="boneRenameBtn" style="flex:1; padding:7px; font-size:11px;"
-                                title="Rinomina l'osso selezionato (anche con doppio clic nella lista)">Rinomina</button>
+                                title="Rinomina l'osso selezionato (anche con doppio clic nella lista)"
+                                data-i18n-title="rigTools.boneRenameTitle" data-i18n="rigTools.boneRename">Rinomina</button>
                             <button class="btn btn-secondary" id="boneDelBtn" style="flex:1; padding:7px; font-size:11px;"
-                                title="Elimina l'osso selezionato: i figli passano al genitore" data-i18n="timeline.deleteKey">Elimina</button>
+                                title="Elimina l'osso selezionato: i figli passano al genitore"
+                                data-i18n-title="rigTools.boneDelTitle" data-i18n="rigTools.boneDel">Elimina</button>
                         </div>
-                        <p class="hint-text" style="margin-top:8px;">
+                        <p class="hint-text" style="margin-top:8px;" data-i18n="rigTools.bonesHint">
                             Doppio clic su un osso per rinominarlo. Rinominare aggiorna posa, pesi dipinti e
                             animazioni AI; eliminando un osso i suoi voxel tornano all'osso più vicino.
                         </p>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px;">Simmetria X</div>
+                    <details class="sb-section" id="sbSecSymmetryX" open>
+                    <summary class="section-title" style="margin-top:16px;" data-i18n="rigTools.symSectionTitle">Simmetria X</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
-                            <label>Direzione</label>
+                            <label data-i18n="rigTools.mirrorDirLabel">Direzione</label>
                             <div class="segmented" id="mirrorDir">
-                                <button class="seg-btn active" data-dir="LtoR" title="Copia il lato sinistro (_L) su quello destro (_R)">L → R</button>
-                                <button class="seg-btn" data-dir="RtoL" title="Copia il lato destro (_R) su quello sinistro (_L)">R → L</button>
-                                <button class="seg-btn" data-dir="both" title="Scambia i due lati fra loro (e allinea le ossa centrali)">Scambia</button>
+                                <button class="seg-btn active" data-dir="LtoR" data-i18n-title="rigTools.dirLtoRTitle" title="Copia il lato sinistro (_L) su quello destro (_R)">L → R</button>
+                                <button class="seg-btn" data-dir="RtoL" data-i18n-title="rigTools.dirRtoLTitle" title="Copia il lato destro (_R) su quello sinistro (_L)">R → L</button>
+                                <button class="seg-btn" data-dir="both" data-i18n-title="rigTools.dirBothTitle" data-i18n="rigTools.dirBoth" title="Scambia i due lati fra loro (e allinea le ossa centrali)">Scambia</button>
                             </div>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
                             <button class="btn btn-secondary" id="mirrorPoseBtn" style="width:100%; padding:8px; font-size:12px;"
+                                data-i18n-title="rigTools.mirrorPoseBtnTitle" data-i18n="rigTools.mirrorPoseBtn"
                                 title="Specchia la posa delle ossa _L/_R: rotazione Y e Z invertite">⇄ Specchia posa</button>
                             <button class="btn btn-secondary" id="mirrorWeightsBtn" style="width:100%; padding:8px; font-size:12px;"
+                                data-i18n-title="rigTools.mirrorWeightsBtnTitle" data-i18n="rigTools.mirrorWeightsBtn"
                                 title="Copia le correzioni dei pesi sul voxel simmetrico dell'altro lato">⇄ Specchia pesi dipinti</button>
                             <button class="btn btn-secondary" id="symSkeletonBtn" style="width:100%; padding:8px; font-size:12px;"
+                                data-i18n-title="rigTools.symSkeletonBtnTitle" data-i18n="rigTools.symSkeletonBtn"
                                 title="Rende lo scheletro simmetrico dopo le correzioni con G: le articolazioni L/R combaciano al voxel">⇄ Simmetrizza scheletro</button>
                         </div>
-                        <p class="hint-text" style="margin-top:8px;">
+                        <p class="hint-text" style="margin-top:8px;" data-i18n="rigTools.symHint">
                             Lo specchio è sull'asse X, rispetto al centro del modello. Su un personaggio simmetrico
                             posi e dipingi un solo lato: l'altro si ricava da qui.
                         </p>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px;" data-i18n="help.s.weights.t">Pittura pesi</div>
+                    <details class="sb-section" id="sbSecWeightPaint" open>
+                    <summary class="section-title" style="margin-top:16px;" data-i18n="help.s.weights.t">Pittura pesi</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
                             <label data-i18n="rig.bindMode">Tipo di legatura</label>
@@ -2686,8 +2837,12 @@
                             </p>
                         </div>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px;" data-i18n="rig.selectedPose">Posa osso selezionato</div>
+                    <details class="sb-section" id="sbSecBonePose" open>
+                    <summary class="section-title" style="margin-top:16px;" data-i18n="rig.selectedPose">Posa osso selezionato</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <div id="poseControls">
                             <div class="pose-axis"><label>Rot X <span id="rotXVal">0°</span></label><input type="range"
@@ -2698,33 +2853,47 @@
                                     id="poseRotZ" min="-180" max="180" step="1" value="0"></div>
                         </div>
                         <button class="btn btn-secondary" id="resetPoseBtn"
-                            style="width:100%; padding:8px; font-size:12px; margin-top:8px;">↺ Riporta a T-pose</button>
+                            style="width:100%; padding:8px; font-size:12px; margin-top:8px;" data-i18n="rigTools.resetPose">↺ Riporta a T-pose</button>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px;">Punta arto (IK)</div>
+                    <details class="sb-section" id="sbSecIk" open>
+                    <summary class="section-title" style="margin-top:16px;" data-i18n="rigTools.ikSectionTitle">Punta arto (IK)</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <button class="btn btn-secondary" id="ikToggleBtn" style="width:100%; padding:9px; font-size:12px;"
+                            data-i18n-title="rigTools.ikToggleTitle" data-i18n="rigTools.ikToggle"
                             title="Trascina la mano o il piede: spalla e gomito (anca e ginocchio) si sistemano da soli">🎯 Punta arto</button>
                         <p id="ikHint" class="hint-text" style="margin-top:8px;"></p>
-                        <p class="hint-text" style="margin-top:4px;">
+                        <p class="hint-text" style="margin-top:4px;" data-i18n="rigTools.ikSectionHint">
                             Attiva la modalità, poi trascina con il tasto sinistro l'estremità dell'arto verso il punto
                             voluto: invece di ruotare tre ossa a mano, la catena si orienta da sola. Il ginocchio piega
                             avanti e il gomito indietro. Ogni trascinamento è un solo Ctrl+Z.
                         </p>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px;">Libreria pose</div>
+                    <details class="sb-section" id="sbSecPoseLib" open>
+                    <summary class="section-title" style="margin-top:16px;" data-i18n="rigTools.poseLibTitle">Libreria pose</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <button class="btn btn-secondary" id="poseSaveBtn" style="width:100%; padding:8px; font-size:12px;"
+                            data-i18n-title="rigTools.poseSaveBtnTitle" data-i18n="rigTools.poseSaveBtn"
                             title="Salva la posa corrente nella libreria, riusabile su altri oggetti">💾 Salva posa corrente</button>
                         <div id="poseLibList" style="margin-top:10px;"></div>
-                        <p id="poseLibEmpty" class="hint-text" style="margin-top:4px;">
+                        <p id="poseLibEmpty" class="hint-text" style="margin-top:4px;" data-i18n="rigTools.poseLibEmpty">
                             Nessuna posa salvata. Le pose restano su questo computer e valgono per qualsiasi oggetto
                             con gli stessi nomi di ossa.
                         </p>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px;" data-i18n="rig.animations">Animazioni</div>
+                    <details class="sb-section" id="sbSecAnimations" open>
+                    <summary class="section-title" style="margin-top:16px;" data-i18n="rig.animations">Animazioni</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <div class="control-row">
                             <label data-i18n="rig.clip">Clip</label>
@@ -2738,16 +2907,20 @@
                                 <option value="wave" data-i18n="rig.clipWave">Saluto</option>
                             </select>
                         </div>
-                        <p class="hint-text" style="margin-top:8px;">Le clip sono generate dallo scheletro e servono per
+                        <p class="hint-text" style="margin-top:8px;" data-i18n="rig.clipHint">Le clip sono generate dallo scheletro e servono per
                             l'anteprima. Vengono incluse nell'export GLB.</p>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
 
-                    <div class="section-title" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between;">
+                    <details class="sb-section" id="sbSecAiAnimations" open>
+                    <summary class="section-title" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between;">
                         <span data-i18n="rig.aiAnims">Animazioni AI</span>
                         <button id="addAnimBtn" class="btn btn-secondary" title="Nuova animazione AI"
                             data-i18n-title="rig.aiAnimNew"
                             style="width:26px; height:26px; padding:0; font-size:18px; line-height:1; border-radius:6px;">+</button>
-                    </div>
+                    </summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:16px;">
                         <div id="customAnimList" style="display:flex; flex-direction:column; gap:6px;"></div>
                         <p id="customAnimEmpty" class="hint-text" style="margin-top:4px;" data-i18n="rig.aiAnimEmpty">
@@ -2773,6 +2946,8 @@
                                 attuale. Le animazioni salvate restano nel progetto ed entrano nell'export GLB.</p>
                         </div>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
                 </div>
             </div>
         </div>
@@ -2817,8 +2992,7 @@
         <div id="gizmoBar" class="canvas-hud"
             style="position:absolute; top:14px; left:14px; z-index:20; gap:6px; padding:6px;">
             <button id="gizmoRotateBtn" class="gizmo-btn active" title="Ruota osso — posa (R)" data-i18n-title="gizmo.rotateTitle" data-i18n="gizmo.rotate">⟳ Ruota</button>
-            <button id="gizmoTranslateBtn" class="gizmo-btn" title="Sposta giunto — modifica scheletro (G)" data-i18n-title="gizmo.translateTitle">✥
-                Sposta</button>
+            <button id="gizmoTranslateBtn" class="gizmo-btn" title="Sposta giunto — modifica scheletro (G)" data-i18n-title="gizmo.translateTitle" data-i18n="gizmo.translate">✥ Sposta</button>
         </div>
         <div id="loaderOverlay" class="loader-overlay glass" style="display: none;">
             <div class="loader-content">
@@ -2939,8 +3113,8 @@
         <details class="rp-section" id="rpOutliner" open>
             <summary data-i18n="objects.sectionTitle">Oggetti della Scena</summary>
             <div class="rp-body" id="objectsPanel">
-                <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;">
-                    Premi <b>Tab</b> per passare da Modifica a Oggetto. In Modalità Oggetto clicca un oggetto per selezionarlo.
+                <div data-i18n="objects.hint" style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;">
+                    Premi Tab per passare da Modifica a Oggetto. In Modalità Oggetto clicca un oggetto per selezionarlo.
                 </div>
                 <div id="objectsList" style="display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto;">
                     <!-- Righe oggetto iniettate qui -->
@@ -3060,8 +3234,9 @@
             <div id="settingsBody" style="overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:18px;">
 
                 <!-- Aspetto -->
-                <div>
-                    <div class="section-title" data-i18n="settings.appearance">Aspetto</div>
+                <details class="sb-section" id="sbSecAppearance" open>
+                    <summary class="section-title" data-i18n="settings.appearance">Aspetto</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
                         <div class="control-row">
                             <label data-i18n="settings.theme">Tema</label>
@@ -3083,7 +3258,7 @@
                                     <button type="button" class="accent-swatch" data-accent="#f59e0b" title="Ambra" style="background:#f59e0b;"></button>
                                     <button type="button" class="accent-swatch" data-accent="#ec4899" title="Magenta" style="background:#ec4899;"></button>
                                 </div>
-                                <input type="color" id="accentColorInput" value="#475569" title="Colore personalizzato" style="width:32px; height:28px; padding:2px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--input-bg); cursor:pointer;">
+                                <input type="color" id="accentColorInput" value="#475569" data-i18n-title="settings.accentCustom" title="Colore personalizzato" style="width:32px; height:28px; padding:2px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--input-bg); cursor:pointer;">
                             </div>
                         </div>
                         <div class="control-row">
@@ -3105,28 +3280,33 @@
                             <input type="range" id="fontSizeRange" min="11" max="17" step="1" value="13" style="width:180px;">
                         </div>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
 
                 <!-- Scorciatoie -->
-                <div>
-                    <div class="section-title" data-i18n="settings.shortcuts">Scorciatoie da tastiera</div>
+                <details class="sb-section" id="sbSecShortcuts" open>
+                    <summary class="section-title" data-i18n="settings.shortcuts">Scorciatoie da tastiera</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" id="shortcutsPanel" style="padding: 14px; display:flex; flex-direction:column; gap:8px;">
-                        <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;">
-                            Clicca il tasto accanto a un'azione, poi premi la nuova combinazione. <b data-i18n="shortcut.keyEsc">Esc</b> annulla.
+                        <div data-i18n="shortcut.rebindHint" style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;">
+                            Clicca il tasto accanto a un'azione, poi premi la nuova combinazione. Esc annulla.
                         </div>
                         <div id="shortcutsList" style="display:flex; flex-direction:column; gap:4px;">
                             <!-- Righe scorciatoia iniettate qui -->
                         </div>
                         <div id="shortcutConflict" style="display:none; font-size:11px; color:var(--danger, #ef4444); line-height:1.4; padding:4px 0;"></div>
                         <div style="display:flex; gap:6px;">
-                            <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" title="Ripristina tutte le scorciatoie ai valori predefiniti">↺ Ripristina predefiniti</button>
+                            <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" data-i18n-title="shortcut.resetDefaultsTitle" data-i18n="shortcut.resetDefaults" title="Ripristina tutte le scorciatoie ai valori predefiniti">↺ Ripristina predefiniti</button>
                         </div>
                     </div>
-                </div>
+                    </div><!-- /.sb-body -->
+                </details>
 
                 <!-- Sessione Gemini (cookie): tutta la gestione che stava in ui/settings.html -->
                 <div id="settingsCookiesSection">
-                    <div class="section-title" data-i18n="settings.session">Sessione Gemini</div>
+                    <details class="sb-section" id="sbSecSession" open>
+                    <summary class="section-title" data-i18n="settings.session">Sessione Gemini</summary>
+                    <div class="sb-body">
                     <div class="controls-group glass" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
                         <div style="display:flex; align-items:flex-start; gap:10px;">
                             <span id="cookieStatusDot" style="width:10px; height:10px; margin-top:4px; border-radius:50%; flex-shrink:0; background:var(--text-muted);"></span>
@@ -3161,6 +3341,8 @@
                         <div class="screens-section-note" data-i18n="settings.sessionPrivacy">I cookie vengono salvati soltanto su questo computer, nella cartella impostazioni locale, e servono solo ad autenticare le richieste a Gemini: non vengono mai condivisi con terze parti.</div>
                         <div id="cookiePathInfo" style="font-size:10px; color:var(--text-muted); word-break:break-all;"></div>
                     </div>
+                    </div><!-- /.sb-body -->
+                    </details>
                 </div>
 
                 <!-- Avvio / Salvataggio / Plugin: iniettati da 22-screens/26-settings-modal -->
@@ -3565,7 +3747,8 @@
 
             modelNameEl.addEventListener('blur', () => {
                 if (!currentModelData) return;
-                const newName = modelNameEl.textContent.trim().replace(/\s+/g, '_') || "Senza_Nome";
+                const newName = modelNameEl.textContent.trim().replace(/\s+/g, '_')
+                    || t('info.nameDefault').replace(/\s+/g, '_');
                 if (!currentModelData.metadata) currentModelData.metadata = {};
                 currentModelData.metadata.name = newName;
                 modelNameEl.textContent = newName;
@@ -3678,7 +3861,7 @@
                                 const decoded = decodeURIComponent(escape(atob(content.trim())));
                                 parsed = JSON.parse(decoded);
                             } catch (e2) {
-                                throw new Error("Il file non è in formato JSON in chiaro né in formato crittografato .voxelai valido.");
+                                throw new Error(t('alert.fileNotJsonOrVoxelai'));
                             }
                         }
                         if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
@@ -3768,7 +3951,7 @@
 
             submitNewProjectBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const name = newProjectName.value.trim().replace(/\s+/g, '_') || "Nuovo_Modello";
+                const name = newProjectName.value.trim().replace(/\s+/g, '_') || t('newProject.defaultName');
                 const gridParts = newProjectGrid.value.split(',').map(Number);
                 loadSceneFromParsed({
                     metadata: {
@@ -3791,13 +3974,13 @@
                             const decoded = decodeURIComponent(escape(atob(jsonStr.trim())));
                             parsed = JSON.parse(decoded);
                         } catch (e2) {
-                            throw new Error("Il testo inserito non è JSON valido né un codice .voxelai valido.");
+                            throw new Error(t('alert.pasteNotJsonOrVoxelai'));
                         }
                     }
                     if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
                         if (!parsed.metadata) parsed.metadata = {};
                         if (!parsed.metadata.name) {
-                            parsed.metadata.name = "Modello Caricato";
+                            parsed.metadata.name = t('io.loadedModelName');
                         }
                         // T1 Fase B: append se la scena ha già contenuto, altrimenti sostituisce.
                         const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
@@ -4178,7 +4361,7 @@
                 const obj = {
                     id: id,
                     data: d, // live model-data reference (currentModelData for the active object)
-                    get name() { return this.data.metadata.name || this._name || ('Oggetto ' + this.id); },
+                    get name() { return this.data.metadata.name || this._name || t('objects.defaultName', { n: this.id }); },
                     set name(v) { this._name = v; this.data.metadata.name = v; },
                     get voxels() { return this.data.voxels; },
                     set voxels(v) { this.data.voxels = v; },
@@ -4403,10 +4586,16 @@
                 buildModel(resetCamera === true);
             }
 
+            // Solo il testo del badge: separato da applyEditorMode() perche' il cambio
+            // lingua deve ritradurlo SENZA rieseguirne gli effetti (setTool, gizmo).
+            function updateEditorModeBadge() {
+                const badge = document.getElementById('editorModeBadge');
+                if (badge) badge.textContent = editorMode === 'object' ? t('mode.object') : t('mode.edit');
+            }
+
             // Applica alla UI l'attuale editorMode (badge, cursore, tool).
             function applyEditorMode() {
-                const badge = document.getElementById('editorModeBadge');
-                if (badge) badge.textContent = editorMode === 'object' ? 'Modalità Oggetto' : 'Modalità Modifica';
+                updateEditorModeBadge();
                 if (editorMode === 'object') {
                     // In Modalità Oggetto niente editing: torna alla vista/orbita.
                     if (currentTool !== 'view') setTool('view');
@@ -4467,7 +4656,7 @@
 
                     const eye = document.createElement('span');
                     eye.textContent = obj.visible ? '👁' : '🚫';
-                    eye.title = obj.visible ? 'Nascondi oggetto' : 'Mostra oggetto';
+                    eye.title = obj.visible ? t('objects.hide') : t('objects.show');
                     eye.style.cssText = 'cursor:pointer; user-select:none; opacity:' + (obj.visible ? '1' : '0.5') + ';';
                     eye.addEventListener('click', (ev) => {
                         ev.stopPropagation();
@@ -4535,7 +4724,7 @@
 
                             const partDup = document.createElement('span');
                             partDup.textContent = '📋';
-                            partDup.title = 'Duplica come oggetto separato';
+                            partDup.title = t('objects.partDuplicateTitle');
                             partDup.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDup.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
@@ -4556,7 +4745,7 @@
 
                             const partDel = document.createElement('span');
                             partDel.textContent = '🗑';
-                            partDel.title = 'Elimina parte/figlio';
+                            partDel.title = t('objects.partDeleteTitle');
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
@@ -4591,9 +4780,9 @@
                 const delBtn = document.getElementById('objDeleteBtn');
                 if (delBtn) {
                     if (activePartName) {
-                        delBtn.textContent = '🗑 Elimina figlio: ' + activePartName;
+                        delBtn.textContent = t('objects.deleteChild', { name: activePartName });
                     } else {
-                        delBtn.textContent = '🗑 Elimina attivo';
+                        delBtn.textContent = t('objects.delete');
                     }
                 }
             }
@@ -4622,7 +4811,7 @@
                     if (!confirm(t('objects.confirmNew'))) return;
                 }
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
-                const obj = createObject({ metadata: { name: 'Oggetto ' + nextObjectId, grid_size: gSize.slice() }, voxels: [] });
+                const obj = createObject({ metadata: { name: t('objects.defaultName', { n: nextObjectId }), grid_size: gSize.slice() }, voxels: [] });
                 selectActiveObjectAndRefresh(obj.id);
             }
 
@@ -4631,13 +4820,15 @@
                 if (!active) return;
                 const clone = JSON.parse(JSON.stringify(active.data));
                 clone.metadata = clone.metadata || {};
-                clone.metadata.name = (active.name || 'Oggetto') + ' (copia)';
-                const t = active.transform || makeDefaultTransform();
+                clone.metadata.name = t('objects.copyName', { name: active.name || t('objects.defaultNameBase') });
+                // NB: la variabile locale si chiama `tf`, non `t`: `t` e' la funzione i18n
+                // e ombreggiarla qui manderebbe in TDZ la chiamata sopra.
+                const tf = active.transform || makeDefaultTransform();
                 const obj = createObject(clone, {
                     transform: {
-                        position: { x: (t.position.x || 0) + 1, y: t.position.y || 0, z: (t.position.z || 0) + 1 },
-                        rotationY: t.rotationY || 0,
-                        scale: (t.scale === undefined) ? 1 : t.scale
+                        position: { x: (tf.position.x || 0) + 1, y: tf.position.y || 0, z: (tf.position.z || 0) + 1 },
+                        rotationY: tf.rotationY || 0,
+                        scale: (tf.scale === undefined) ? 1 : tf.scale
                     }
                 });
                 selectActiveObjectAndRefresh(obj.id);
@@ -4672,7 +4863,7 @@
                 sceneObjects.splice(idx, 1);
                 selectedObjectIds = selectedObjectIds.filter(id => id !== active.id);
                 if (!sceneObjects.length) {
-                    const empty = createObject({ metadata: { name: 'Oggetto 1', grid_size: [16, 16, 16] }, voxels: [] });
+                    const empty = createObject({ metadata: { name: t('objects.defaultName', { n: 1 }), grid_size: [16, 16, 16] }, voxels: [] });
                     setActiveObject(empty.id);
                 } else {
                     setActiveObject(sceneObjects[Math.max(0, idx - 1)].id);
@@ -4718,7 +4909,7 @@
                 });
                 const baseMeta = toMerge[0].data.metadata || {};
                 const merged = createObject({
-                    metadata: { name: 'Unione', grid_size: (baseMeta.grid_size || [16, 16, 16]).slice() },
+                    metadata: { name: t('objects.mergedName'), grid_size: (baseMeta.grid_size || [16, 16, 16]).slice() },
                     voxels: mergedVoxels
                 });
                 // Rimuove gli originali fusi.
@@ -5459,7 +5650,8 @@
                 gridSelect.disabled = true;
                 modeSelect.disabled = true;
                 uploadImageBtn.disabled = true;
-                generateBtn.innerHTML = '<span class="spinner"></span> Elaborazione...';
+                generateBtn.innerHTML = '<span class="spinner"></span> ';
+                generateBtn.appendChild(document.createTextNode(t('generate.processing')));
                 loaderOverlay.style.display = 'flex';
 
                 // Cattura cio' che inviamo: in "modifica" la palette inviata serve a
@@ -5484,7 +5676,7 @@
                 })
                     .then(res => {
                         if (!res.ok) {
-                            return res.json().then(err => { throw new Error(err.error || "Errore sconosciuto"); });
+                            return res.json().then(err => { throw new Error(err.error || t('common.unknownError')); });
                         }
                         return res.json();
                     })
@@ -5510,9 +5702,9 @@
                         modeSelect.disabled = false;
                         uploadImageBtn.disabled = false;
                         if (modeSelect.value === 'modify') {
-                            generateBtn.innerHTML = "Modifica Modello";
+                            generateBtn.textContent = t('generate.modifyBtn');
                         } else {
-                            generateBtn.innerHTML = "Genera Modello";
+                            generateBtn.textContent = t('generate.generateBtn');
                         }
                         loaderOverlay.style.display = 'none';
                     });
@@ -5573,13 +5765,23 @@
             const undoBtn = document.getElementById('undoBtn');
             const redoBtn = document.getElementById('redoBtn');
 
+            // Chiavi i18n, non testi: il suggerimento viene tradotto al momento in cui
+            // si scrive nel DOM (refreshEditHint), cosi' segue il cambio lingua.
             const HINTS = {
-                view: 'Modalità Vista: trascina per orbitare, rotella per zoom.',
-                place: 'Aggiungi: trascina con tasto sinistro per creare un\'area (Scrap Mechanic). Premi Q per ciclare l\'asse.',
-                remove: 'Rimuovi: trascina con tasto destro o strumento attivo per cancellare aree. Premi Q per ciclare l\'asse.',
-                draw: 'Disegna: trascina per ricolorare un\'intera area. Premi Q per ciclare l\'asse.',
-                pick: 'Contagocce: clic sinistro su un voxel per copiarne il colore.',
+                view: 'hint.view',
+                place: 'hint.place',
+                remove: 'hint.remove',
+                draw: 'hint.draw',
+                pick: 'hint.pick',
             };
+
+            // Riscrive il suggerimento dello strumento corrente. Chiamata da setTool e
+            // dal cambio lingua (setLanguage in 23-i18n.js).
+            function refreshEditHint() {
+                if (!editHint) return;
+                const key = HINTS[currentTool];
+                if (key) editHint.textContent = t(key);
+            }
 
             // --- Preview meshes ---
             // Green ghost cube for "place".
@@ -5688,18 +5890,23 @@
 
             function updateConstraintHUD(axis) {
                 if (!dragConstraintHUD) return;
-                const axisNames = {
-                    x: 'Piano YZ (Larghezza X fissa)',
-                    y: 'Piano XZ (Altezza Y fissa)',
-                    z: 'Piano XY (Profondità Z fissa)'
+                const axisNameKeys = {
+                    x: 'dragPlane.xTitle',
+                    y: 'dragPlane.yTitle',
+                    z: 'dragPlane.zTitle'
                 };
+                // Struttura in innerHTML, testi tradotti con textContent: le traduzioni
+                // contengono apostrofi e virgolette e non vanno interpolate in HTML.
                 dragConstraintHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🔧 <b>Asse Drag:</b> ${axis.toUpperCase()}</span>
-                        <span style="color:var(--text-secondary); font-size:11px;">(${axisNames[axis]})</span>
-                        <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Premi Q per cambiare</span>
+                        <span>🔧 <b class="hud-drag-label"></b> ${axis.toUpperCase()}</span>
+                        <span class="hud-drag-plane" style="color:var(--text-secondary); font-size:11px;"></span>
+                        <span class="hud-drag-hint" style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;"></span>
                     </div>
                 `;
+                dragConstraintHUD.querySelector('.hud-drag-label').textContent = t('hud.dragAxis');
+                dragConstraintHUD.querySelector('.hud-drag-plane').textContent = '(' + t(axisNameKeys[axis]) + ')';
+                dragConstraintHUD.querySelector('.hud-drag-hint').textContent = t('hud.dragAxisChange');
                 dragConstraintHUD.style.display = 'block';
             }
 
@@ -5904,7 +6111,7 @@
                 } else {
                     controls.mouseButtons.LEFT = null;
                 }
-                editHint.textContent = HINTS[tool];
+                refreshEditHint();
                 clearPreview();
                 renderer.domElement.style.cursor = tool === 'view' ? 'grab' : 'crosshair';
             }
@@ -6003,12 +6210,19 @@
                 const nCells = extrudeFaceCells.length;
                 const passi = Math.abs(extrudeSteps);
                 const verso = extrudeSteps === 0 ? '' : (extrudeSteps > 0 ? '+' : '−');
+                // Struttura in innerHTML, testi tradotti con textContent (apostrofi).
                 extrudeHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🧱 <b>Estrusione:</b> asse ${extrudeAxis.toUpperCase()} ${verso}</span>
-                        <span style="color:var(--text-secondary); font-size:11px;">${nCells} facce · ${passi} passi</span>
-                        <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Trascina · E cambia asse · click conferma · Esc annulla</span>
+                        <span>🧱 <b class="hud-extrude-label"></b> <span class="hud-extrude-axis"></span></span>
+                        <span class="hud-extrude-info" style="color:var(--text-secondary); font-size:11px;"></span>
+                        <span class="hud-extrude-controls" style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;"></span>
                     </div>`;
+                extrudeHUD.querySelector('.hud-extrude-label').textContent = t('hud.extrude');
+                extrudeHUD.querySelector('.hud-extrude-axis').textContent =
+                    t('hud.extrudeAxis', { axis: extrudeAxis.toUpperCase(), dir: verso });
+                extrudeHUD.querySelector('.hud-extrude-info').textContent =
+                    t('hud.extrudeInfo', { faces: nCells, steps: passi });
+                extrudeHUD.querySelector('.hud-extrude-controls').textContent = t('hud.extrudeControls');
                 extrudeHUD.style.display = 'block';
             }
 
@@ -6257,13 +6471,15 @@
             undoBtn.addEventListener('click', undo);
             redoBtn.addEventListener('click', redo);
             window.addEventListener('keydown', e => {
-                const t = e.target;
+                // NB: si chiama `tgt` e non `t` perche' `t` e' la funzione i18n: una
+                // `const t` qui la ombreggerebbe in tutto l'handler (TDZ).
+                const tgt = e.target;
                 // I cursori di posa del rig sono <input type="range">: non hanno un "undo"
                 // di testo nativo, quindi Ctrl+Z / Ctrl+Y deve restare GLOBALE anche quando
                 // uno di essi ha il focus (altrimenti annullare una posa nel Rig non fa
                 // nulla). I veri campi di testo, invece, tengono il loro undo nativo.
-                const isRange = !!(t && t.tagName === 'INPUT' && t.type === 'range');
-                const isTextField = !!(t && ((t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable));
+                const isRange = !!(tgt && tgt.tagName === 'INPUT' && tgt.type === 'range');
+                const isTextField = !!(tgt && ((tgt.tagName === 'INPUT' && tgt.type !== 'range') || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT' || tgt.isContentEditable));
 
                 if (e.ctrlKey || e.metaKey) {
                     if (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y') {
@@ -6271,7 +6487,7 @@
                         e.preventDefault();
                         if ((e.key === 'y' || e.key === 'Y') || e.shiftKey) redo(); else undo();
                         // Togli il focus dal cursore cosi' etichette/gizmo riflettono lo stato ripristinato.
-                        if (isRange && typeof t.blur === 'function') t.blur();
+                        if (isRange && typeof tgt.blur === 'function') tgt.blur();
                     }
                     return;
                 }
@@ -6296,12 +6512,14 @@
                         } else {
                             let lockedAxis = 'y';
                             if (dragConstraintMode === 'auto') {
-                                lockedAxis = 'auto (Normale)';
+                                lockedAxis = t('hud.dragAxisAuto');
                             } else {
                                 lockedAxis = dragConstraintMode.toUpperCase();
                             }
                             if (dragConstraintHUD) {
-                                dragConstraintHUD.innerHTML = `<span>🔧 <b>Asse Drag impostato:</b> ${lockedAxis}</span>`;
+                                dragConstraintHUD.innerHTML = '<span>🔧 <b class="hud-drag-label"></b> <span class="hud-drag-value"></span></span>';
+                                dragConstraintHUD.querySelector('.hud-drag-label').textContent = t('hud.dragAxisSet');
+                                dragConstraintHUD.querySelector('.hud-drag-value').textContent = lockedAxis;
                                 dragConstraintHUD.style.display = 'block';
                                 if (window.hudTimeout) clearTimeout(window.hudTimeout);
                                 window.hudTimeout = setTimeout(() => {
@@ -6374,8 +6592,8 @@
                 gizmoTranslateBtn.classList.toggle('active', mode === 'translate');
                 if (typeof updateGizmo === 'function') updateGizmo();
                 if (rig) rigHint.textContent = mode === 'translate'
-                    ? 'Modalità SPOSTA (G): trascina per muovere il giunto e adattare lo scheletro. Premi R per tornare a ruotare.'
-                    : 'Modalità RUOTA (R): trascina gli anelli per posare l\'osso. Premi G per spostare il giunto.';
+                    ? t('gizmo.hintTranslate')
+                    : t('gizmo.hintRotate');
             }
             gizmoRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
             gizmoTranslateBtn.addEventListener('click', () => setGizmoMode('translate'));
@@ -8615,10 +8833,8 @@
                 if (showRigBtn) showRigBtn.style.display = (has && !rigPreviewActive) ? 'block' : 'none';
                 if (rigHint && !rigPreviewActive) {
                     rigHint.textContent = has
-                        ? `Rig salvato su questo oggetto: ${rig.bones.filter(b => !b.helper).length} ossa, posa e pesi inclusi. `
-                          + 'Viene esportato in JSON e GLB. Premi "Mostra rig" per rientrare in anteprima, '
-                          + 'oppure Auto-Rig per rigenerarlo da zero (perdi posa e correzioni dei pesi).'
-                        : 'Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un solo osso, cosi\' i cubi non si deformano).';
+                        ? t('rig.hintSaved', { count: rig.bones.filter(b => !b.helper).length })
+                        : t('rig.hintNoRig');
                 }
                 updateWeightPaintUI();
             }
@@ -8809,6 +9025,66 @@
                 if (typeof updateGizmo === 'function') updateGizmo();
             });
 
+            // --- Frame del personaggio (facing) -------------------------------------
+            // Le clip preimpostate sono scritte in un frame CANONICO: personaggio in
+            // piedi (+Y su) che guarda verso +Z, lato _R a X alta. In buildSkinnedMesh
+            // ogni osso nasce con rotazione IDENTITA' (solo la posizione cambia), quindi
+            // gli assi LOCALI di ogni osso coincidono con quelli del MONDO: le rotazioni
+            // delle clip sono di fatto rotazioni mondo. Se lo scheletro e' orientato
+            // diversamente (correzioni a mano col gizmo G, scheletri importati, file
+            // vecchi) quel frame non vale piu' e le gambe oscillano di fianco.
+            //
+            // rigFacingYaw() ricava l'imbardata (rotazione attorno a Y) dalle ossa:
+            //   1. PIEDI: la coda del piede (o del toeTip) e' la punta -> il davanti.
+            //      E' il segnale piu' affidabile perche' il piede e' l'unico osso
+            //      dell'umanoide autorato lungo l'asse frontale.
+            //   2. Se non ci sono piedi: ASSE LATERALE fra le ossa gemelle _R/_L
+            //      (destra = testa_R - testa_L). Con su = +Y vale avanti = destra x su,
+            //      che su questo scheletro (destra a X alta, davanti a +Z) si riduce a
+            //      avanti = (-rz, 0, rx). Non ha l'ambiguita' di 180 gradi che avrebbe
+            //      il solo asse delle spalle.
+            //   3. Nessuno dei due (scheletro generico, catena qualsiasi) -> 0 = canonico.
+            // Il risultato e' snappato al multiplo di 90 gradi piu' vicino: lo scheletro
+            // e' autorato sugli assi, tutto il resto sarebbe rumore di misura.
+            function rigFacingYaw(bones) {
+                const list = Array.isArray(bones) ? bones : [];
+                const vec = b => (b && Array.isArray(b.head) && Array.isArray(b.tail));
+                let fx = 0, fz = 0;
+                list.forEach(b => {
+                    if (!vec(b) || !/^(foot|toeTip)_[LR]$/.test(b.name || '')) return;
+                    fx += b.tail[0] - b.head[0];
+                    fz += b.tail[2] - b.head[2];
+                });
+                if (Math.hypot(fx, fz) < 1e-3) {
+                    let rx = 0, rz = 0, n = 0;
+                    list.forEach(b => {
+                        const m = /^(.*)_R$/.exec((b && b.name) || '');
+                        if (!m || !vec(b)) return;
+                        const twin = list.find(o => o && o.name === m[1] + '_L');
+                        if (!vec(twin)) return;
+                        rx += b.head[0] - twin.head[0];
+                        rz += b.head[2] - twin.head[2];
+                        n++;
+                    });
+                    if (n && Math.hypot(rx, rz) > 1e-3) { fx = -rz; fz = rx; }
+                }
+                if (Math.hypot(fx, fz) < 1e-3) return 0;
+                // yaw = angolo attorno a Y che porta il davanti canonico (+Z) sul davanti
+                // reale: R_y(yaw) * (0,0,1) = (sin yaw, 0, cos yaw).
+                const steps = ((Math.round(Math.atan2(fx, fz) / (Math.PI / 2)) % 4) + 4) % 4;
+                return steps * 90;
+            }
+
+            // Porta una rotazione scritta nel frame canonico in quello del personaggio:
+            // q' = qFace * q * qFace^-1 (coniugazione). Essendo un omomorfismo, coniugare
+            // ogni rotazione LOCALE equivale a coniugare l'intera posa mondo, quindi il
+            // movimento resta lo stesso "visto dal personaggio". qFace null = identita'
+            // (nessun calcolo: cosi' il caso canonico resta bit-identico a prima).
+            function faceRotate(q, qFace) {
+                if (!qFace) return q;
+                return qFace.clone().multiply(q).multiply(qFace.clone().invert());
+            }
+
             // --- Preset animations --------------------------------------------------
             // Build a few clips procedurally from the bone names present. These are for
             // preview and are embedded into the exported GLB.
@@ -8819,6 +9095,26 @@
                 rig.bones.forEach((bd, i) => byName[bd.name] = skeleton.bones[i]);
                 const q = (rx, ry, rz) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
 
+                // Imbardata del personaggio, dedotta dalle ossa e snappata a 90 gradi.
+                // I due orientamenti STORICI (+Z e -Z) restano gestiti dalla vecchia
+                // convenzione di segni: per gli arti coniugare con un'imbardata di 180
+                // gradi cambia esattamente il segno di X e Z, cioe' produce gli stessi
+                // numeri di legSign/kneeSign. Tenerli evita di toccare anche i pochi
+                // gradi di inclinazione del busto, quindi per gli scheletri esistenti
+                // questa generalizzazione e' un no-op esatto. Per 90/270 i segni non
+                // bastano piu' (le gambe oscillerebbero DI FIANCO) e allora si coniuga.
+                const faceYaw = rigFacingYaw(rig.bones);
+                const legSign = (faceYaw === 180) ? -1 : 1;
+                const kneeSign = (faceYaw === 180) ? 1 : -1;
+                const yawRad = (faceYaw === 90 || faceYaw === 270) ? faceYaw * Math.PI / 180 : 0;
+                const qFace = yawRad
+                    ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawRad)
+                    : null;
+                // Rotazione dell'imbardata applicata a uno spostamento sul piano XZ
+                // (le traslazioni sono vettori, non rotazioni: niente coniugazione).
+                const fCos = Math.cos(yawRad), fSin = Math.sin(yawRad);
+                const faceVec = (dx, dz) => [dx * fCos + dz * fSin, -dx * fSin + dz * fCos];
+
                 // Helper: quaternion track for a bone from keyframes [{t, e:[x,y,z]}].
                 const track = (boneName, keys) => {
                     const bone = byName[boneName];
@@ -8826,7 +9122,7 @@
                     const times = [], values = [];
                     keys.forEach(k => {
                         times.push(k.t);
-                        const qq = q(k.e[0], k.e[1], k.e[2]);
+                        const qq = faceRotate(q(k.e[0], k.e[1], k.e[2]), qFace);
                         values.push(qq.x, qq.y, qq.z, qq.w);
                     });
                     return new THREE.QuaternionKeyframeTrack(`${bone.name}.quaternion`, times, values);
@@ -8835,7 +9131,9 @@
                     tracks.filter(Boolean));
 
                 // Vertical bob: offset the hips bone up/down from its rest position. Keys
-                // are relative dy (in voxel units), added to the bone's rest y.
+                // are relative dy (in voxel units), added to the bone's rest y. Un
+                // eventuale spostamento orizzontale (dx/dz) passa per faceVec: il bob
+                // verticale puro e' invariante per imbardata, quindi qui non cambia nulla.
                 const hipsBone = byName['hips'];
                 const hipsRest = hipsBone ? hipsBone.position.clone() : null;
                 const bob = (keys) => {
@@ -8843,18 +9141,13 @@
                     const times = [], values = [];
                     keys.forEach(k => {
                         times.push(k.t);
-                        values.push(hipsRest.x, hipsRest.y + k.dy, hipsRest.z);
+                        const d = faceVec(k.dx || 0, k.dz || 0);
+                        values.push(hipsRest.x + d[0], hipsRest.y + k.dy, hipsRest.z + d[1]);
                     });
                     return new THREE.VectorKeyframeTrack(`${hipsBone.name}.position`, times, values);
                 };
 
                 const rad = d => d * Math.PI / 180;
-
-                // Detect foot facing direction from the foot bone orientation in rest space.
-                const ftBone = rig.bones.find(b => b.name === 'foot_R' || b.name === 'foot_L');
-                const isFacingNegZ = ftBone ? (ftBone.tail[2] < ftBone.head[2]) : false;
-                const legSign = isFacingNegZ ? -1 : 1;
-                const kneeSign = isFacingNegZ ? 1 : -1;
 
                 // Idle: gentle chest/arm breathing.
                 rigClips.push(clip('idle', 2.4, [
@@ -9000,7 +9293,8 @@
             const PRESET_ANIM_NAMES = ['none', 'idle', 'walk', 'run', 'jump', 'wave'];
 
             function uniqueAnimName(base) {
-                base = (base || 'Animazione').trim() || 'Animazione';
+                const fallback = t('rig.animDefaultName');
+                base = (base || fallback).trim() || fallback;
                 const taken = new Set(PRESET_ANIM_NAMES.map(n => n.toLowerCase()));
                 (rig && rig.customAnims ? rig.customAnims : []).forEach(a => taken.add(String(a.name).toLowerCase()));
                 if (!taken.has(base.toLowerCase())) return base;
@@ -9038,7 +9332,7 @@
                     const delBtn = document.createElement('button');
                     delBtn.className = 'btn btn-secondary';
                     delBtn.textContent = 'X';
-                    delBtn.title = 'Elimina animazione';
+                    delBtn.title = t('rig.deleteAnim');
                     delBtn.style.cssText = 'padding:4px 9px; font-size:11px;';
                     delBtn.addEventListener('click', () => removeCustomAnim(a.name));
                     row.appendChild(label); row.appendChild(playBtn); row.appendChild(delBtn);
@@ -9175,32 +9469,138 @@
                 if (!restoreRigForActiveObject()) updateRigUI();
             });
 
-            function rotateSkeletonY(deg) {
-                if (!rig || !rig.bones || !rig.bones.length) return;
-                pushHistory();
-                const rad = deg * Math.PI / 180;
-                const voxels = currentModelData.voxels || [];
+            /* ===================== RUOTA MODELLO =====================
+               Prima qui c'era rotateSkeletonY(): ruotava SOLO teste e code delle ossa.
+               Era una trappola: le clip preimpostate sono rotazioni MONDO (ogni osso
+               nasce con rotazione identita', vedi buildSkinnedMesh), quindi girare lo
+               scheletro non girava le animazioni - braccia che si aprivano dal lato
+               sbagliato, oscillazione invertita, _L/_R fisicamente scambiati.
+
+               Ora si gira il PERSONAGGIO: i voxel ruotano davvero, lo scheletro resta
+               nella sua orientazione canonica e il rig viene ri-legato (pesi ricalcolati,
+               mesh e clip rifatte). La rotazione e' a passi esatti di 90 gradi e sfrutta
+               solo aritmetica INTERA (rotazione attorno all'origine + traslazione), per
+               cui e' senza perdite e perfettamente reversibile: quattro click di +90
+               riportano esattamente ai voxel di partenza. */
+
+            // Piano di rotazione: restituisce la mappa (x,z) -> (x,z) e la nuova
+            // grid_size, oppure null se non c'e' niente da fare. Funzione PURA (nessuna
+            // scrittura), cosi' e' verificabile: vedi tests/test_rig_rotate.mjs.
+            //   steps 1..3 = 90/180/270 gradi antiorari attorno a +Y.
+            // La traslazione viene scelta in modo che:
+            //   - se la griglia e' nota E tutti i voxel stanno dentro la scatola
+            //     [0,gx-1] x [0,gz-1], la scatola ruotata torna sulla scatola (scambiata
+            //     su X/Z per 90/270). E' equivalente a ruotare attorno al centro della
+            //     GRIGLIA (gx-1)/2, e nessuna coordinata puo' uscire dai limiti;
+            //   - altrimenti (voxel fuori scatola, griglia assente) si ruota attorno al
+            //     bounding box e si trasla perche' l'angolo minimo del modello resti
+            //     dov'era, poi si rientra a forza nei limiti se conosciuti. In nessun
+            //     caso si scende sotto zero.
+            function planRotationY(voxels, steps, gridSize) {
+                steps = ((Math.round(steps) % 4) + 4) % 4;
+                if (!steps || !voxels || !voxels.length) return null;
+                const cos = [1, 0, -1, 0][steps];
+                const sin = [0, 1, 0, -1][steps];
+                const rx = (x, z) => x * cos - z * sin;
+                const rz = (x, z) => x * sin + z * cos;
+
+                const g = Array.isArray(gridSize) ? gridSize.map(n => Math.round(Number(n) || 0)) : null;
+                const gx = g && g[0] > 0 ? g[0] : 0;
+                const gy = g && g[1] > 0 ? g[1] : 0;
+                const gz = g && g[2] > 0 ? g[2] : 0;
                 const b = voxelBounds(voxels);
-                const cx = b.cx, cz = b.cz;
-                const cos = Math.cos(rad), sin = Math.sin(rad);
+                const inGrid = gx > 0 && gz > 0 &&
+                    b.minX >= 0 && b.minZ >= 0 && b.maxX <= gx - 1 && b.maxZ <= gz - 1;
+                // Su 90/270 la scatola si scambia: una griglia 32x16 diventa 16x32.
+                const swap = (steps === 1 || steps === 3);
+                const ngx = swap ? gz : gx, ngz = swap ? gx : gz;
 
-                rig.bones.forEach(bone => {
-                    const hx = bone.head[0] - cx, hz = bone.head[2] - cz;
-                    bone.head[0] = cx + (hx * cos - hz * sin);
-                    bone.head[2] = cz + (hx * sin + hz * cos);
+                let tx, tz;
+                if (inGrid) {
+                    // Angoli della scatola ruotati: la traslazione e' quella che li
+                    // riporta a 0 (aritmetica intera, quindi esatta).
+                    const cs = [[0, 0], [gx - 1, 0], [0, gz - 1], [gx - 1, gz - 1]];
+                    tx = -Math.min(...cs.map(c => rx(c[0], c[1])));
+                    tz = -Math.min(...cs.map(c => rz(c[0], c[1])));
+                } else {
+                    const cs = [[b.minX, b.minZ], [b.maxX, b.minZ], [b.minX, b.maxZ], [b.maxX, b.maxZ]];
+                    tx = b.minX - Math.min(...cs.map(c => rx(c[0], c[1])));
+                    tz = b.minZ - Math.min(...cs.map(c => rz(c[0], c[1])));
+                    // Rientro nei limiti quando la griglia e' nota: prima il fondo scala
+                    // (mai coordinate negative), poi il tetto se il modello ci sta.
+                    const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+                    const nw = swap ? d : w, nd = swap ? w : d;
+                    if (ngx > 0 && b.minX + nw > ngx - 1) tx -= (b.minX + nw) - (ngx - 1);
+                    if (ngz > 0 && b.minZ + nd > ngz - 1) tz -= (b.minZ + nd) - (ngz - 1);
+                    tx = Math.round(tx); tz = Math.round(tz);
+                    const shiftX = Math.min(...cs.map(c => rx(c[0], c[1]))) + tx;
+                    const shiftZ = Math.min(...cs.map(c => rz(c[0], c[1]))) + tz;
+                    if (shiftX < 0) tx -= shiftX;
+                    if (shiftZ < 0) tz -= shiftZ;
+                }
+                return {
+                    steps: steps,
+                    map: (x, z) => [rx(x, z) + tx, rz(x, z) + tz],
+                    grid: (gx > 0 && gz > 0) ? [ngx, gy || 0, ngz] : null
+                };
+            }
 
-                    const tx = bone.tail[0] - cx, tz = bone.tail[2] - cz;
-                    bone.tail[0] = cx + (tx * cos - tz * sin);
-                    bone.tail[2] = cz + (tx * sin + tz * cos);
+            // Applica il piano ai DATI dell'oggetto attivo: voxel, grid_size e le
+            // sovrascritture del weight paint (rig.weights e' indicizzato "x,y,z", quindi
+            // ogni chiave deve seguire il suo voxel). Le ossa e la posa NON si toccano:
+            // e' esattamente il punto di questa funzione, lo scheletro resta canonico.
+            // Nessuna UI qui dentro, cosi' i test possono verificare solo i dati.
+            function applyModelRotation(steps) {
+                const voxels = (currentModelData && currentModelData.voxels) || [];
+                const meta = (currentModelData && currentModelData.metadata) || null;
+                const plan = planRotationY(voxels, steps, meta && meta.grid_size);
+                if (!plan) return false;
+                voxels.forEach(v => {
+                    const p = plan.map(v.x, v.z);
+                    v.x = p[0]; v.z = p[1];
                 });
+                if (meta && plan.grid) meta.grid_size = plan.grid;
+                if (rig && rig.weights) {
+                    const moved = {};
+                    Object.keys(rig.weights).forEach(k => {
+                        const c = k.split(',').map(Number);
+                        if (c.length !== 3 || c.some(n => !Number.isFinite(n))) return;
+                        const p = plan.map(c[0], c[2]);
+                        moved[p[0] + ',' + c[1] + ',' + p[1]] = rig.weights[k];
+                    });
+                    rig.weights = Object.keys(moved).length ? moved : null;
+                }
+                return true;
+            }
 
-                applyRig();
+            // Ruota il modello attivo di `deg` gradi (multipli di 90) attorno a Y e
+            // ri-lega il rig. Ritorna false se non c'era nulla da ruotare.
+            function rotateModelY(deg) {
+                const steps = ((Math.round((Number(deg) || 0) / 90) % 4) + 4) % 4;
+                if (!steps) return false;
+                if (!((currentModelData && currentModelData.voxels) || []).length) return false;
+                pushHistory();
+                if (!applyModelRotation(steps)) return false;
+                // Stessa sequenza delle altre operazioni che riscrivono TUTTI i voxel
+                // (vedi objDelete / bake del pannello Proprieta'): l'indice incrementale
+                // punta ai voxel vecchi, quindi va invalidato prima del rebuild.
+                const sel = selectedBoneIndex;
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                buildModel(false);      // ricostruisce voxelMap, visibilita', mesh e palette
+                if (rig && rig.bones && rig.bones.length) {
+                    applyRig();         // re-bind: pesi ricalcolati sul corpo ruotato, clip rifatte
+                    if (sel >= 0 && sel < rig.bones.length) selectBone(sel);
+                }
+                if (typeof requestRender === 'function') requestRender();
+                return true;
             }
 
             const rotateRig90Btn = document.getElementById('rotateRig90Btn');
             const rotateRig180Btn = document.getElementById('rotateRig180Btn');
-            if (rotateRig90Btn) rotateRig90Btn.addEventListener('click', () => rotateSkeletonY(90));
-            if (rotateRig180Btn) rotateRig180Btn.addEventListener('click', () => rotateSkeletonY(180));
+            const rotateRigM90Btn = document.getElementById('rotateRigM90Btn');
+            if (rotateRig90Btn) rotateRig90Btn.addEventListener('click', () => rotateModelY(90));
+            if (rotateRig180Btn) rotateRig180Btn.addEventListener('click', () => rotateModelY(180));
+            if (rotateRigM90Btn) rotateRigM90Btn.addEventListener('click', () => rotateModelY(-90));
 
             toggleSkeleton.addEventListener('change', updateRigVisibility);
             toggleWeightColors.addEventListener('change', updateRigVisibility);
@@ -9869,28 +10269,30 @@
              * conflitti (tasto già usato) e li segnala in italiano senza applicare.
              * Dopo un rebind valido aggiorna KEYMAP in memoria (applicazione immediata)
              * e persiste via savePref('keymap', ...). */
+            // Chiavi i18n: le etichette vengono tradotte in collectShortcutBindings(),
+            // cosi' il pannello segue il cambio lingua senza tabelle duplicate.
             const SHORTCUT_TOOL_LABELS = {
-                view: 'Strumento: Vista',
-                place: 'Strumento: Aggiungi',
-                remove: 'Strumento: Rimuovi',
-                draw: 'Strumento: Disegna',
-                pick: 'Strumento: Contagocce'
+                view: 'shortcut.toolView',
+                place: 'shortcut.toolPlace',
+                remove: 'shortcut.toolRemove',
+                draw: 'shortcut.toolDraw',
+                pick: 'shortcut.toolPick'
             };
             const SHORTCUT_SINGLE_LABELS = {
-                toggleMode: 'Modalità Oggetto/Modifica',
-                extrude: 'Estrusione',
-                brushDown: 'Pennello −',
-                brushUp: 'Pennello +'
+                toggleMode: 'shortcut.toggleMode',
+                extrude: 'shortcut.extrude',
+                brushDown: 'shortcut.brushDown',
+                brushUp: 'shortcut.brushUp'
             };
             const SHORTCUT_SINGLE_ORDER = ['toggleMode', 'extrude', 'brushDown', 'brushUp'];
 
             function keyDisplay(k) {
-                if (k === ' ' || k === 'Spacebar' || k === 'Space') return 'Spazio';
+                if (k === ' ' || k === 'Spacebar' || k === 'Space') return t('shortcut.keySpace');
                 if (k === 'ArrowUp') return '↑';
                 if (k === 'ArrowDown') return '↓';
                 if (k === 'ArrowLeft') return '←';
                 if (k === 'ArrowRight') return '→';
-                if (k === 'Escape') return 'Esc';
+                if (k === 'Escape') return t('shortcut.keyEsc');
                 if (typeof k !== 'string' || k.length === 0) return '—';
                 return k.length === 1 ? k.toUpperCase() : k;
             }
@@ -9906,12 +10308,12 @@
                 Object.keys(tools).forEach(k => { keyByTool[tools[k]] = k; });
                 toolOrder.forEach(tool => {
                     if (keyByTool[tool] !== undefined) {
-                        list.push({ id: 'tool:' + tool, type: 'tool', tool, key: keyByTool[tool], label: SHORTCUT_TOOL_LABELS[tool] });
+                        list.push({ id: 'tool:' + tool, type: 'tool', tool, key: keyByTool[tool], label: t(SHORTCUT_TOOL_LABELS[tool]) });
                     }
                 });
                 SHORTCUT_SINGLE_ORDER.forEach(prop => {
                     if (KEYMAP[prop] !== undefined) {
-                        list.push({ id: 'single:' + prop, type: 'single', prop, key: KEYMAP[prop], label: SHORTCUT_SINGLE_LABELS[prop] });
+                        list.push({ id: 'single:' + prop, type: 'single', prop, key: KEYMAP[prop], label: t(SHORTCUT_SINGLE_LABELS[prop]) });
                     }
                 });
                 return list;
@@ -9940,7 +10342,7 @@
             function assignShortcut(binding, newKey) {
                 const conflict = collectShortcutBindings().find(b => b.id !== binding.id && b.key === newKey);
                 if (conflict) {
-                    showShortcutConflict('Il tasto "' + keyDisplay(newKey) + '" è già usato da "' + conflict.label + '". Scegli un altro tasto.');
+                    showShortcutConflict(t('shortcut.conflict', { key: keyDisplay(newKey), action: conflict.label }));
                     return false;
                 }
                 showShortcutConflict('');
@@ -10254,9 +10656,9 @@
             function decodeVox(arrayBuffer) {
                 const dv = new DataView(arrayBuffer);
                 const bytes = new Uint8Array(arrayBuffer);
-                if (bytes.length < 8) throw new Error('.vox troppo corto');
+                if (bytes.length < 8) throw new Error(t('formats.voxTooShort'));
                 const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-                if (magic !== 'VOX ') throw new Error('Magic .vox non valido (atteso "VOX ")');
+                if (magic !== 'VOX ') throw new Error(t('formats.voxBadMagic'));
                 // version = dv.getInt32(4, true) — non serve validarla.
 
                 // Il primo chunk (a offset 8) e' MAIN; ne scandiamo i children.
@@ -10305,7 +10707,7 @@
                 // Parte dal primo chunk (MAIN) subito dopo l'header di 8 byte.
                 walk(8, bytes.length);
 
-                if (!models.length) throw new Error('.vox senza modelli (nessun XYZI)');
+                if (!models.length) throw new Error(t('formats.voxNoModels'));
                 const m = models[0]; // importiamo il PRIMO modello. LIMITE: multi-modello non fuso.
 
                 // Palette: RGBA se presente, altrimenti fallback default. colorIndex n -> palette[n-1].
@@ -10523,7 +10925,7 @@
                     const ab = await new Response(ds.readable).arrayBuffer();
                     return new Uint8Array(ab);
                 }
-                throw new Error('File .schem gzip ma non ho modo di decomprimerlo (manca pako/DecompressionStream).');
+                throw new Error(t('formats.schemNoGunzip'));
             }
 
             // --- Decoder NBT minimale (BIG-endian) per l'import .schem ------------
@@ -10547,11 +10949,11 @@
                         case 10: { const obj = {}; while (true) { const t = bytes[o++]; if (t === 0) break; const nm = name(); obj[nm] = payload(t); } return obj; } // Compound
                         case 11: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(i32()); return arr; } // IntArray
                         case 12: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) { const hi = i32(), lo = i32(); arr.push(hi * 4294967296 + (lo >>> 0)); } return arr; } // LongArray
-                        default: throw new Error('Tag NBT non supportato: ' + type);
+                        default: throw new Error(t('formats.nbtUnsupportedTag', { tag: type }));
                     }
                 }
                 const rootType = bytes[o++];
-                if (rootType !== 10) throw new Error('NBT root non e\' un compound');
+                if (rootType !== 10) throw new Error(t('formats.nbtRootNotCompound'));
                 name(); // nome root (di solito "Schematic")
                 return payload(10);
             }
@@ -10572,7 +10974,7 @@
                 MC_BLOCK_COLORS.forEach(b => { blockColor[b[0]] = fmtHexRGB(b[1], b[2], b[3]); });
 
                 const blockData = s.BlockData;
-                if (!blockData) throw new Error('.schem senza BlockData');
+                if (!blockData) throw new Error(t('formats.schemNoBlockData'));
                 const off = { o: 0 };
                 const voxels = [];
                 for (let y = 0; y < H; y++) {
@@ -10636,7 +11038,7 @@
                 const nameLc = (file.name || '').toLowerCase();
                 if (nameLc.endsWith('.vox')) return Promise.resolve(decodeVox(arrayBuffer));
                 if (nameLc.endsWith('.schem') || nameLc.endsWith('.schematic')) return decodeSchem(arrayBuffer);
-                return Promise.reject(new Error('Formato binario non riconosciuto: ' + file.name));
+                return Promise.reject(new Error(t('project.unknownBinary', { ext: file.name })));
             }
 
             /* ===== T-progetto: Formato nativo .voxai + autosave + versioning =========
@@ -10723,7 +11125,7 @@
                 const now = new Date();
                 const hh = String(now.getHours()).padStart(2, '0');
                 const mm = String(now.getMinutes()).padStart(2, '0');
-                setAutosaveStatus('Salvato automaticamente ' + hh + ':' + mm);
+                setAutosaveStatus(t('project.autosavedAt', { time: hh + ':' + mm }));
             }
 
             // --- aggiornamento progetti recenti (best-effort) -------------------
@@ -11088,12 +11490,18 @@
                 }
 
                 /* ---------- 1. Launcher "Progetti recenti" ---------- */
+                // I18N. Il markup nasce a load, cioe' PRIMA che bootI18n abbia il
+                // dizionario: usare t() qui stamperebbe le chiavi. Si segue quindi la
+                // stessa strada del template (data-i18n + testo italiano come
+                // segnaposto) e si chiama applyI18n() sul nodo appena creato: pre-boot
+                // e' un no-op (applyI18n scrive solo le chiavi che trova nel dizionario),
+                // quindi l'italiano resta corretto anche se i locali non arrivano, e al
+                // cambio lingua ci pensa applyI18n(document) di setLanguage().
                 function buildLauncherDom() {
                     if (document.getElementById('launcherOverlay')) return;
                     const ov = document.createElement('div');
                     ov.id = 'launcherOverlay';
                     ov.setAttribute('role', 'dialog');
-                    ov.setAttribute('aria-label', 'Apri o crea un progetto');
                     ov.innerHTML =
                         '<div class="launcher-card glass">' +
                           '<div class="launcher-logo">' +
@@ -11101,21 +11509,22 @@
                             '<div><div style="font-size:18px;font-weight:700;color:var(--text-primary);">Voxel AI Artist</div>' +
                             '<div style="font-size:11px;color:var(--accent-primary);">by KFDev</div></div>' +
                           '</div>' +
-                          '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 16px;">Riprendi un progetto recente o creane uno nuovo.</div>' +
-                          '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">Progetti recenti</div>' +
+                          '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 16px;" data-i18n="launcher.subtitle">Riprendi un progetto recente o creane uno nuovo.</div>' +
+                          '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;" data-i18n="launcher.recentTitle">Progetti recenti</div>' +
                           '<div id="launcherRecentList" style="overflow-y:auto;flex:1;min-height:60px;max-height:320px;margin-bottom:14px;"></div>' +
                           '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
-                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena">＋ Nuovo progetto</button>' +
-                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)">📂 Apri progetto…</button>' +
+                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena" data-i18n-title="launcher.newBtnTitle" data-i18n="launcher.newBtn">＋ Nuovo progetto</button>' +
+                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)" data-i18n-title="launcher.openBtnTitle" data-i18n="launcher.openBtn">📂 Apri progetto…</button>' +
                           '</div>' +
                           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--glass-border);padding-top:12px;">' +
                             '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;">' +
                               '<input type="checkbox" id="launcherShowOnStart" checked style="cursor:pointer;accent-color:var(--accent-primary);">' +
-                              'Mostra questa schermata all\'avvio</label>' +
-                            '<button class="btn btn-secondary" id="launcherSkipBtn" style="font-size:12px;padding:8px 16px;" title="Chiudi e vai alla scena corrente">Salta</button>' +
+                              '<span data-i18n="launcher.showOnStart">Mostra questa schermata all\'avvio</span></label>' +
+                            '<button class="btn btn-secondary" id="launcherSkipBtn" style="font-size:12px;padding:8px 16px;" title="Chiudi e vai alla scena corrente" data-i18n-title="launcher.skipTitle" data-i18n="launcher.skip">Salta</button>' +
                           '</div>' +
                         '</div>';
                     document.body.appendChild(ov);
+                    if (typeof applyI18n === 'function') applyI18n(ov);
 
                     // Chiude cliccando fuori dalla card.
                     ov.addEventListener('click', (e) => { if (e.target === ov) hideLauncher(); });
@@ -11139,6 +11548,10 @@
                 function showLauncher() {
                     const ov = document.getElementById('launcherOverlay');
                     if (!ov) return;
+                    // aria-label: applyI18n non gestisce gli attributi ARIA, e qui siamo
+                    // sicuramente dopo il boot i18n (il launcher si apre su interazione
+                    // o dopo la lettura delle prefs).
+                    ov.setAttribute('aria-label', t('launcher.dialogLabel'));
                     ov.classList.add('visible');
                     refreshLauncherRecent();
                 }
@@ -11152,7 +11565,7 @@
                 function launcherNewProject() {
                     try {
                         if (typeof loadSceneFromParsed === 'function') {
-                            loadSceneFromParsed({ metadata: { name: 'Nuovo_Modello', grid_size: [16, 16, 16] }, voxels: [] });
+                            loadSceneFromParsed({ metadata: { name: t('newProject.defaultName'), grid_size: [16, 16, 16] }, voxels: [] });
                             if (typeof buildModel === 'function') buildModel();
                         }
                     } catch (e) { /* se fallisce restiamo sulla scena corrente */ }
@@ -11229,7 +11642,7 @@
                         row.title = it.path || '';
                         const info = document.createElement('div');
                         info.style.cssText = 'overflow:hidden;';
-                        const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || 'Progetto';
+                        const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || t('launcher.projectFallback');
                         info.innerHTML = '<div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(nm) + '</div>' +
                             '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(it.path || '') + (it.lastOpened ? ' · ' + fmtRecentDate(it.lastOpened) : '') + '</div>';
                         info.style.cursor = 'pointer';
@@ -11237,7 +11650,7 @@
                         const del = document.createElement('button');
                         del.className = 'launcher-recent-del';
                         del.textContent = '✕';
-                        del.title = 'Rimuovi dai recenti';
+                        del.title = t('launcher.removeRecent');
                         del.addEventListener('click', async (e) => { e.stopPropagation(); await deleteRecent(it.path); refreshLauncherRecent(); });
                         row.appendChild(info);
                         row.appendChild(del);
@@ -11270,28 +11683,31 @@
 
                     const wrap = document.createElement('div');
                     wrap.id = 'startupSettingsSection';
+                    // I18N: come il launcher, data-i18n + italiano come segnaposto
+                    // (questa funzione gira a load, prima del dizionario).
                     wrap.innerHTML =
-                        '<div class="section-title">Avvio</div>' +
+                        '<div class="section-title" data-i18n="screens.startup">Avvio</div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<label class="control-row" style="cursor:pointer;">' +
-                            '<span>Mostra la schermata iniziale all\'avvio</span>' +
+                            '<span data-i18n="screens.showLauncher">Mostra la schermata iniziale all\'avvio</span>' +
                             '<label class="switch"><input type="checkbox" id="settingsShowLauncher" checked><span class="slider"></span></label>' +
                           '</label>' +
-                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti">🗂 Apri schermata iniziale</button>' +
+                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti" data-i18n-title="screens.openLauncherTitle" data-i18n="screens.openLauncher">🗂 Apri schermata iniziale</button>' +
                         '</div>' +
-                        '<div class="section-title">Salvataggio</div>' +
+                        '<div class="section-title" data-i18n="screens.saving">Salvataggio</div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<div class="control-row">' +
-                            '<label>Cartella di default (Salvataggio/Esportazione)</label>' +
+                            '<label data-i18n="screens.defaultDir">Cartella di default (Salvataggio/Esportazione)</label>' +
                             '<div style="display:flex; gap:6px; flex:1;">' +
-                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly placeholder="Predefinita (Appdata)">' +
-                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;">Sfoglia...</button>' +
+                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly placeholder="Predefinita (Appdata)" data-i18n-placeholder="screens.defaultDirPlaceholder">' +
+                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;" data-i18n="common.browse">Sfoglia...</button>' +
                             '</div>' +
                           '</div>' +
-                          '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata dal backend Python (funziona sia in modalità web sia desktop).</div>' +
-                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>' +
+                          '<div class="screens-section-note" data-i18n="screens.autosaveNote">I salvataggi automatici vengono conservati in una cartella dedicata dal backend Python (funziona sia in modalità web sia desktop).</div>' +
+                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder">📁 Apri cartella autosave</button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
+                    if (typeof applyI18n === 'function') applyI18n(wrap);
 
                     const defaultSaveInput = document.getElementById('settingsDefaultSaveDir');
                     if (defaultSaveInput && typeof window.getPref === 'function') {
@@ -11354,31 +11770,37 @@
                     if (!footer || footer.dataset.grouped) return;
                     footer.dataset.grouped = '1';
 
-                    function groupLabel(text) {
+                    function groupLabel(key) {
                         const d = document.createElement('div');
                         d.className = 'screens-toolbar-group';
-                        d.textContent = text;
+                        d.setAttribute('data-i18n', key);
+                        d.textContent = t(key);
                         d.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:6px 0 2px;';
                         return d;
                     }
                     // Etichetta "Progetto" davanti al blocco salva/apri (primo figlio).
                     const first = footer.firstElementChild;
-                    if (first) footer.insertBefore(groupLabel('Progetto'), first);
+                    if (first) footer.insertBefore(groupLabel('toolbar.groupProject'), first);
                     // Etichetta "File / Export" prima del primo btn-group (export OBJ/MTL).
                     const firstBtnGroup = footer.querySelector('.btn-group');
-                    if (firstBtnGroup) footer.insertBefore(groupLabel('File / Export'), firstBtnGroup);
+                    if (firstBtnGroup) footer.insertBefore(groupLabel('toolbar.groupFileExport'), firstBtnGroup);
 
                     // Tooltip di rinforzo (solo se assenti) sui pulsanti principali.
                     const tips = {
-                        savePlainJsonBtn: 'Salva la scena come file JSON in chiaro (.json)',
-                        exportMtlBtn: 'Esporta il file materiali (.mtl) da affiancare all\'OBJ',
-                        exportObjBtn: 'Esporta la mesh in Wavefront OBJ (con MTL)',
-                        exportGlbBtn: 'Esporta GLB con scheletro e animazioni (Blender/Unity/Godot)'
+                        savePlainJsonBtn: 'toolbar.savePlainJsonTitle',
+                        exportMtlBtn: 'toolbar.exportMtlTitle',
+                        exportObjBtn: 'toolbar.exportObjTitle',
+                        exportGlbBtn: 'toolbar.exportGlbTitle'
                     };
                     Object.keys(tips).forEach(id => {
                         const el = document.getElementById(id);
-                        if (el && !el.getAttribute('title')) el.setAttribute('title', tips[id]);
+                        if (el && !el.getAttribute('title')) {
+                            // data-i18n-title: il tooltip segue poi i cambi di lingua.
+                            el.setAttribute('data-i18n-title', tips[id]);
+                            el.setAttribute('title', t(tips[id]));
+                        }
                     });
+                    if (typeof applyI18n === 'function') applyI18n(footer);
                 }
 
                 /* ---------- Init: applica prefs e mostra il launcher all'avvio ---------- */
@@ -11505,6 +11927,28 @@
                     if (typeof renderPaletteSwatches === 'function') {
                         try { renderPaletteSwatches(); } catch (e) { }
                     }
+                    // Stesso motivo per le altre parti costruite da JS: liste, badge e
+                    // suggerimenti nascono prima del dizionario (o vengono ridisegnati
+                    // solo a fronte di un'azione dell'utente), quindi resterebbero nella
+                    // lingua precedente. Le funzioni vivono nello stesso scope condiviso
+                    // dei moduli (non su window), quindi si citano per nome con la
+                    // guardia typeof: un modulo assente o un errore interno non deve
+                    // fermare il cambio lingua.
+                    if (typeof renderObjectsList === 'function') {          // 04-objects.js
+                        try { renderObjectsList(); } catch (e) { }
+                    }
+                    if (typeof updateEditorModeBadge === 'function') {      // 04-objects.js
+                        try { updateEditorModeBadge(); } catch (e) { }
+                    }
+                    if (typeof refreshEditHint === 'function') {            // 09-editing-engine.js
+                        try { refreshEditHint(); } catch (e) { }
+                    }
+                    if (typeof renderShortcutsPanel === 'function') {       // 19-prefs.js
+                        try { renderShortcutsPanel(); } catch (e) { }
+                    }
+                    if (typeof refreshPluginLabels === 'function') {        // 24-plugins.js
+                        try { refreshPluginLabels(); } catch (e) { }
+                    }
                     i18nApplied = true;
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
@@ -11625,8 +12069,9 @@
             const BUILTIN_PLUGINS = [
                 {
                     id: 'mirror-x',
-                    name: 'Specchia su X',
-                    desc: 'Duplica i voxel riflettendoli sull\'asse X (crea simmetria).',
+                    // nameKey/descKey: tradotti al rendering (vedi refreshPluginLabels).
+                    nameKey: 'plugins.builtinMirrorX',
+                    descKey: 'plugins.builtinMirrorXDesc',
                     code:
 "// Specchia il modello sull'asse X.\n" +
 "function transform(voxels, api) {\n" +
@@ -11644,8 +12089,8 @@
                 },
                 {
                     id: 'grayscale',
-                    name: 'Scala di grigi',
-                    desc: 'Converte i colori di tutti i voxel in scala di grigi (luminanza).',
+                    nameKey: 'plugins.builtinGrayscale',
+                    descKey: 'plugins.builtinGrayscaleDesc',
                     code:
 "// Converte ogni voxel in grigio secondo la luminanza percepita.\n" +
 "function transform(voxels, api) {\n" +
@@ -11658,8 +12103,8 @@
                 },
                 {
                     id: 'hollow',
-                    name: 'Svuota interno',
-                    desc: 'Rimuove i voxel completamente circondati (mantiene solo il guscio).',
+                    nameKey: 'plugins.builtinHollow',
+                    descKey: 'plugins.builtinHollowDesc',
                     code:
 "// Mantiene solo i voxel esposti: rimuove quelli con tutti e 6 i vicini pieni.\n" +
 "function transform(voxels, api) {\n" +
@@ -11670,6 +12115,21 @@
 "}\n"
                 }
             ];
+
+            // Ritraduce tendina e descrizione: nascono a load, cioe' prima che il
+            // dizionario i18n sia arrivato. Chiamata da setLanguage() (23-i18n.js).
+            function refreshPluginLabels() {
+                const sel = document.getElementById('pluginSelect');
+                if (sel) {
+                    Array.from(sel.options).forEach(o => {
+                        const p = BUILTIN_PLUGINS.find(x => x.id === o.value);
+                        if (p) o.textContent = t(p.nameKey);
+                    });
+                }
+                const descEl = document.getElementById('pluginDesc');
+                const cur = sel ? BUILTIN_PLUGINS.find(x => x.id === sel.value) : null;
+                if (descEl && cur) descEl.textContent = t(cur.descKey);
+            }
 
             // --- Sorgente del bootstrap del Worker (stringa: gira in un contesto isolato) ---
             // Riceve {code, voxels, metadata}; azzera le API pericolose; definisce l'api
@@ -11725,14 +12185,14 @@
                 }
                 function loadIntoEditor(p) {
                     codeEl.value = p.code;
-                    if (descEl) descEl.textContent = p.desc || '';
+                    if (descEl) descEl.textContent = p.descKey ? t(p.descKey) : '';
                     setStatus('', null);
                 }
 
                 // Popola la tendina.
                 BUILTIN_PLUGINS.forEach(p => {
                     const o = document.createElement('option');
-                    o.value = p.id; o.textContent = p.name;
+                    o.value = p.id; o.textContent = t(p.nameKey);
                     sel.appendChild(o);
                 });
                 sel.value = BUILTIN_PLUGINS[0].id;
@@ -11742,9 +12202,9 @@
 
                 // Valida e normalizza i voxel restituiti dal plugin.
                 function sanitize(list) {
-                    if (!Array.isArray(list)) throw new Error('lo script deve restituire un array di voxel');
+                    if (!Array.isArray(list)) throw new Error(t('plugins.notArray'));
                     if (list.length > PLUGIN_MAX_VOXELS)
-                        throw new Error('troppi voxel restituiti (' + list.length + ' > ' + PLUGIN_MAX_VOXELS + ')');
+                        throw new Error(t('plugins.tooManyVoxels', { n: list.length, max: PLUGIN_MAX_VOXELS }));
                     const out = [];
                     let dropped = 0;
                     const hex = /^#[0-9a-fA-F]{6}$/;
@@ -11768,8 +12228,8 @@
                     if (typeof pushHistory === 'function') pushHistory();
                     currentModelData.voxels = out;
                     if (typeof buildModel === 'function') buildModel(false, true);
-                    let msg = (typeof t === 'function' ? t('plugins.done') : 'Fatto') + ': ' + out.length + ' voxel';
-                    if (dropped) msg += ' (' + dropped + ' scartati non validi)';
+                    let msg = t('plugins.doneCount', { n: out.length });
+                    if (dropped) msg += ' ' + t('plugins.dropped', { n: dropped });
                     if (logs && logs.length) msg += ' — ' + logs.join(' | ');
                     setStatus(msg, 'ok');
                 }
@@ -11826,14 +12286,14 @@
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
                             const d = ev.data || {};
-                            if (!d.ok) { setStatus('Errore plugin: ' + (d.error || '?'), 'error'); return; }
+                            if (!d.ok) { setStatus(t('plugins.pluginError', { error: d.error || '?' }), 'error'); return; }
                             try { applyResult(d.voxels, d.logs); }
-                            catch (e) { setStatus('Errore: ' + e.message, 'error'); }
+                            catch (e) { setStatus(t('plugins.genericError', { error: e.message }), 'error'); }
                         };
                         worker.onerror = (e) => {
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
-                            setStatus('Errore plugin: ' + (e.message || 'esecuzione fallita'), 'error');
+                            setStatus(t('plugins.pluginError', { error: e.message || t('plugins.execFailed') }), 'error');
                         };
                         worker.postMessage(payload);
                         return;
@@ -11844,9 +12304,9 @@
                         try {
                             const { result, logs } = runInline(code, payload);
                             applyResult(result, logs);
-                            if (statusEl && statusEl.textContent) statusEl.textContent += ' [fallback senza worker]';
+                            if (statusEl && statusEl.textContent) statusEl.textContent += ' ' + t('plugins.noWorkerFallback');
                         } catch (e) {
-                            setStatus('Errore plugin: ' + e.message, 'error');
+                            setStatus(t('plugins.pluginError', { error: e.message }), 'error');
                         } finally { done(); }
                     }, 0);
                 }
@@ -11876,8 +12336,10 @@
                     return;
                 }
 
-                const t = obj.transform || (typeof makeDefaultTransform === 'function' ? makeDefaultTransform() : { position: { x: 0, y: 0, z: 0 }, rotationY: 0, scale: 1 });
-                const rotDeg = Math.round(((t.rotationY || 0) * 180 / Math.PI));
+                // NB: la variabile del transform si chiama `xf`, NON `t`: `t()` e' la
+                // funzione di traduzione (23-i18n.js) e qui dentro serve.
+                const xf = obj.transform || (typeof makeDefaultTransform === 'function' ? makeDefaultTransform() : { position: { x: 0, y: 0, z: 0 }, rotationY: 0, scale: 1 });
+                const rotDeg = Math.round(((xf.rotationY || 0) * 180 / Math.PI));
                 const voxCount = (obj.data && obj.data.voxels ? obj.data.voxels.length : 0);
 
                 panel.innerHTML =
@@ -11906,27 +12368,33 @@
                     '</div>' +
                     ((typeof rig !== 'undefined' && rig && rig.bones) ?
                         '<div class="menu-sep"></div>' +
-                        '<div class="menu-label">Ruota Scheletro (Rig)</div>' +
+                        '<div class="menu-label" data-i18n="rig.rotateModel">Ruota Modello</div>' +
                         '<div class="control-row">' +
-                            '<label title="Ruota solo le ossa rispetto alla mesh">Orientamento</label>' +
+                            '<label data-i18n="properties.orientation" data-i18n-title="rig.rotateModelTitle">Orientamento</label>' +
                             '<div style="display:flex; gap:4px;">' +
+                                '<button class="btn btn-secondary" id="propRotRigM90Btn" style="padding:4px 8px; font-size:11px;">-90°</button>' +
                                 '<button class="btn btn-secondary" id="propRotRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>' +
                                 '<button class="btn btn-secondary" id="propRotRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>' +
                             '</div>' +
                         '</div>' : '') +
                     '<div class="screens-section-note" data-i18n="properties.liveNote">Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta nei voxel (coordinate intere, rotazione a 90°).</div>' +
-                    '<div class="screens-section-note" style="text-align:center;">' + voxCount + ' voxel</div>';
+                    '<div class="screens-section-note" style="text-align:center;" id="propVoxCount"></div>';
+
+                // Conteggio voxel: testo tradotto scritto con textContent (le traduzioni
+                // possono contenere apostrofi, quindi niente innerHTML).
+                const voxCountEl = document.getElementById('propVoxCount');
+                if (voxCountEl) voxCountEl.textContent = t('rig.voxelCount', { n: voxCount });
 
                 // Popola i valori.
                 const nameEl = document.getElementById('propName');
                 const visEl = document.getElementById('propVisible');
                 if (nameEl) nameEl.value = obj.name || '';
                 if (visEl) visEl.checked = !!obj.visible;
-                document.getElementById('propPosX').value = t.position.x || 0;
-                document.getElementById('propPosY').value = t.position.y || 0;
-                document.getElementById('propPosZ').value = t.position.z || 0;
+                document.getElementById('propPosX').value = xf.position.x || 0;
+                document.getElementById('propPosY').value = xf.position.y || 0;
+                document.getElementById('propPosZ').value = xf.position.z || 0;
                 document.getElementById('propRotY').value = rotDeg;
-                document.getElementById('propScale').value = (t.scale === undefined) ? 1 : t.scale;
+                document.getElementById('propScale').value = (xf.scale === undefined) ? 1 : xf.scale;
 
                 // Nome → applicazione immediata (aggiorna anche l'outliner).
                 if (nameEl) nameEl.addEventListener('change', () => {
@@ -11965,19 +12433,19 @@
                     // change (blur/invio) → COMMIT: cuoce la trasformazione nei voxel una
                     // sola volta, azzera l'anteprima e ricostruisce. Una voce di undo.
                     el.addEventListener('change', () => {
-                        const t = readFields();
+                        const nxf = readFields();
                         if (typeof clearLiveTransform === 'function') clearLiveTransform();
                         // Niente da cuocere se è l'identità (evita voci di undo inutili).
                         if (typeof isIdentityTransform === 'function' && isIdentityTransform(
-                            { position: { x: Math.round(t.position.x), y: Math.round(t.position.y), z: Math.round(t.position.z) },
-                              rotationY: t.rotationY, scale: t.scale })) {
+                            { position: { x: Math.round(nxf.position.x), y: Math.round(nxf.position.y), z: Math.round(nxf.position.z) },
+                              rotationY: nxf.rotationY, scale: nxf.scale })) {
                             return;
                         }
                         if (typeof pushHistory === 'function') { try { pushHistory(); } catch (e) {} }
                         obj.transform = {
-                            position: { x: Math.round(t.position.x), y: Math.round(t.position.y), z: Math.round(t.position.z) },
-                            rotationY: t.rotationY,
-                            scale: t.scale
+                            position: { x: Math.round(nxf.position.x), y: Math.round(nxf.position.y), z: Math.round(nxf.position.z) },
+                            rotationY: nxf.rotationY,
+                            scale: nxf.scale
                         };
                         if (typeof bakeTransform === 'function') bakeTransform(obj);
                         if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
@@ -11987,10 +12455,16 @@
                     });
                 });
 
+                // Ruota il MODELLO (non lo scheletro): i voxel girano davvero e il rig
+                // viene ri-legato, cosi' le animazioni restano corrette. Vedi
+                // rotateModelY() in 15-rig.js.
+                const pRigM90 = document.getElementById('propRotRigM90Btn');
                 const pRig90 = document.getElementById('propRotRig90Btn');
                 const pRig180 = document.getElementById('propRotRig180Btn');
-                if (pRig90) pRig90.addEventListener('click', () => { if (typeof rotateSkeletonY === 'function') rotateSkeletonY(90); });
-                if (pRig180) pRig180.addEventListener('click', () => { if (typeof rotateSkeletonY === 'function') rotateSkeletonY(180); });
+                const rotModel = deg => { if (typeof rotateModelY === 'function') rotateModelY(deg); };
+                if (pRigM90) pRigM90.addEventListener('click', () => rotModel(-90));
+                if (pRig90) pRig90.addEventListener('click', () => rotModel(90));
+                if (pRig180) pRig180.addEventListener('click', () => rotModel(180));
 
                 if (typeof applyI18n === 'function') applyI18n(panel);
             }
@@ -13313,7 +13787,7 @@
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore sconosciuto');
+                        if (!res.ok) throw new Error(data.error || t('common.unknownError'));
                         packRunId = data.id;
                         packActiveJobId = null;
                         Object.keys(packModelCache).forEach(k => delete packModelCache[k]);
@@ -13574,7 +14048,7 @@
                         const res = await fetch(packApi('/api/pack/result?runId=' +
                             encodeURIComponent(packRunId) + '&jobId=' + encodeURIComponent(jobId)));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Asset non disponibile');
+                        if (!res.ok) throw new Error(data.error || t('pack.assetUnavailable'));
                         model = data.model;
                         packModelCache[jobId] = model;
                     }
@@ -13613,7 +14087,7 @@
                     try {
                         const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!res.ok) throw new Error(data.error || t('common.error'));
                         if (!data.count) {
                             alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
                             return;
@@ -13662,7 +14136,7 @@
 
                         const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!res.ok) throw new Error(data.error || t('common.error'));
                         if (!data.count) {
                             alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
                             return;
@@ -13809,7 +14283,7 @@ window.importGlbFormat = function (file, options) {
             try {
                 loader = new THREE.GLTFLoader();
             } catch (err) {
-                reject(new Error("GLTFLoader non disponibile: " + err.message));
+                reject(new Error(t('glb.loaderMissing', { error: err.message })));
                 return;
             }
             loader.parse(buffer, '', async (gltf) => {
@@ -13819,10 +14293,10 @@ window.importGlbFormat = function (file, options) {
                     reject(err);
                 }
             }, (err) => {
-                reject(new Error("Errore nel parsing del GLB: " + ((err && err.message) || err)));
+                reject(new Error(t('glb.parseError', { error: (err && err.message) || err })));
             });
         };
-        reader.onerror = () => reject(new Error("Impossibile leggere il file"));
+        reader.onerror = () => reject(new Error(t('glb.readError')));
         reader.readAsArrayBuffer(file);
     });
 };
@@ -13978,7 +14452,7 @@ async function voxelizeScene(gltfScene, options) {
     const breathe = () => new Promise(r => setTimeout(r, 0));
 
     if (overlay) overlay.style.display = 'flex';
-    setProg(0, 'Analisi del modello...');
+    setProg(0, t('glb.progAnalyze'));
 
     try {
         await breathe();
@@ -13993,7 +14467,7 @@ async function voxelizeScene(gltfScene, options) {
                 meshes.push(o);
             }
         });
-        if (!meshes.length) throw new Error("Il modello non contiene mesh visibili.");
+        if (!meshes.length) throw new Error(t('glb.noVisibleMeshes'));
 
         // --- 2. Triangoli in world space ----------------------------------
         // I vertici vengono dagli attributi REALI (niente morph target, che
@@ -14071,7 +14545,7 @@ async function voxelizeScene(gltfScene, options) {
             }
         }
 
-        if (!tris.length) throw new Error("Nessun triangolo trovato nel modello.");
+        if (!tris.length) throw new Error(t('glb.noTriangles'));
 
         // --- 2b. Scarta i nodi ISOLATI lontanissimi -----------------------
         // Molti GLB contengono nodi sperduti (helper, riferimenti, pezzi
@@ -14126,7 +14600,7 @@ async function voxelizeScene(gltfScene, options) {
 
         const sx = maxX - minX, sy = maxY - minY, sz = maxZ - minZ;
         const maxDim = Math.max(sx, sy, sz);
-        if (!(maxDim > 0)) throw new Error("Il modello ha dimensione nulla.");
+        if (!(maxDim > 0)) throw new Error(t('glb.zeroSize'));
 
         // --- 3. Griglia ----------------------------------------------------
         const scale = (maxGridSize - 1) / maxDim;
@@ -14168,7 +14642,7 @@ async function voxelizeScene(gltfScene, options) {
         // Campionamento baricentrico con passo inferiore a mezza cella: la
         // superficie resta senza buchi. Piu' semplice del test SAT triangolo/AABB
         // e, con questa densita', equivalente nel risultato.
-        setProg(5, 'Voxelizzazione superficie...');
+        setProg(5, t('glb.progSurface'));
         const cellWorld = 1 / scale;
         let processed = 0;
 
@@ -14195,19 +14669,19 @@ async function voxelizeScene(gltfScene, options) {
             processed++;
             if ((processed & 255) === 0) {
                 setProg(5 + (processed / tris.length) * 65,
-                    'Voxelizzazione superficie... ' + processed + '/' + tris.length);
+                    t('glb.progSurfaceCount', { done: processed, total: tris.length }));
                 await breathe();
             }
         }
 
-        if (!cells.size) throw new Error("La voxelizzazione non ha prodotto voxel.");
+        if (!cells.size) throw new Error(t('glb.noVoxels'));
 
         // --- 5. Riempimento interno ----------------------------------------
         // Flood fill dall'ESTERNO: tutto cio' che il flood non raggiunge sta
         // dentro il guscio. Piu' robusto del test di parita', che sbaglia sulle
         // mesh non chiuse o con facce doppie.
         if (fillInterior && W * H * D <= 8000000) {
-            setProg(72, 'Riempimento interno...');
+            setProg(72, t('glb.progFill'));
             await breathe();
             const idx = (x, y, z) => (z * H + y) * W + x;
             const solid = new Uint8Array(W * H * D);
@@ -14256,7 +14730,7 @@ async function voxelizeScene(gltfScene, options) {
         }
 
         // --- 6. Palette ------------------------------------------------------
-        setProg(85, 'Riduzione palette...');
+        setProg(85, t('glb.progPalette'));
         await breathe();
         const counts = new Map();
         cells.forEach(rgb => {
@@ -14268,7 +14742,7 @@ async function voxelizeScene(gltfScene, options) {
         // --- 7. Payload nel formato compatto ---------------------------------
         // Raggruppa per colore in ops "set": lo stesso formato dei modelli
         // generati, quindi ricaricabile e modificabile come tutti gli altri.
-        setProg(93, 'Costruzione modello...');
+        setProg(93, t('glb.progBuild'));
         await breathe();
         const byColor = new Map();
         cells.forEach((rgb, key) => {
@@ -14294,7 +14768,7 @@ async function voxelizeScene(gltfScene, options) {
             ' colori, griglia ' + W + 'x' + H + 'x' + D +
             ' (da ' + tris.length + ' triangoli)');
 
-        setProg(100, 'Completato');
+        setProg(100, t('glb.progDone'));
         return {
             metadata: { name: 'Imported_GLB', grid_size: [W, H, D] },
             palette: palette,
@@ -14805,13 +15279,13 @@ async function voxelizeScene(gltfScene, options) {
             // Rinomina migrando TUTTO cio' che cita il nome (vedi invariante (b) in testa
             // al file): posa, correzioni dei pesi e track delle animazioni AI.
             function rigRenameBone(rigData, index, newName) {
-                if (!rigData || !rigData.bones || !rigData.bones[index]) return 'Osso inesistente.';
+                if (!rigData || !rigData.bones || !rigData.bones[index]) return t('rigTools.boneMissing');
                 const bd = rigData.bones[index];
                 const name = String(newName == null ? '' : newName).trim().replace(/\s+/g, '_');
-                if (!name) return 'Il nome non puo\' essere vuoto.';
-                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) return 'Usa solo lettere, numeri, _ . e -';
+                if (!name) return t('rigTools.nameEmpty');
+                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) return t('rigTools.nameCharset');
                 if (name === bd.name) return null;
-                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return 'Nome gia\' usato da un altro osso.';
+                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return t('rigTools.nameTaken');
                 const old = bd.name;
                 bd.name = name;
                 if (rigData.pose && rigData.pose[old] !== undefined) {
@@ -14844,10 +15318,10 @@ async function voxelizeScene(gltfScene, options) {
             //      a ossa casuali (era il bug classico degli editor di scheletri).
             // Ritorna {error, select}: l'indice su cui riportare la selezione.
             function rigDeleteBone(rigData, index) {
-                if (!rigData || !rigData.bones || !rigData.bones[index]) return { error: 'Osso inesistente.', select: -1 };
+                if (!rigData || !rigData.bones || !rigData.bones[index]) return { error: t('rigTools.boneMissing'), select: -1 };
                 const bones = rigData.bones;
                 if (bones.filter(b => !b.helper).length <= 1) {
-                    return { error: 'Deve restare almeno un osso. Usa Auto-Rig per rifare lo scheletro.', select: index };
+                    return { error: t('rigTools.lastBone'), select: index };
                 }
                 const remove = new Set([index]);
                 bones.forEach((o, i) => { if (o.helper && o.parent === index) remove.add(i); });
@@ -14987,7 +15461,8 @@ async function voxelizeScene(gltfScene, options) {
             // Le ossa _L stanno a x BASSA e le _R a x alta (vedi buildHumanoidSkeleton).
             let mirrorDir = 'LtoR';          // 'LtoR' | 'RtoL' | 'both'
             function mirrorDirLabel() {
-                return mirrorDir === 'RtoL' ? 'R -> L' : mirrorDir === 'both' ? 'scambio dei lati' : 'L -> R';
+                return mirrorDir === 'RtoL' ? t('rigTools.dirRtoL')
+                    : mirrorDir === 'both' ? t('rigTools.dirSwap') : t('rigTools.dirLtoR');
             }
 
             function rigToolsReady() {
@@ -15091,14 +15566,14 @@ async function voxelizeScene(gltfScene, options) {
                 const res = symmetrizeBonesData(rig.bones, voxels, mirrorDir);
                 if (!res.moved && !res.centred) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Scheletro gia\' simmetrico su X.';
+                    if (rigHint) rigHint.textContent = t('rigTools.symAlready');
                     return;
                 }
                 rig.bones = res.bones;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Scheletro simmetrizzato (' + mirrorDirLabel() + '): ' + res.moved
-                    + ' ossa spostate, ' + res.pairs + ' coppie L/R'
-                    + (res.centred ? ', ' + res.centred + ' ossa centrali riallineate' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.symOk', {
+                    dir: mirrorDirLabel(), moved: res.moved, pairs: res.pairs
+                }) + (res.centred ? t('rigTools.symCentred', { n: res.centred }) : '') + '.';
             });
 
             // --- Idea 4: aggiungi / rinomina / elimina ossa (sopra lo scheletro automatico) ---
@@ -15139,8 +15614,9 @@ async function voxelizeScene(gltfScene, options) {
                 if (err) { dropLastHistory(); alert(err); return; }
                 if (rig.bones[i].name === before) { dropLastHistory(); return; }
                 rebuildRigPreserving(i);
-                if (rigHint) rigHint.textContent = 'Osso rinominato: ' + before + ' -> ' + rig.bones[i].name
-                    + ' (posa, pesi e animazioni aggiornati).';
+                if (rigHint) rigHint.textContent = t('rigTools.boneRenamed', {
+                    before: before, after: rig.bones[i].name
+                });
             }
 
             function rigDeleteBonePrompt() {
@@ -15149,17 +15625,17 @@ async function voxelizeScene(gltfScene, options) {
                 const bd = rig.bones[i];
                 if (!bd) return;
                 const children = rig.bones.filter(o => o.parent === i && !o.helper).length;
-                let msg = 'Eliminare l\'osso "' + bd.name + '"?';
-                if (children) msg += '\n' + children + ' ossa figlie passeranno al suo genitore.';
-                msg += '\nI voxel che gli erano assegnati torneranno all\'osso piu\' vicino.';
+                let msg = t('rigTools.confirmDeleteBone', { name: bd.name });
+                if (children) msg += '\n' + t('rigTools.deleteBoneChildren', { n: children });
+                msg += '\n' + t('rigTools.deleteBoneVoxels');
                 if (!confirm(msg)) return;
                 pushHistory();
                 const res = rigDeleteBone(rig, i);
                 if (res.error) { dropLastHistory(); alert(res.error); return; }
                 const name = bd.name;
                 rebuildRigPreserving(res.select);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" eliminato'
-                    + (res.removed > 1 ? ' (con ' + (res.removed - 1) + ' punta/e helper)' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneDeleted', { name: name })
+                    + (res.removed > 1 ? t('rigTools.boneDeletedHelpers', { n: res.removed - 1 }) : '') + '.';
             }
 
             if (boneAddBtn) boneAddBtn.addEventListener('click', rigAddBonePrompt);
@@ -15256,7 +15732,7 @@ async function voxelizeScene(gltfScene, options) {
                     const mid = boneWorldHead(childI);
                     ikAimBone(childI, new THREE.Vector3(sol.effector[0], sol.effector[1], sol.effector[2]).sub(mid));
                     if (ikHintEl) ikHintEl.textContent = sol.reachable
-                        ? 'Arto puntato.' : 'Punto fuori portata: l\'arto si stende al massimo.';
+                        ? t('rigTools.ikReached') : t('rigTools.ikUnreachable');
                 }
                 ikDirty = true;
                 applyPoseToBones();
@@ -15289,7 +15765,7 @@ async function voxelizeScene(gltfScene, options) {
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
-                    if (rigHint) rigHint.textContent = 'IK disattivata: [R] ruota, [G] sposta l\'articolazione.';
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOff');
                 }
                 if (typeof requestRender === 'function') requestRender();
             });
@@ -15383,7 +15859,7 @@ async function voxelizeScene(gltfScene, options) {
                     const use = document.createElement('button');
                     use.className = 'btn btn-secondary';
                     use.style.cssText = 'padding:5px 10px; font-size:11px;';
-                    use.textContent = 'Applica';
+                    use.textContent = t('info.apply');
                     use.addEventListener('click', () => applyPoseFromLib(idx));
                     const del = document.createElement('button');
                     del.className = 'btn btn-secondary';
@@ -15414,8 +15890,7 @@ async function voxelizeScene(gltfScene, options) {
                 list.unshift({ name, pose: clean, ts: Date.now() });
                 poseLibSave(list);
                 renderPoseLib();
-                if (rigHint) rigHint.textContent = 'Posa "' + name + '" salvata (' + names.length
-                    + ' ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseSaved', { name: name, n: names.length });
             });
 
             renderPoseLib();
@@ -15447,6 +15922,18 @@ async function voxelizeScene(gltfScene, options) {
              * hanno un dato sorgente da editare. Il pulsante "Rendi modificabile" le
              * converte in una clip personalizzata leggendo i keyframe reali dalle
              * tracce THREE (non ricampionandole), cosi' non si perde nulla.
+             *
+             * PRESET IN SOLA LETTURA (non piu' righe vuote)
+             * Anche senza dato modificabile i keyframe di una preset si VEDONO: si
+             * ricavano dalla clip THREE con tlAnimDataFromClip() - lo stesso convertitore
+             * di "Rendi modificabile" - e si memorizzano in tlPresetCache (derivarli
+             * legge tutte le tracce, non va rifatto a ogni redraw). I diamanti prendono
+             * la classe .tl-key-ro: grigi, cursore normale, non selezionabili.
+             * Lo scrub campiona quel dato e scrive in rig.pose come per le clip
+             * modificabili, quindi il mixer va ZITTITO prima (tlSilenceMixer): un'action
+             * in pausa continua a scrivere sulle ossa a ogni mixer.update, e le due
+             * sorgenti si sovrascriverebbero a vicenda. Premendo Play il controllo torna
+             * al mixer (tlPlayPreset) e la timeline si limita a rispecchiare action.time.
              * ===================================================================== */
 
             const TL_DEFAULT_FPS = 24;
@@ -15469,6 +15956,7 @@ async function voxelizeScene(gltfScene, options) {
             let tlKeyDrag = null;           // {startX, moved, orig:[{bone,t}]}
             let tlDockHeight = 190;
             let tlRowsBuilt = '';           // firma dell'ultimo render (evita rebuild inutili)
+            let tlPresetCache = null;       // {clip, data}: animData derivato dalla preset mostrata
 
             const tlDock = document.getElementById('timelineDock');
             const tlClipSel = document.getElementById('tlClip');
@@ -15495,6 +15983,24 @@ async function voxelizeScene(gltfScene, options) {
             const tlResizeEl = document.getElementById('tlResizer');
             const tlBodyEl = document.getElementById('tlBody');
 
+            // Badge "sola lettura" per le clip predefinite. Nasce da JS perche' la barra
+            // della timeline non ha un posto suo nel markup: si infila accanto a #tlStatus.
+            // Il testo lo scrive tlUpdateToolbar() (a modulo caricato t() e' ancora vuota),
+            // gli attributi data-i18n servono al ripasso di applyI18n() al cambio lingua.
+            const tlRoBadge = tlStatusEl ? document.createElement('span') : null;
+            if (tlRoBadge) {
+                tlRoBadge.id = 'tlRoBadge';
+                tlRoBadge.className = 'tl-label';
+                tlRoBadge.setAttribute('data-i18n', 'timeline.readOnly');
+                tlRoBadge.setAttribute('data-i18n-title', 'timeline.statusPreset');
+                tlRoBadge.style.display = 'none';
+                tlRoBadge.style.border = '1px solid var(--glass-border)';
+                tlRoBadge.style.borderRadius = '4px';
+                tlRoBadge.style.padding = '1px 6px';
+                tlRoBadge.style.opacity = '0.8';
+                if (tlStatusEl.parentNode) tlStatusEl.parentNode.insertBefore(tlRoBadge, tlStatusEl);
+            }
+
             function tlHasDom() { return !!(tlDock && tlRulerEl && tlRowsEl); }
 
             // --- helpers sul dato -----------------------------------------------------
@@ -15512,6 +16018,32 @@ async function voxelizeScene(gltfScene, options) {
                 if (!tlClipName || tlClipName === 'none') return null;
                 return tlFindAnim(tlClipName);
             }
+
+            // La clip THREE mostrata quando NON esiste un dato modificabile: e' una preset.
+            // (buildAnimationClips() mette in rigClips anche le personalizzate, quindi il
+            // controllo su tlFindAnim e' quello che distingue i due casi.)
+            function tlPresetClip() {
+                if (!tlClipName || tlClipName === 'none') return null;
+                if (tlFindAnim(tlClipName)) return null;
+                const list = (typeof rigClips !== 'undefined' ? rigClips : []);
+                return list.find(c => c && c.name === tlClipName) || null;
+            }
+
+            // animData derivato dalla preset mostrata, in SOLA LETTURA. Con cache per
+            // identita' della clip: ricavarlo scorre tutte le tracce e crea quaternioni,
+            // e tlRedraw() viene chiamato anche a ogni pixel di resize del dock.
+            function tlPresetAnim() {
+                const clip = tlPresetClip();
+                if (!clip) { tlPresetCache = null; return null; }
+                if (tlPresetCache && tlPresetCache.clip === clip) return tlPresetCache.data;
+                tlPresetCache = { clip: clip, data: tlAnimDataFromClip(clip, tlClipName) };
+                return tlPresetCache.data;
+            }
+
+            // Il dato da DISEGNARE/CAMPIONARE: la clip personalizzata se c'e', altrimenti
+            // quella derivata dalla preset. Prima di questo le righe delle preset erano
+            // vuote (tlActiveAnim() null -> nessun tempo di chiave).
+            function tlDisplayAnim() { return tlActiveAnim() || tlPresetAnim(); }
 
             function tlFps() {
                 const a = tlActiveAnim();
@@ -15683,13 +16215,32 @@ async function voxelizeScene(gltfScene, options) {
 
             // --- applicazione della posa ----------------------------------------------
 
+            // Ferma l'action del mixer e ne restituisce il controllo alla timeline.
+            // NON basta metterla in pausa: un'action in pausa continua ad applicare il
+            // suo valore alle ossa a ogni mixer.update(), quindi il frame dopo lo scrub
+            // la posa tornerebbe quella dell'animazione.
+            function tlSilenceMixer() {
+                if (typeof currentAction === 'undefined' || !currentAction) return false;
+                try { currentAction.stop(); } catch (e) { }
+                currentAction = null;
+                if (typeof animSelect !== 'undefined' && animSelect) animSelect.value = 'none';
+                // Per una preset il "play" ERA il mixer: spento quello, non si sta piu'
+                // riproducendo nulla.
+                if (!tlActiveAnim()) tlStopPlayback();
+                return true;
+            }
+
             // Scrive nel rig la posa dell'animazione al frame corrente. Le ossa senza
             // traccia restano dove sono: cosi' una clip che anima solo un braccio non
             // azzera il resto della posa (in Blender e' lo stesso).
             function tlApplyAt(t) {
                 if (typeof rig === 'undefined' || !rig || typeof skeleton === 'undefined' || !skeleton) return;
-                const anim = tlActiveAnim();
+                const editable = tlActiveAnim();
+                const anim = editable || tlPresetAnim();
                 if (!anim) return;
+                // Preset: la posa la stava scrivendo il mixer, che qui va zittito perche'
+                // la sorgente diventa il dato campionato (una sola verita' in rig.pose).
+                if (!editable) tlSilenceMixer();
                 const s = tlSampleAnim(anim, t);
                 rig.pose = rig.pose || {};
                 Object.keys(s.rot).forEach(name => { rig.pose[name] = s.rot[name]; });
@@ -15810,13 +16361,16 @@ async function voxelizeScene(gltfScene, options) {
                 if (!tlRowsEl || !tlLabelsEl) return;
                 tlRowsEl.textContent = '';
                 tlLabelsEl.textContent = '';
-                const anim = tlActiveAnim();
-                const readOnly = !anim;
+                const editable = tlActiveAnim();
+                const readOnly = !editable;
 
                 if (!rig || !rig.bones || !rig.bones.length) return;
 
-                const times = tlKeyTimesByBone(anim);
-                const bones = anim ? tlRowBones(anim) : tlPresetRowBones();
+                // Per una preset il dato arriva da tlPresetAnim() (derivato dalla clip
+                // THREE): senza questo le righe restavano senza un solo keyframe.
+                const shown = editable || tlPresetAnim();
+                const times = tlKeyTimesByBone(shown);
+                const bones = shown ? tlRowBones(shown) : tlPresetRowBones();
 
                 // Riga di riepilogo: l'unione di tutte le chiavi, come il "Summary" di Blender.
                 const allT = [];
@@ -15868,7 +16422,13 @@ async function voxelizeScene(gltfScene, options) {
                     const k = document.createElement('div');
                     k.className = 'tl-key' + (isSummary ? ' tl-key-sum' : '');
                     if (!isSummary && tlIsSelectedKey(boneName, t)) k.classList.add('tl-key-sel');
-                    if (readOnly) k.classList.add('tl-key-ro');
+                    if (readOnly) {
+                        // .tl-key-ro esiste gia' nel CSS del template (cursore normale,
+                        // opacita' ridotta): qui si aggiunge solo il grigio, cosi' anche i
+                        // diamanti della riga di riepilogo si leggono come "non tuoi".
+                        k.classList.add('tl-key-ro');
+                        k.style.background = 'var(--text-secondary)';
+                    }
                     k.style.left = tlXOfFrame(tlFrameOfTime(t)) + 'px';
                     k.dataset.t = String(t);
                     k.dataset.bone = boneName || '';
@@ -15905,9 +16465,15 @@ async function voxelizeScene(gltfScene, options) {
                 if (tlDurInput) { tlDurInput.disabled = !editable; tlDurInput.value = String(Math.round(tlDuration() * 100) / 100); }
                 if (tlLoopBtn) tlLoopBtn.classList.toggle('active', tlLoop);
                 if (tlEditableBtn) tlEditableBtn.style.display = (hasClip && !editable) ? '' : 'none';
+                // Badge: spiega perche' i keyframe che si vedono non si possono toccare.
+                if (tlRoBadge) {
+                    tlRoBadge.textContent = t('timeline.readOnly');
+                    tlRoBadge.title = t('timeline.statusPreset');
+                    tlRoBadge.style.display = (hasClip && !editable) ? '' : 'none';
+                }
                 if (tlStatusEl) {
                     if (!hasClip) tlStatusEl.textContent = t('timeline.statusNone');
-                    else if (!editable) tlStatusEl.textContent = t('timeline.statusPreset');
+                    else if (!editable) tlStatusEl.textContent = t('timeline.statusPresetKeys', { n: tlCountKeys(tlPresetAnim()) });
                     else tlStatusEl.textContent = t('timeline.statusKeys', { n: tlCountKeys(anim) });
                 }
             }
@@ -15967,6 +16533,7 @@ async function voxelizeScene(gltfScene, options) {
                 tlStopPlayback();
                 if (name === 'none') {
                     tlClipName = 'none';
+                    tlSilenceMixer();
                     tlRelease();
                     tlSelected = [];
                     tlFrame = 0;
@@ -15977,14 +16544,20 @@ async function voxelizeScene(gltfScene, options) {
                 tlClipName = name;
                 tlSelected = [];
                 tlFrame = 0;
+                tlPresetCache = null;
                 if (anim) {
                     tlTakeOver();
                     tlApplyAt(0);
                 } else {
-                    // Preset: nessun dato da editare, si usa il mixer come sempre.
+                    // Preset: il dato non si edita, ma i keyframe si vedono (derivati dalla
+                    // clip) e la riproduzione resta in mano al mixer. tlTakeOver() serve
+                    // comunque: appena si scrubba si scrive in rig.pose, e senza backup la
+                    // posa dell'utente sarebbe persa.
                     tlRelease();
+                    tlTakeOver();
                     if (typeof animSelect !== 'undefined' && animSelect) animSelect.value = name;
                     if (typeof playClip === 'function') playClip(name);
+                    tlPlaying = !!(typeof currentAction !== 'undefined' && currentAction);
                 }
                 tlRedraw();
             }
@@ -15999,18 +16572,41 @@ async function voxelizeScene(gltfScene, options) {
                 }
             }
 
+            // Riproduzione di una PRESET: il motore e' il mixer (il dato derivato serve solo
+            // a vedere e a scrubbare), quindi qui si restituisce il controllo all'action e si
+            // riparte dal playhead, come fa il trasporto delle clip modificabili.
+            function tlPlayPreset() {
+                const t0 = tlTimeOfFrame(tlFrame);
+                const act = () => ((typeof currentAction !== 'undefined') ? currentAction : null);
+                const cur = act();
+                const same = !!(cur && typeof cur.getClip === 'function'
+                    && cur.getClip() && cur.getClip().name === tlClipName);
+                if (!same) {
+                    if (typeof animSelect !== 'undefined' && animSelect) animSelect.value = tlClipName;
+                    if (typeof playClip === 'function') playClip(tlClipName);
+                }
+                const a = act();
+                if (!a) { tlPlaying = false; return false; }
+                a.paused = false;
+                if (isFinite(t0)) a.time = Math.max(0, Math.min(tlDuration(), t0));
+                tlPlaying = true;
+                return true;
+            }
+
+            // Pausa di una preset: l'action in pausa TIENE la posa dov'e' (continua ad
+            // applicarla), quindi non serve altro. Al primo scrub tlSilenceMixer() la ferma
+            // e la posa torna a venire da rig.pose.
+            function tlPausePreset() {
+                if (typeof currentAction !== 'undefined' && currentAction) currentAction.paused = true;
+                tlStopPlayback();
+            }
+
             function tlTogglePlay() {
                 if (!tlClipName || tlClipName === 'none') return;
                 const anim = tlActiveAnim();
                 if (!anim) {
-                    // Preset: delega al mixer (play/stop dell'action corrente).
-                    if (typeof currentAction !== 'undefined' && currentAction) {
-                        currentAction.paused = !currentAction.paused;
-                        tlPlaying = !currentAction.paused;
-                    } else if (typeof playClip === 'function') {
-                        playClip(tlClipName);
-                        tlPlaying = true;
-                    }
+                    if (tlPlaying) tlPausePreset();
+                    else tlPlayPreset();
                 } else {
                     tlPlaying = !tlPlaying;
                     if (tlPlaying) tlTakeOver();
@@ -16023,7 +16619,7 @@ async function voxelizeScene(gltfScene, options) {
             function tlTick(dt) {
                 if (!tlVisible || !tlPlaying) return;
                 const anim = tlActiveAnim();
-                if (!anim) return;                       // le preset le muove il mixer
+                if (!anim) { tlTickPreset(); return; }
                 const n = tlFrameCount();
                 let f = tlFrame + dt * tlFps();
                 if (f > n) {
@@ -16033,6 +16629,24 @@ async function voxelizeScene(gltfScene, options) {
                 tlFrame = f;
                 tlUpdatePlayhead();
                 tlApplyAt(tlTimeOfFrame(tlFrame));
+            }
+
+            // Le preset le muove il mixer: qui la timeline RISPECCHIA soltanto il tempo
+            // dell'action (letto dopo mixer.update(), quindi e' il frame davvero disegnato).
+            // Nessuna scrittura sulla posa: il playhead segue, non guida.
+            function tlTickPreset() {
+                const a = (typeof currentAction !== 'undefined') ? currentAction : null;
+                const running = !!a && !a.paused
+                    && (typeof a.isRunning !== 'function' || a.isRunning());
+                if (!running) { tlStopPlayback(); tlUpdateToolbar(); return; }
+                const dur = tlDuration();
+                let time = Number(a.time);
+                if (!isFinite(time) || time < 0) time = 0;
+                // Le clip in ciclo hanno action.time gia' avvolto dal mixer; l'avvolgimento
+                // qui e' una rete di sicurezza (e ferma il playhead in fondo se non cicla).
+                if (dur > 1e-6 && time > dur) time = tlLoop ? (time % dur) : dur;
+                tlFrame = Math.max(0, Math.min(tlFrameCount(), tlFrameOfTime(time)));
+                tlUpdatePlayhead();
             }
 
             function tlIsPlaying() { return tlVisible && tlPlaying; }
@@ -16269,8 +16883,10 @@ async function voxelizeScene(gltfScene, options) {
                     tlSelected = [];
                 }
                 // Firma: se cambia lo scheletro, la clip o la selezione, ridisegna.
+                // Il conteggio usa il dato MOSTRATO (anche derivato da una preset), cosi'
+                // una preset ricostruita da buildAnimationClips() fa ridisegnare le righe.
                 const sig = [tlClipName, rig ? rig.bones.length : 0, selectedBoneIndex,
-                tlCountKeys(tlActiveAnim())].join('|');
+                tlCountKeys(tlDisplayAnim())].join('|');
                 if (sig !== tlRowsBuilt) { tlRowsBuilt = sig; tlRedraw(); }
                 else tlUpdateToolbar();
             }
@@ -16303,7 +16919,9 @@ async function voxelizeScene(gltfScene, options) {
                 if (tlLastBtn) tlLastBtn.addEventListener('click', () => { tlStopPlayback(); tlSetFrame(tlFrameCount()); tlUpdateToolbar(); });
 
                 const jumpKey = dir => {
-                    const anim = tlActiveAnim();
+                    // Anche in sola lettura: saltare da un keyframe all'altro di una preset
+                    // e' navigazione, non modifica.
+                    const anim = tlDisplayAnim();
                     const times = [];
                     if (anim) {
                         const m = tlKeyTimesByBone(anim);
@@ -16421,6 +17039,212 @@ async function voxelizeScene(gltfScene, options) {
                     const ro = new ResizeObserver(() => { if (tlVisible) tlRedraw(); });
                     ro.observe(tlDock);
                 }
+            }
+
+            /* ===== Sezioni richiudibili della sidebar (disclosure + persistenza) =====
+             * Ogni blocco della sidebar (e della modale Impostazioni) e' un
+             * <details class="sb-section" id="sbSec..."> con <summary class="section-title">
+             * e <div class="sb-body">: stessa convenzione del pannello destro
+             * (.rp-section / .rp-body), ma piu' sezioni possono restare aperte
+             * insieme e lo stato aperto/chiuso sopravvive al riavvio.
+             *
+             * Persistenza: un unico blob JSON in localStorage sotto 'voxelai-sections'
+             * ({ id: true|false }), coerente con le altre chiavi 'voxelai-*' di
+             * 17-theme.js / 19-prefs.js. Non passa da savePref() di proposito: lo
+             * stato serve SINCRONO all'avvio (lo script anti-flash nell'<head> legge
+             * la stessa chiave per non far comparire aperte le sezioni chiuse).
+             *
+             * Difensivo: JSON corrotto -> si butta, id sconosciuti -> ignorati,
+             * localStorage non disponibile -> tutto resta aperto come nel markup. */
+            const SECTIONS_LS_KEY = 'voxelai-sections';
+            const SB_SECTION_SEL = 'details.sb-section';
+
+            // Le sezioni iniettate da 22-screens.js in #settingsExtraSections nascono
+            // "piatte" (titolo + gruppo): le trasformiamo a runtime. L'id NON puo'
+            // derivare dal testo del titolo (cambia con la lingua), quindi e' posizionale.
+            const SB_INJECTED_IDS = { startupSettingsSection: ['sbSecStartup', 'sbSecSaving'] };
+
+            // Etichette di fallback del comando "apri/chiudi tutto". Servono solo prima
+            // che bootI18n() abbia caricato il dizionario: t() in quella finestra
+            // restituisce la chiave. Stesso schema del template (testo italiano nel DOM
+            // + data-i18n), cosi' applyI18n() traduce al cambio lingua senza altro codice.
+            const SB_LABELS = {
+                'sections.expandAll': 'Apri tutto',
+                'sections.collapseAll': 'Chiudi tutto',
+                'sections.expandAllTitle': 'Apre tutte le sezioni di questa scheda',
+                'sections.collapseAllTitle': 'Chiude tutte le sezioni di questa scheda'
+            };
+
+            function sbLabel(key) {
+                let s = key;
+                try { if (typeof t === 'function') s = t(key); } catch (e) { }
+                return (s === key) ? (SB_LABELS[key] || key) : s;
+            }
+
+            function sbAllSections() {
+                return Array.prototype.slice.call(document.querySelectorAll(SB_SECTION_SEL));
+            }
+
+            function sbReadState() {
+                try {
+                    const raw = localStorage.getItem(SECTIONS_LS_KEY);
+                    if (!raw) return {};
+                    const o = JSON.parse(raw);
+                    if (o && typeof o === 'object' && !Array.isArray(o)) return o;
+                } catch (e) { /* storage assente o JSON corrotto: si riparte da zero */ }
+                return {};
+            }
+
+            function sbSaveState() {
+                const blob = sbReadState();
+                sbAllSections().forEach(d => { if (d.id) blob[d.id] = !!d.open; });
+                try { localStorage.setItem(SECTIONS_LS_KEY, JSON.stringify(blob)); } catch (e) { }
+            }
+
+            /* Trasforma una coppia piatta (.section-title + elemento successivo) nel
+             * <details class="sb-section"> equivalente, senza toccare il nodo del corpo
+             * (id, classi e figli restano identici: molto JS li interroga). */
+            function sbWrapFlatSection(titleEl, sid) {
+                const body = titleEl.nextElementSibling;
+                if (!body || !titleEl.parentNode) return null;
+                const det = document.createElement('details');
+                det.className = 'sb-section';
+                det.id = sid;
+                det.open = true;
+                const sum = document.createElement('summary');
+                sum.className = titleEl.className || 'section-title';
+                if (titleEl.getAttribute('style')) sum.setAttribute('style', titleEl.getAttribute('style'));
+                const k = titleEl.getAttribute('data-i18n');
+                if (k) sum.setAttribute('data-i18n', k);
+                while (titleEl.firstChild) sum.appendChild(titleEl.firstChild);
+                const wrap = document.createElement('div');
+                wrap.className = 'sb-body';
+                titleEl.parentNode.insertBefore(det, titleEl);
+                det.appendChild(sum);
+                det.appendChild(wrap);
+                wrap.appendChild(body);
+                titleEl.parentNode.removeChild(titleEl);
+                return det;
+            }
+
+            function sbUpgradeInjected() {
+                Object.keys(SB_INJECTED_IDS).forEach(hostId => {
+                    const host = document.getElementById(hostId);
+                    if (!host) return;
+                    const ids = SB_INJECTED_IDS[hostId];
+                    const titles = Array.prototype.slice.call(host.children)
+                        .filter(el => el.classList && el.classList.contains('section-title'));
+                    titles.forEach((titleEl, i) => {
+                        const sid = ids[i] || (hostId + 'Sec' + (i + 1));
+                        if (document.getElementById(sid)) return;
+                        try { sbWrapFlatSection(titleEl, sid); } catch (e) { }
+                    });
+                });
+            }
+
+            /* Un <summary> puo' contenere controlli veri (es. il "+" di Animazioni AI):
+             * il click li attiverebbe E aprirebbe/chiuderebbe la sezione. preventDefault()
+             * annulla solo l'azione predefinita del summary, il listener del pulsante
+             * (che gira prima, in bubbling dal target) resta valido. */
+            function sbGuardSummary(sum) {
+                sum.addEventListener('click', (e) => {
+                    if (e.target === sum) return;
+                    if (e.target.closest && e.target.closest('button, a, input, select, textarea')) {
+                        e.preventDefault();
+                    }
+                });
+            }
+
+            function sbInitSections() {
+                const state = sbReadState();
+                sbAllSections().forEach(det => {
+                    if (det.dataset.sbInit) return;
+                    det.dataset.sbInit = '1';
+                    if (det.id && typeof state[det.id] === 'boolean') det.open = state[det.id];
+                    const sum = det.querySelector(':scope > summary');
+                    if (sum) sbGuardSummary(sum);
+                    det.addEventListener('toggle', () => { sbSaveState(); sbSyncToggleAll(); });
+                });
+                // Lo stato vero e' applicato: le regole di pre-paint dell'<head> non
+                // servono piu' (e riaprendo una sezione ne nasconderebbero il corpo).
+                const pre = document.getElementById('sbSectionsPrepaint');
+                if (pre && pre.parentNode) pre.parentNode.removeChild(pre);
+            }
+
+            /* ---------- Comando "Apri tutto / Chiudi tutto" per ogni scheda ---------- */
+            const sbToggleAllBtns = [];
+
+            function sbScopeSections(scope) {
+                return Array.prototype.slice.call(scope.querySelectorAll(SB_SECTION_SEL));
+            }
+
+            function sbSyncToggleAll() {
+                sbToggleAllBtns.forEach(btn => {
+                    const scope = btn.parentElement;
+                    if (!scope) return;
+                    const secs = sbScopeSections(scope);
+                    if (!secs.length) return;
+                    const allOpen = secs.every(d => d.open);
+                    const key = allOpen ? 'sections.collapseAll' : 'sections.expandAll';
+                    btn.dataset.sbAction = allOpen ? 'collapse' : 'expand';
+                    btn.classList.toggle('sb-collapsed', !allOpen);
+                    btn.setAttribute('data-i18n', key);
+                    btn.setAttribute('data-i18n-title', key + 'Title');
+                    btn.textContent = sbLabel(key);
+                    btn.setAttribute('title', sbLabel(key + 'Title'));
+                });
+            }
+
+            function sbBuildToggleAll(scope) {
+                if (!scope || scope.querySelector(':scope > .sb-toggle-all')) return;
+                if (sbScopeSections(scope).length < 2) return;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'sb-toggle-all';
+                btn.addEventListener('click', () => {
+                    const want = btn.dataset.sbAction !== 'collapse';
+                    sbScopeSections(scope).forEach(d => { d.open = want; });
+                    sbSaveState();
+                    sbSyncToggleAll();
+                });
+                scope.insertBefore(btn, scope.firstChild);
+                sbToggleAllBtns.push(btn);
+            }
+
+            function sbBuildAllToggles() {
+                document.querySelectorAll('.tab-content .tab-panel').forEach(sbBuildToggleAll);
+                sbBuildToggleAll(document.getElementById('settingsBody'));
+                sbSyncToggleAll();
+            }
+
+            function sbRefresh() {
+                sbUpgradeInjected();
+                sbInitSections();
+                sbBuildAllToggles();
+            }
+
+            sbRefresh();
+
+            /* La modale Impostazioni puo' essere aperta puntando a una sezione precisa
+             * (es. i cookie al primo avvio, da 26-settings-modal.js): se quella sezione
+             * e' chiusa l'utente vedrebbe solo il titolo. La apriamo prima dello
+             * scrollIntoView. Ne approfittiamo per agganciare eventuali sezioni
+             * iniettate dopo il boot. */
+            if (typeof window.openSettingsModal === 'function') {
+                const sbOpenSettings = window.openSettingsModal;
+                window.openSettingsModal = function (opts) {
+                    const res = sbOpenSettings.apply(this, arguments);
+                    try {
+                        sbRefresh();
+                        const id = opts && opts.section;
+                        const el = id ? document.getElementById(id) : null;
+                        if (el) {
+                            const det = el.closest(SB_SECTION_SEL) || el.querySelector(SB_SECTION_SEL);
+                            if (det && !det.open) det.open = true;   // 'toggle' salva e risincronizza
+                        }
+                    } catch (e) { }
+                    return res;
+                };
             }
 
             const clock = new THREE.Clock();

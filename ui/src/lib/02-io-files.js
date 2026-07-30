@@ -27,7 +27,8 @@
 
             modelNameEl.addEventListener('blur', () => {
                 if (!currentModelData) return;
-                const newName = modelNameEl.textContent.trim().replace(/\s+/g, '_') || "Senza_Nome";
+                const newName = modelNameEl.textContent.trim().replace(/\s+/g, '_')
+                    || t('info.nameDefault').replace(/\s+/g, '_');
                 if (!currentModelData.metadata) currentModelData.metadata = {};
                 currentModelData.metadata.name = newName;
                 modelNameEl.textContent = newName;
@@ -140,7 +141,7 @@
                                 const decoded = decodeURIComponent(escape(atob(content.trim())));
                                 parsed = JSON.parse(decoded);
                             } catch (e2) {
-                                throw new Error("Il file non è in formato JSON in chiaro né in formato crittografato .voxelai valido.");
+                                throw new Error(t('alert.fileNotJsonOrVoxelai'));
                             }
                         }
                         if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
@@ -230,7 +231,7 @@
 
             submitNewProjectBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const name = newProjectName.value.trim().replace(/\s+/g, '_') || "Nuovo_Modello";
+                const name = newProjectName.value.trim().replace(/\s+/g, '_') || t('newProject.defaultName');
                 const gridParts = newProjectGrid.value.split(',').map(Number);
                 loadSceneFromParsed({
                     metadata: {
@@ -253,13 +254,13 @@
                             const decoded = decodeURIComponent(escape(atob(jsonStr.trim())));
                             parsed = JSON.parse(decoded);
                         } catch (e2) {
-                            throw new Error("Il testo inserito non è JSON valido né un codice .voxelai valido.");
+                            throw new Error(t('alert.pasteNotJsonOrVoxelai'));
                         }
                     }
                     if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
                         if (!parsed.metadata) parsed.metadata = {};
                         if (!parsed.metadata.name) {
-                            parsed.metadata.name = "Modello Caricato";
+                            parsed.metadata.name = t('io.loadedModelName');
                         }
                         // T1 Fase B: append se la scena ha già contenuto, altrimenti sostituisce.
                         const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);

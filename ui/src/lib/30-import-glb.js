@@ -52,7 +52,7 @@ window.importGlbFormat = function (file, options) {
             try {
                 loader = new THREE.GLTFLoader();
             } catch (err) {
-                reject(new Error("GLTFLoader non disponibile: " + err.message));
+                reject(new Error(t('glb.loaderMissing', { error: err.message })));
                 return;
             }
             loader.parse(buffer, '', async (gltf) => {
@@ -62,10 +62,10 @@ window.importGlbFormat = function (file, options) {
                     reject(err);
                 }
             }, (err) => {
-                reject(new Error("Errore nel parsing del GLB: " + ((err && err.message) || err)));
+                reject(new Error(t('glb.parseError', { error: (err && err.message) || err })));
             });
         };
-        reader.onerror = () => reject(new Error("Impossibile leggere il file"));
+        reader.onerror = () => reject(new Error(t('glb.readError')));
         reader.readAsArrayBuffer(file);
     });
 };
@@ -221,7 +221,7 @@ async function voxelizeScene(gltfScene, options) {
     const breathe = () => new Promise(r => setTimeout(r, 0));
 
     if (overlay) overlay.style.display = 'flex';
-    setProg(0, 'Analisi del modello...');
+    setProg(0, t('glb.progAnalyze'));
 
     try {
         await breathe();
@@ -236,7 +236,7 @@ async function voxelizeScene(gltfScene, options) {
                 meshes.push(o);
             }
         });
-        if (!meshes.length) throw new Error("Il modello non contiene mesh visibili.");
+        if (!meshes.length) throw new Error(t('glb.noVisibleMeshes'));
 
         // --- 2. Triangoli in world space ----------------------------------
         // I vertici vengono dagli attributi REALI (niente morph target, che
@@ -314,7 +314,7 @@ async function voxelizeScene(gltfScene, options) {
             }
         }
 
-        if (!tris.length) throw new Error("Nessun triangolo trovato nel modello.");
+        if (!tris.length) throw new Error(t('glb.noTriangles'));
 
         // --- 2b. Scarta i nodi ISOLATI lontanissimi -----------------------
         // Molti GLB contengono nodi sperduti (helper, riferimenti, pezzi
@@ -369,7 +369,7 @@ async function voxelizeScene(gltfScene, options) {
 
         const sx = maxX - minX, sy = maxY - minY, sz = maxZ - minZ;
         const maxDim = Math.max(sx, sy, sz);
-        if (!(maxDim > 0)) throw new Error("Il modello ha dimensione nulla.");
+        if (!(maxDim > 0)) throw new Error(t('glb.zeroSize'));
 
         // --- 3. Griglia ----------------------------------------------------
         const scale = (maxGridSize - 1) / maxDim;
@@ -411,7 +411,7 @@ async function voxelizeScene(gltfScene, options) {
         // Campionamento baricentrico con passo inferiore a mezza cella: la
         // superficie resta senza buchi. Piu' semplice del test SAT triangolo/AABB
         // e, con questa densita', equivalente nel risultato.
-        setProg(5, 'Voxelizzazione superficie...');
+        setProg(5, t('glb.progSurface'));
         const cellWorld = 1 / scale;
         let processed = 0;
 
@@ -438,19 +438,19 @@ async function voxelizeScene(gltfScene, options) {
             processed++;
             if ((processed & 255) === 0) {
                 setProg(5 + (processed / tris.length) * 65,
-                    'Voxelizzazione superficie... ' + processed + '/' + tris.length);
+                    t('glb.progSurfaceCount', { done: processed, total: tris.length }));
                 await breathe();
             }
         }
 
-        if (!cells.size) throw new Error("La voxelizzazione non ha prodotto voxel.");
+        if (!cells.size) throw new Error(t('glb.noVoxels'));
 
         // --- 5. Riempimento interno ----------------------------------------
         // Flood fill dall'ESTERNO: tutto cio' che il flood non raggiunge sta
         // dentro il guscio. Piu' robusto del test di parita', che sbaglia sulle
         // mesh non chiuse o con facce doppie.
         if (fillInterior && W * H * D <= 8000000) {
-            setProg(72, 'Riempimento interno...');
+            setProg(72, t('glb.progFill'));
             await breathe();
             const idx = (x, y, z) => (z * H + y) * W + x;
             const solid = new Uint8Array(W * H * D);
@@ -499,7 +499,7 @@ async function voxelizeScene(gltfScene, options) {
         }
 
         // --- 6. Palette ------------------------------------------------------
-        setProg(85, 'Riduzione palette...');
+        setProg(85, t('glb.progPalette'));
         await breathe();
         const counts = new Map();
         cells.forEach(rgb => {
@@ -511,7 +511,7 @@ async function voxelizeScene(gltfScene, options) {
         // --- 7. Payload nel formato compatto ---------------------------------
         // Raggruppa per colore in ops "set": lo stesso formato dei modelli
         // generati, quindi ricaricabile e modificabile come tutti gli altri.
-        setProg(93, 'Costruzione modello...');
+        setProg(93, t('glb.progBuild'));
         await breathe();
         const byColor = new Map();
         cells.forEach((rgb, key) => {
@@ -537,7 +537,7 @@ async function voxelizeScene(gltfScene, options) {
             ' colori, griglia ' + W + 'x' + H + 'x' + D +
             ' (da ' + tris.length + ' triangoli)');
 
-        setProg(100, 'Completato');
+        setProg(100, t('glb.progDone'));
         return {
             metadata: { name: 'Imported_GLB', grid_size: [W, H, D] },
             palette: palette,

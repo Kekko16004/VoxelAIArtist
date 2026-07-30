@@ -19,7 +19,7 @@
                 const obj = {
                     id: id,
                     data: d, // live model-data reference (currentModelData for the active object)
-                    get name() { return this.data.metadata.name || this._name || ('Oggetto ' + this.id); },
+                    get name() { return this.data.metadata.name || this._name || t('objects.defaultName', { n: this.id }); },
                     set name(v) { this._name = v; this.data.metadata.name = v; },
                     get voxels() { return this.data.voxels; },
                     set voxels(v) { this.data.voxels = v; },
@@ -244,10 +244,16 @@
                 buildModel(resetCamera === true);
             }
 
+            // Solo il testo del badge: separato da applyEditorMode() perche' il cambio
+            // lingua deve ritradurlo SENZA rieseguirne gli effetti (setTool, gizmo).
+            function updateEditorModeBadge() {
+                const badge = document.getElementById('editorModeBadge');
+                if (badge) badge.textContent = editorMode === 'object' ? t('mode.object') : t('mode.edit');
+            }
+
             // Applica alla UI l'attuale editorMode (badge, cursore, tool).
             function applyEditorMode() {
-                const badge = document.getElementById('editorModeBadge');
-                if (badge) badge.textContent = editorMode === 'object' ? 'Modalità Oggetto' : 'Modalità Modifica';
+                updateEditorModeBadge();
                 if (editorMode === 'object') {
                     // In Modalità Oggetto niente editing: torna alla vista/orbita.
                     if (currentTool !== 'view') setTool('view');
@@ -308,7 +314,7 @@
 
                     const eye = document.createElement('span');
                     eye.textContent = obj.visible ? '👁' : '🚫';
-                    eye.title = obj.visible ? 'Nascondi oggetto' : 'Mostra oggetto';
+                    eye.title = obj.visible ? t('objects.hide') : t('objects.show');
                     eye.style.cssText = 'cursor:pointer; user-select:none; opacity:' + (obj.visible ? '1' : '0.5') + ';';
                     eye.addEventListener('click', (ev) => {
                         ev.stopPropagation();
@@ -376,7 +382,7 @@
 
                             const partDup = document.createElement('span');
                             partDup.textContent = '📋';
-                            partDup.title = 'Duplica come oggetto separato';
+                            partDup.title = t('objects.partDuplicateTitle');
                             partDup.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDup.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
@@ -397,7 +403,7 @@
 
                             const partDel = document.createElement('span');
                             partDel.textContent = '🗑';
-                            partDel.title = 'Elimina parte/figlio';
+                            partDel.title = t('objects.partDeleteTitle');
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
@@ -432,9 +438,9 @@
                 const delBtn = document.getElementById('objDeleteBtn');
                 if (delBtn) {
                     if (activePartName) {
-                        delBtn.textContent = '🗑 Elimina figlio: ' + activePartName;
+                        delBtn.textContent = t('objects.deleteChild', { name: activePartName });
                     } else {
-                        delBtn.textContent = '🗑 Elimina attivo';
+                        delBtn.textContent = t('objects.delete');
                     }
                 }
             }
@@ -463,7 +469,7 @@
                     if (!confirm(t('objects.confirmNew'))) return;
                 }
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
-                const obj = createObject({ metadata: { name: 'Oggetto ' + nextObjectId, grid_size: gSize.slice() }, voxels: [] });
+                const obj = createObject({ metadata: { name: t('objects.defaultName', { n: nextObjectId }), grid_size: gSize.slice() }, voxels: [] });
                 selectActiveObjectAndRefresh(obj.id);
             }
 
@@ -472,13 +478,15 @@
                 if (!active) return;
                 const clone = JSON.parse(JSON.stringify(active.data));
                 clone.metadata = clone.metadata || {};
-                clone.metadata.name = (active.name || 'Oggetto') + ' (copia)';
-                const t = active.transform || makeDefaultTransform();
+                clone.metadata.name = t('objects.copyName', { name: active.name || t('objects.defaultNameBase') });
+                // NB: la variabile locale si chiama `tf`, non `t`: `t` e' la funzione i18n
+                // e ombreggiarla qui manderebbe in TDZ la chiamata sopra.
+                const tf = active.transform || makeDefaultTransform();
                 const obj = createObject(clone, {
                     transform: {
-                        position: { x: (t.position.x || 0) + 1, y: t.position.y || 0, z: (t.position.z || 0) + 1 },
-                        rotationY: t.rotationY || 0,
-                        scale: (t.scale === undefined) ? 1 : t.scale
+                        position: { x: (tf.position.x || 0) + 1, y: tf.position.y || 0, z: (tf.position.z || 0) + 1 },
+                        rotationY: tf.rotationY || 0,
+                        scale: (tf.scale === undefined) ? 1 : tf.scale
                     }
                 });
                 selectActiveObjectAndRefresh(obj.id);
@@ -513,7 +521,7 @@
                 sceneObjects.splice(idx, 1);
                 selectedObjectIds = selectedObjectIds.filter(id => id !== active.id);
                 if (!sceneObjects.length) {
-                    const empty = createObject({ metadata: { name: 'Oggetto 1', grid_size: [16, 16, 16] }, voxels: [] });
+                    const empty = createObject({ metadata: { name: t('objects.defaultName', { n: 1 }), grid_size: [16, 16, 16] }, voxels: [] });
                     setActiveObject(empty.id);
                 } else {
                     setActiveObject(sceneObjects[Math.max(0, idx - 1)].id);
@@ -559,7 +567,7 @@
                 });
                 const baseMeta = toMerge[0].data.metadata || {};
                 const merged = createObject({
-                    metadata: { name: 'Unione', grid_size: (baseMeta.grid_size || [16, 16, 16]).slice() },
+                    metadata: { name: t('objects.mergedName'), grid_size: (baseMeta.grid_size || [16, 16, 16]).slice() },
                     voxels: mergedVoxels
                 });
                 // Rimuove gli originali fusi.

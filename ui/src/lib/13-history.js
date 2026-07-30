@@ -121,13 +121,15 @@
             undoBtn.addEventListener('click', undo);
             redoBtn.addEventListener('click', redo);
             window.addEventListener('keydown', e => {
-                const t = e.target;
+                // NB: si chiama `tgt` e non `t` perche' `t` e' la funzione i18n: una
+                // `const t` qui la ombreggerebbe in tutto l'handler (TDZ).
+                const tgt = e.target;
                 // I cursori di posa del rig sono <input type="range">: non hanno un "undo"
                 // di testo nativo, quindi Ctrl+Z / Ctrl+Y deve restare GLOBALE anche quando
                 // uno di essi ha il focus (altrimenti annullare una posa nel Rig non fa
                 // nulla). I veri campi di testo, invece, tengono il loro undo nativo.
-                const isRange = !!(t && t.tagName === 'INPUT' && t.type === 'range');
-                const isTextField = !!(t && ((t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable));
+                const isRange = !!(tgt && tgt.tagName === 'INPUT' && tgt.type === 'range');
+                const isTextField = !!(tgt && ((tgt.tagName === 'INPUT' && tgt.type !== 'range') || tgt.tagName === 'TEXTAREA' || tgt.tagName === 'SELECT' || tgt.isContentEditable));
 
                 if (e.ctrlKey || e.metaKey) {
                     if (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y') {
@@ -135,7 +137,7 @@
                         e.preventDefault();
                         if ((e.key === 'y' || e.key === 'Y') || e.shiftKey) redo(); else undo();
                         // Togli il focus dal cursore cosi' etichette/gizmo riflettono lo stato ripristinato.
-                        if (isRange && typeof t.blur === 'function') t.blur();
+                        if (isRange && typeof tgt.blur === 'function') tgt.blur();
                     }
                     return;
                 }
@@ -160,12 +162,14 @@
                         } else {
                             let lockedAxis = 'y';
                             if (dragConstraintMode === 'auto') {
-                                lockedAxis = 'auto (Normale)';
+                                lockedAxis = t('hud.dragAxisAuto');
                             } else {
                                 lockedAxis = dragConstraintMode.toUpperCase();
                             }
                             if (dragConstraintHUD) {
-                                dragConstraintHUD.innerHTML = `<span>🔧 <b>Asse Drag impostato:</b> ${lockedAxis}</span>`;
+                                dragConstraintHUD.innerHTML = '<span>🔧 <b class="hud-drag-label"></b> <span class="hud-drag-value"></span></span>';
+                                dragConstraintHUD.querySelector('.hud-drag-label').textContent = t('hud.dragAxisSet');
+                                dragConstraintHUD.querySelector('.hud-drag-value').textContent = lockedAxis;
                                 dragConstraintHUD.style.display = 'block';
                                 if (window.hudTimeout) clearTimeout(window.hudTimeout);
                                 window.hudTimeout = setTimeout(() => {

@@ -53,18 +53,23 @@
 
             function updateConstraintHUD(axis) {
                 if (!dragConstraintHUD) return;
-                const axisNames = {
-                    x: 'Piano YZ (Larghezza X fissa)',
-                    y: 'Piano XZ (Altezza Y fissa)',
-                    z: 'Piano XY (Profondità Z fissa)'
+                const axisNameKeys = {
+                    x: 'dragPlane.xTitle',
+                    y: 'dragPlane.yTitle',
+                    z: 'dragPlane.zTitle'
                 };
+                // Struttura in innerHTML, testi tradotti con textContent: le traduzioni
+                // contengono apostrofi e virgolette e non vanno interpolate in HTML.
                 dragConstraintHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🔧 <b>Asse Drag:</b> ${axis.toUpperCase()}</span>
-                        <span style="color:var(--text-secondary); font-size:11px;">(${axisNames[axis]})</span>
-                        <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Premi Q per cambiare</span>
+                        <span>🔧 <b class="hud-drag-label"></b> ${axis.toUpperCase()}</span>
+                        <span class="hud-drag-plane" style="color:var(--text-secondary); font-size:11px;"></span>
+                        <span class="hud-drag-hint" style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;"></span>
                     </div>
                 `;
+                dragConstraintHUD.querySelector('.hud-drag-label').textContent = t('hud.dragAxis');
+                dragConstraintHUD.querySelector('.hud-drag-plane').textContent = '(' + t(axisNameKeys[axis]) + ')';
+                dragConstraintHUD.querySelector('.hud-drag-hint').textContent = t('hud.dragAxisChange');
                 dragConstraintHUD.style.display = 'block';
             }
 

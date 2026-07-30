@@ -82,7 +82,7 @@
                 const now = new Date();
                 const hh = String(now.getHours()).padStart(2, '0');
                 const mm = String(now.getMinutes()).padStart(2, '0');
-                setAutosaveStatus('Salvato automaticamente ' + hh + ':' + mm);
+                setAutosaveStatus(t('project.autosavedAt', { time: hh + ':' + mm }));
             }
 
             // --- aggiornamento progetti recenti (best-effort) -------------------

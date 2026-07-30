@@ -107,28 +107,30 @@
              * conflitti (tasto già usato) e li segnala in italiano senza applicare.
              * Dopo un rebind valido aggiorna KEYMAP in memoria (applicazione immediata)
              * e persiste via savePref('keymap', ...). */
+            // Chiavi i18n: le etichette vengono tradotte in collectShortcutBindings(),
+            // cosi' il pannello segue il cambio lingua senza tabelle duplicate.
             const SHORTCUT_TOOL_LABELS = {
-                view: 'Strumento: Vista',
-                place: 'Strumento: Aggiungi',
-                remove: 'Strumento: Rimuovi',
-                draw: 'Strumento: Disegna',
-                pick: 'Strumento: Contagocce'
+                view: 'shortcut.toolView',
+                place: 'shortcut.toolPlace',
+                remove: 'shortcut.toolRemove',
+                draw: 'shortcut.toolDraw',
+                pick: 'shortcut.toolPick'
             };
             const SHORTCUT_SINGLE_LABELS = {
-                toggleMode: 'Modalità Oggetto/Modifica',
-                extrude: 'Estrusione',
-                brushDown: 'Pennello −',
-                brushUp: 'Pennello +'
+                toggleMode: 'shortcut.toggleMode',
+                extrude: 'shortcut.extrude',
+                brushDown: 'shortcut.brushDown',
+                brushUp: 'shortcut.brushUp'
             };
             const SHORTCUT_SINGLE_ORDER = ['toggleMode', 'extrude', 'brushDown', 'brushUp'];
 
             function keyDisplay(k) {
-                if (k === ' ' || k === 'Spacebar' || k === 'Space') return 'Spazio';
+                if (k === ' ' || k === 'Spacebar' || k === 'Space') return t('shortcut.keySpace');
                 if (k === 'ArrowUp') return '↑';
                 if (k === 'ArrowDown') return '↓';
                 if (k === 'ArrowLeft') return '←';
                 if (k === 'ArrowRight') return '→';
-                if (k === 'Escape') return 'Esc';
+                if (k === 'Escape') return t('shortcut.keyEsc');
                 if (typeof k !== 'string' || k.length === 0) return '—';
                 return k.length === 1 ? k.toUpperCase() : k;
             }
@@ -144,12 +146,12 @@
                 Object.keys(tools).forEach(k => { keyByTool[tools[k]] = k; });
                 toolOrder.forEach(tool => {
                     if (keyByTool[tool] !== undefined) {
-                        list.push({ id: 'tool:' + tool, type: 'tool', tool, key: keyByTool[tool], label: SHORTCUT_TOOL_LABELS[tool] });
+                        list.push({ id: 'tool:' + tool, type: 'tool', tool, key: keyByTool[tool], label: t(SHORTCUT_TOOL_LABELS[tool]) });
                     }
                 });
                 SHORTCUT_SINGLE_ORDER.forEach(prop => {
                     if (KEYMAP[prop] !== undefined) {
-                        list.push({ id: 'single:' + prop, type: 'single', prop, key: KEYMAP[prop], label: SHORTCUT_SINGLE_LABELS[prop] });
+                        list.push({ id: 'single:' + prop, type: 'single', prop, key: KEYMAP[prop], label: t(SHORTCUT_SINGLE_LABELS[prop]) });
                     }
                 });
                 return list;
@@ -178,7 +180,7 @@
             function assignShortcut(binding, newKey) {
                 const conflict = collectShortcutBindings().find(b => b.id !== binding.id && b.key === newKey);
                 if (conflict) {
-                    showShortcutConflict('Il tasto "' + keyDisplay(newKey) + '" è già usato da "' + conflict.label + '". Scegli un altro tasto.');
+                    showShortcutConflict(t('shortcut.conflict', { key: keyDisplay(newKey), action: conflict.label }));
                     return false;
                 }
                 showShortcutConflict('');

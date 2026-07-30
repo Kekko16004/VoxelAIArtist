@@ -55,6 +55,9 @@ function scene(children){
 // carica il modulo reale
 const src=fs.readFileSync(path.join(ROOT,'ui/src/lib/30-import-glb.js'),'latin1');
 global.window={};
+// Stub di i18n: i messaggi di errore/progresso passano da t(), qui non si
+// verificano le traduzioni ma la geometria, quindi basta la chiave in chiaro.
+global.t=(key,vars)=>(vars?key+'('+JSON.stringify(vars)+')':key);
 const api=new Function(src+';return {voxelizeScene, reducePalette, paletteKeyFor};')();
 
 function expand(model){ // espande le ops "set" come fa l'app

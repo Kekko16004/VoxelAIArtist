@@ -150,7 +150,8 @@
                 gridSelect.disabled = true;
                 modeSelect.disabled = true;
                 uploadImageBtn.disabled = true;
-                generateBtn.innerHTML = '<span class="spinner"></span> Elaborazione...';
+                generateBtn.innerHTML = '<span class="spinner"></span> ';
+                generateBtn.appendChild(document.createTextNode(t('generate.processing')));
                 loaderOverlay.style.display = 'flex';
 
                 // Cattura cio' che inviamo: in "modifica" la palette inviata serve a
@@ -175,7 +176,7 @@
                 })
                     .then(res => {
                         if (!res.ok) {
-                            return res.json().then(err => { throw new Error(err.error || "Errore sconosciuto"); });
+                            return res.json().then(err => { throw new Error(err.error || t('common.unknownError')); });
                         }
                         return res.json();
                     })
@@ -201,9 +202,9 @@
                         modeSelect.disabled = false;
                         uploadImageBtn.disabled = false;
                         if (modeSelect.value === 'modify') {
-                            generateBtn.innerHTML = "Modifica Modello";
+                            generateBtn.textContent = t('generate.modifyBtn');
                         } else {
-                            generateBtn.innerHTML = "Genera Modello";
+                            generateBtn.textContent = t('generate.generateBtn');
                         }
                         loaderOverlay.style.display = 'none';
                     });

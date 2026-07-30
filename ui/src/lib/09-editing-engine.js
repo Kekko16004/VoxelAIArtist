@@ -34,13 +34,23 @@
             const undoBtn = document.getElementById('undoBtn');
             const redoBtn = document.getElementById('redoBtn');
 
+            // Chiavi i18n, non testi: il suggerimento viene tradotto al momento in cui
+            // si scrive nel DOM (refreshEditHint), cosi' segue il cambio lingua.
             const HINTS = {
-                view: 'Modalità Vista: trascina per orbitare, rotella per zoom.',
-                place: 'Aggiungi: trascina con tasto sinistro per creare un\'area (Scrap Mechanic). Premi Q per ciclare l\'asse.',
-                remove: 'Rimuovi: trascina con tasto destro o strumento attivo per cancellare aree. Premi Q per ciclare l\'asse.',
-                draw: 'Disegna: trascina per ricolorare un\'intera area. Premi Q per ciclare l\'asse.',
-                pick: 'Contagocce: clic sinistro su un voxel per copiarne il colore.',
+                view: 'hint.view',
+                place: 'hint.place',
+                remove: 'hint.remove',
+                draw: 'hint.draw',
+                pick: 'hint.pick',
             };
+
+            // Riscrive il suggerimento dello strumento corrente. Chiamata da setTool e
+            // dal cambio lingua (setLanguage in 23-i18n.js).
+            function refreshEditHint() {
+                if (!editHint) return;
+                const key = HINTS[currentTool];
+                if (key) editHint.textContent = t(key);
+            }
 
             // --- Preview meshes ---
             // Green ghost cube for "place".

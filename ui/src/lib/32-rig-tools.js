@@ -233,13 +233,13 @@
             // Rinomina migrando TUTTO cio' che cita il nome (vedi invariante (b) in testa
             // al file): posa, correzioni dei pesi e track delle animazioni AI.
             function rigRenameBone(rigData, index, newName) {
-                if (!rigData || !rigData.bones || !rigData.bones[index]) return 'Osso inesistente.';
+                if (!rigData || !rigData.bones || !rigData.bones[index]) return t('rigTools.boneMissing');
                 const bd = rigData.bones[index];
                 const name = String(newName == null ? '' : newName).trim().replace(/\s+/g, '_');
-                if (!name) return 'Il nome non puo\' essere vuoto.';
-                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) return 'Usa solo lettere, numeri, _ . e -';
+                if (!name) return t('rigTools.nameEmpty');
+                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) return t('rigTools.nameCharset');
                 if (name === bd.name) return null;
-                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return 'Nome gia\' usato da un altro osso.';
+                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return t('rigTools.nameTaken');
                 const old = bd.name;
                 bd.name = name;
                 if (rigData.pose && rigData.pose[old] !== undefined) {
@@ -272,10 +272,10 @@
             //      a ossa casuali (era il bug classico degli editor di scheletri).
             // Ritorna {error, select}: l'indice su cui riportare la selezione.
             function rigDeleteBone(rigData, index) {
-                if (!rigData || !rigData.bones || !rigData.bones[index]) return { error: 'Osso inesistente.', select: -1 };
+                if (!rigData || !rigData.bones || !rigData.bones[index]) return { error: t('rigTools.boneMissing'), select: -1 };
                 const bones = rigData.bones;
                 if (bones.filter(b => !b.helper).length <= 1) {
-                    return { error: 'Deve restare almeno un osso. Usa Auto-Rig per rifare lo scheletro.', select: index };
+                    return { error: t('rigTools.lastBone'), select: index };
                 }
                 const remove = new Set([index]);
                 bones.forEach((o, i) => { if (o.helper && o.parent === index) remove.add(i); });
@@ -415,7 +415,8 @@
             // Le ossa _L stanno a x BASSA e le _R a x alta (vedi buildHumanoidSkeleton).
             let mirrorDir = 'LtoR';          // 'LtoR' | 'RtoL' | 'both'
             function mirrorDirLabel() {
-                return mirrorDir === 'RtoL' ? 'R -> L' : mirrorDir === 'both' ? 'scambio dei lati' : 'L -> R';
+                return mirrorDir === 'RtoL' ? t('rigTools.dirRtoL')
+                    : mirrorDir === 'both' ? t('rigTools.dirSwap') : t('rigTools.dirLtoR');
             }
 
             function rigToolsReady() {
@@ -519,14 +520,14 @@
                 const res = symmetrizeBonesData(rig.bones, voxels, mirrorDir);
                 if (!res.moved && !res.centred) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Scheletro gia\' simmetrico su X.';
+                    if (rigHint) rigHint.textContent = t('rigTools.symAlready');
                     return;
                 }
                 rig.bones = res.bones;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Scheletro simmetrizzato (' + mirrorDirLabel() + '): ' + res.moved
-                    + ' ossa spostate, ' + res.pairs + ' coppie L/R'
-                    + (res.centred ? ', ' + res.centred + ' ossa centrali riallineate' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.symOk', {
+                    dir: mirrorDirLabel(), moved: res.moved, pairs: res.pairs
+                }) + (res.centred ? t('rigTools.symCentred', { n: res.centred }) : '') + '.';
             });
 
             // --- Idea 4: aggiungi / rinomina / elimina ossa (sopra lo scheletro automatico) ---
@@ -567,8 +568,9 @@
                 if (err) { dropLastHistory(); alert(err); return; }
                 if (rig.bones[i].name === before) { dropLastHistory(); return; }
                 rebuildRigPreserving(i);
-                if (rigHint) rigHint.textContent = 'Osso rinominato: ' + before + ' -> ' + rig.bones[i].name
-                    + ' (posa, pesi e animazioni aggiornati).';
+                if (rigHint) rigHint.textContent = t('rigTools.boneRenamed', {
+                    before: before, after: rig.bones[i].name
+                });
             }
 
             function rigDeleteBonePrompt() {
@@ -577,17 +579,17 @@
                 const bd = rig.bones[i];
                 if (!bd) return;
                 const children = rig.bones.filter(o => o.parent === i && !o.helper).length;
-                let msg = 'Eliminare l\'osso "' + bd.name + '"?';
-                if (children) msg += '\n' + children + ' ossa figlie passeranno al suo genitore.';
-                msg += '\nI voxel che gli erano assegnati torneranno all\'osso piu\' vicino.';
+                let msg = t('rigTools.confirmDeleteBone', { name: bd.name });
+                if (children) msg += '\n' + t('rigTools.deleteBoneChildren', { n: children });
+                msg += '\n' + t('rigTools.deleteBoneVoxels');
                 if (!confirm(msg)) return;
                 pushHistory();
                 const res = rigDeleteBone(rig, i);
                 if (res.error) { dropLastHistory(); alert(res.error); return; }
                 const name = bd.name;
                 rebuildRigPreserving(res.select);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" eliminato'
-                    + (res.removed > 1 ? ' (con ' + (res.removed - 1) + ' punta/e helper)' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneDeleted', { name: name })
+                    + (res.removed > 1 ? t('rigTools.boneDeletedHelpers', { n: res.removed - 1 }) : '') + '.';
             }
 
             if (boneAddBtn) boneAddBtn.addEventListener('click', rigAddBonePrompt);
@@ -684,7 +686,7 @@
                     const mid = boneWorldHead(childI);
                     ikAimBone(childI, new THREE.Vector3(sol.effector[0], sol.effector[1], sol.effector[2]).sub(mid));
                     if (ikHintEl) ikHintEl.textContent = sol.reachable
-                        ? 'Arto puntato.' : 'Punto fuori portata: l\'arto si stende al massimo.';
+                        ? t('rigTools.ikReached') : t('rigTools.ikUnreachable');
                 }
                 ikDirty = true;
                 applyPoseToBones();
@@ -717,7 +719,7 @@
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
-                    if (rigHint) rigHint.textContent = 'IK disattivata: [R] ruota, [G] sposta l\'articolazione.';
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOff');
                 }
                 if (typeof requestRender === 'function') requestRender();
             });
@@ -811,7 +813,7 @@
                     const use = document.createElement('button');
                     use.className = 'btn btn-secondary';
                     use.style.cssText = 'padding:5px 10px; font-size:11px;';
-                    use.textContent = 'Applica';
+                    use.textContent = t('info.apply');
                     use.addEventListener('click', () => applyPoseFromLib(idx));
                     const del = document.createElement('button');
                     del.className = 'btn btn-secondary';
@@ -842,8 +844,7 @@
                 list.unshift({ name, pose: clean, ts: Date.now() });
                 poseLibSave(list);
                 renderPoseLib();
-                if (rigHint) rigHint.textContent = 'Posa "' + name + '" salvata (' + names.length
-                    + ' ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseSaved', { name: name, n: names.length });
             });
 
             renderPoseLib();

@@ -49,12 +49,18 @@
                 }
 
                 /* ---------- 1. Launcher "Progetti recenti" ---------- */
+                // I18N. Il markup nasce a load, cioe' PRIMA che bootI18n abbia il
+                // dizionario: usare t() qui stamperebbe le chiavi. Si segue quindi la
+                // stessa strada del template (data-i18n + testo italiano come
+                // segnaposto) e si chiama applyI18n() sul nodo appena creato: pre-boot
+                // e' un no-op (applyI18n scrive solo le chiavi che trova nel dizionario),
+                // quindi l'italiano resta corretto anche se i locali non arrivano, e al
+                // cambio lingua ci pensa applyI18n(document) di setLanguage().
                 function buildLauncherDom() {
                     if (document.getElementById('launcherOverlay')) return;
                     const ov = document.createElement('div');
                     ov.id = 'launcherOverlay';
                     ov.setAttribute('role', 'dialog');
-                    ov.setAttribute('aria-label', 'Apri o crea un progetto');
                     ov.innerHTML =
                         '<div class="launcher-card glass">' +
                           '<div class="launcher-logo">' +
@@ -62,21 +68,22 @@
                             '<div><div style="font-size:18px;font-weight:700;color:var(--text-primary);">Voxel AI Artist</div>' +
                             '<div style="font-size:11px;color:var(--accent-primary);">by KFDev</div></div>' +
                           '</div>' +
-                          '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 16px;">Riprendi un progetto recente o creane uno nuovo.</div>' +
-                          '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">Progetti recenti</div>' +
+                          '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 16px;" data-i18n="launcher.subtitle">Riprendi un progetto recente o creane uno nuovo.</div>' +
+                          '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;" data-i18n="launcher.recentTitle">Progetti recenti</div>' +
                           '<div id="launcherRecentList" style="overflow-y:auto;flex:1;min-height:60px;max-height:320px;margin-bottom:14px;"></div>' +
                           '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
-                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena">＋ Nuovo progetto</button>' +
-                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)">📂 Apri progetto…</button>' +
+                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena" data-i18n-title="launcher.newBtnTitle" data-i18n="launcher.newBtn">＋ Nuovo progetto</button>' +
+                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)" data-i18n-title="launcher.openBtnTitle" data-i18n="launcher.openBtn">📂 Apri progetto…</button>' +
                           '</div>' +
                           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--glass-border);padding-top:12px;">' +
                             '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;">' +
                               '<input type="checkbox" id="launcherShowOnStart" checked style="cursor:pointer;accent-color:var(--accent-primary);">' +
-                              'Mostra questa schermata all\'avvio</label>' +
-                            '<button class="btn btn-secondary" id="launcherSkipBtn" style="font-size:12px;padding:8px 16px;" title="Chiudi e vai alla scena corrente">Salta</button>' +
+                              '<span data-i18n="launcher.showOnStart">Mostra questa schermata all\'avvio</span></label>' +
+                            '<button class="btn btn-secondary" id="launcherSkipBtn" style="font-size:12px;padding:8px 16px;" title="Chiudi e vai alla scena corrente" data-i18n-title="launcher.skipTitle" data-i18n="launcher.skip">Salta</button>' +
                           '</div>' +
                         '</div>';
                     document.body.appendChild(ov);
+                    if (typeof applyI18n === 'function') applyI18n(ov);
 
                     // Chiude cliccando fuori dalla card.
                     ov.addEventListener('click', (e) => { if (e.target === ov) hideLauncher(); });
@@ -100,6 +107,10 @@
                 function showLauncher() {
                     const ov = document.getElementById('launcherOverlay');
                     if (!ov) return;
+                    // aria-label: applyI18n non gestisce gli attributi ARIA, e qui siamo
+                    // sicuramente dopo il boot i18n (il launcher si apre su interazione
+                    // o dopo la lettura delle prefs).
+                    ov.setAttribute('aria-label', t('launcher.dialogLabel'));
                     ov.classList.add('visible');
                     refreshLauncherRecent();
                 }
@@ -113,7 +124,7 @@
                 function launcherNewProject() {
                     try {
                         if (typeof loadSceneFromParsed === 'function') {
-                            loadSceneFromParsed({ metadata: { name: 'Nuovo_Modello', grid_size: [16, 16, 16] }, voxels: [] });
+                            loadSceneFromParsed({ metadata: { name: t('newProject.defaultName'), grid_size: [16, 16, 16] }, voxels: [] });
                             if (typeof buildModel === 'function') buildModel();
                         }
                     } catch (e) { /* se fallisce restiamo sulla scena corrente */ }
@@ -190,7 +201,7 @@
                         row.title = it.path || '';
                         const info = document.createElement('div');
                         info.style.cssText = 'overflow:hidden;';
-                        const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || 'Progetto';
+                        const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || t('launcher.projectFallback');
                         info.innerHTML = '<div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(nm) + '</div>' +
                             '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(it.path || '') + (it.lastOpened ? ' · ' + fmtRecentDate(it.lastOpened) : '') + '</div>';
                         info.style.cursor = 'pointer';
@@ -198,7 +209,7 @@
                         const del = document.createElement('button');
                         del.className = 'launcher-recent-del';
                         del.textContent = '✕';
-                        del.title = 'Rimuovi dai recenti';
+                        del.title = t('launcher.removeRecent');
                         del.addEventListener('click', async (e) => { e.stopPropagation(); await deleteRecent(it.path); refreshLauncherRecent(); });
                         row.appendChild(info);
                         row.appendChild(del);
@@ -231,28 +242,31 @@
 
                     const wrap = document.createElement('div');
                     wrap.id = 'startupSettingsSection';
+                    // I18N: come il launcher, data-i18n + italiano come segnaposto
+                    // (questa funzione gira a load, prima del dizionario).
                     wrap.innerHTML =
-                        '<div class="section-title">Avvio</div>' +
+                        '<div class="section-title" data-i18n="screens.startup">Avvio</div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<label class="control-row" style="cursor:pointer;">' +
-                            '<span>Mostra la schermata iniziale all\'avvio</span>' +
+                            '<span data-i18n="screens.showLauncher">Mostra la schermata iniziale all\'avvio</span>' +
                             '<label class="switch"><input type="checkbox" id="settingsShowLauncher" checked><span class="slider"></span></label>' +
                           '</label>' +
-                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti">🗂 Apri schermata iniziale</button>' +
+                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti" data-i18n-title="screens.openLauncherTitle" data-i18n="screens.openLauncher">🗂 Apri schermata iniziale</button>' +
                         '</div>' +
-                        '<div class="section-title">Salvataggio</div>' +
+                        '<div class="section-title" data-i18n="screens.saving">Salvataggio</div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<div class="control-row">' +
-                            '<label>Cartella di default (Salvataggio/Esportazione)</label>' +
+                            '<label data-i18n="screens.defaultDir">Cartella di default (Salvataggio/Esportazione)</label>' +
                             '<div style="display:flex; gap:6px; flex:1;">' +
-                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly placeholder="Predefinita (Appdata)">' +
-                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;">Sfoglia...</button>' +
+                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly placeholder="Predefinita (Appdata)" data-i18n-placeholder="screens.defaultDirPlaceholder">' +
+                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;" data-i18n="common.browse">Sfoglia...</button>' +
                             '</div>' +
                           '</div>' +
-                          '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata dal backend Python (funziona sia in modalità web sia desktop).</div>' +
-                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>' +
+                          '<div class="screens-section-note" data-i18n="screens.autosaveNote">I salvataggi automatici vengono conservati in una cartella dedicata dal backend Python (funziona sia in modalità web sia desktop).</div>' +
+                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder">📁 Apri cartella autosave</button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
+                    if (typeof applyI18n === 'function') applyI18n(wrap);
 
                     const defaultSaveInput = document.getElementById('settingsDefaultSaveDir');
                     if (defaultSaveInput && typeof window.getPref === 'function') {
@@ -315,31 +329,37 @@
                     if (!footer || footer.dataset.grouped) return;
                     footer.dataset.grouped = '1';
 
-                    function groupLabel(text) {
+                    function groupLabel(key) {
                         const d = document.createElement('div');
                         d.className = 'screens-toolbar-group';
-                        d.textContent = text;
+                        d.setAttribute('data-i18n', key);
+                        d.textContent = t(key);
                         d.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:6px 0 2px;';
                         return d;
                     }
                     // Etichetta "Progetto" davanti al blocco salva/apri (primo figlio).
                     const first = footer.firstElementChild;
-                    if (first) footer.insertBefore(groupLabel('Progetto'), first);
+                    if (first) footer.insertBefore(groupLabel('toolbar.groupProject'), first);
                     // Etichetta "File / Export" prima del primo btn-group (export OBJ/MTL).
                     const firstBtnGroup = footer.querySelector('.btn-group');
-                    if (firstBtnGroup) footer.insertBefore(groupLabel('File / Export'), firstBtnGroup);
+                    if (firstBtnGroup) footer.insertBefore(groupLabel('toolbar.groupFileExport'), firstBtnGroup);
 
                     // Tooltip di rinforzo (solo se assenti) sui pulsanti principali.
                     const tips = {
-                        savePlainJsonBtn: 'Salva la scena come file JSON in chiaro (.json)',
-                        exportMtlBtn: 'Esporta il file materiali (.mtl) da affiancare all\'OBJ',
-                        exportObjBtn: 'Esporta la mesh in Wavefront OBJ (con MTL)',
-                        exportGlbBtn: 'Esporta GLB con scheletro e animazioni (Blender/Unity/Godot)'
+                        savePlainJsonBtn: 'toolbar.savePlainJsonTitle',
+                        exportMtlBtn: 'toolbar.exportMtlTitle',
+                        exportObjBtn: 'toolbar.exportObjTitle',
+                        exportGlbBtn: 'toolbar.exportGlbTitle'
                     };
                     Object.keys(tips).forEach(id => {
                         const el = document.getElementById(id);
-                        if (el && !el.getAttribute('title')) el.setAttribute('title', tips[id]);
+                        if (el && !el.getAttribute('title')) {
+                            // data-i18n-title: il tooltip segue poi i cambi di lingua.
+                            el.setAttribute('data-i18n-title', tips[id]);
+                            el.setAttribute('title', t(tips[id]));
+                        }
                     });
+                    if (typeof applyI18n === 'function') applyI18n(footer);
                 }
 
                 /* ---------- Init: applica prefs e mostra il launcher all'avvio ---------- */

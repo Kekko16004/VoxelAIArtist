@@ -5,12 +5,19 @@
                 const nCells = extrudeFaceCells.length;
                 const passi = Math.abs(extrudeSteps);
                 const verso = extrudeSteps === 0 ? '' : (extrudeSteps > 0 ? '+' : '−');
+                // Struttura in innerHTML, testi tradotti con textContent (apostrofi).
                 extrudeHUD.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span>🧱 <b>Estrusione:</b> asse ${extrudeAxis.toUpperCase()} ${verso}</span>
-                        <span style="color:var(--text-secondary); font-size:11px;">${nCells} facce · ${passi} passi</span>
-                        <span style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;">Trascina · E cambia asse · click conferma · Esc annulla</span>
+                        <span>🧱 <b class="hud-extrude-label"></b> <span class="hud-extrude-axis"></span></span>
+                        <span class="hud-extrude-info" style="color:var(--text-secondary); font-size:11px;"></span>
+                        <span class="hud-extrude-controls" style="background:var(--hover-bg-strong); padding:2px 6px; border-radius:var(--radius-sm); font-size:10px;"></span>
                     </div>`;
+                extrudeHUD.querySelector('.hud-extrude-label').textContent = t('hud.extrude');
+                extrudeHUD.querySelector('.hud-extrude-axis').textContent =
+                    t('hud.extrudeAxis', { axis: extrudeAxis.toUpperCase(), dir: verso });
+                extrudeHUD.querySelector('.hud-extrude-info').textContent =
+                    t('hud.extrudeInfo', { faces: nCells, steps: passi });
+                extrudeHUD.querySelector('.hud-extrude-controls').textContent = t('hud.extrudeControls');
                 extrudeHUD.style.display = 'block';
             }
 
