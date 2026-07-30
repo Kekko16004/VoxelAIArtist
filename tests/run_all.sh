@@ -116,6 +116,12 @@ run "Capacita' backend: web vs desktop (Node)" node tests/test_backend_caps.mjs
 #            dipinti e le clip tengono conto dell'orientamento delle ossa.
 run "Rotazione modello e clip orientate (Node)" node tests/test_rig_rotate.mjs
 
+# 4c-septies-bis. bakeTransform (Proprieta' > Rotazione Y) usava i segni OPPOSTI
+#            a THREE: l'anteprima girava in un verso e al commit l'oggetto
+#            girava nell'altro. Il bake deve essere identico a Ry(+a) di THREE,
+#            che e' cio' che mostrano modelPivot e i Group degli oggetti inattivi.
+run "Bake del transform = anteprima (Node)" node tests/test_object_transform.mjs
+
 # 4c-octies. Timeline: i keyframe delle clip predefinite (camminata, salto...)
 #            non erano disegnati perche' si leggevano solo da rig.customAnims:
 #            ora si ricavano dalla clip vera e restano in sola lettura.

@@ -176,7 +176,8 @@ function mkModel(grid) {
 }
 
 // --- 3. coordinate attese: rotazione attorno al centro della GRIGLIA -----------
-// Con passo 90 (antiorario attorno a +Y) e griglia N: (x,z) -> (N-1-z, x).
+// Convenzione di THREE (rotation.y positiva porta +Z su +X), la stessa di
+// bakeTransform() in 04-objects.js: con passo 90 e griglia N, (x,z) -> (z, N-1-x).
 {
     global.currentModelData = mkModel();
     const src = mkVoxels();
@@ -184,10 +185,10 @@ function mkModel(grid) {
     const got = currentModelData.voxels;
     let wrong = 0;
     src.forEach((v, i) => {
-        const ex = { x: GRID - 1 - v.z, y: v.y, z: v.x };
+        const ex = { x: v.z, y: v.y, z: GRID - 1 - v.x };
         if (got[i].x !== ex.x || got[i].y !== ex.y || got[i].z !== ex.z) wrong++;
     });
-    ok(wrong === 0, '90 gradi: ogni voxel (x,z) finisce in (N-1-z, x)');
+    ok(wrong === 0, '90 gradi: ogni voxel (x,z) finisce in (z, N-1-x)');
     ok(got.every(v => Number.isInteger(v.x) && Number.isInteger(v.z)),
         'nessuna coordinata frazionaria (rotazione a passi interi)');
     ok(got.every(v => v.x >= 0 && v.x <= GRID - 1 && v.z >= 0 && v.z <= GRID - 1),
@@ -267,10 +268,10 @@ function mkModel(grid) {
     const bonesJson = JSON.stringify(bones);
     const poseJson = JSON.stringify(rigData.pose);
 
-    api.applyModelRotation(1);   // (x,z) -> (15-z, x)
+    api.applyModelRotation(1);   // (x,z) -> (z, 15-x)
     const w = api.getRig().weights;
-    ok(w['10,3,1'] === 'hips', 'la chiave 1,3,5 segue il voxel in 10,3,1: ' + Object.keys(w).join(' '));
-    const blend = w['14,0,4'];
+    ok(w['5,3,14'] === 'hips', 'la chiave 1,3,5 segue il voxel in 5,3,14: ' + Object.keys(w).join(' '));
+    const blend = w['1,0,11'];
     ok(blend && blend.foot_R === 0.7 && blend.hips === 0.3,
         'i pesi GRADUALI arrivano interi sulla nuova chiave: ' + JSON.stringify(blend));
     ok(w['1,3,5'] === undefined && w['rotto'] === undefined,

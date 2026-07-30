@@ -155,8 +155,15 @@
                 (obj.data.voxels || []).forEach(v => {
                     let dx = (v.x - c.x) * scale;
                     let dz = (v.z - c.z) * scale;
-                    const rx = dx * cos - dz * sin;
-                    const rz = dx * sin + dz * cos;
+                    // Segni: la convenzione e' quella di THREE (Object3D.rotation.y),
+                    // cioe' Ry(+a): x' = x*cos + z*sin, z' = -x*sin + z*cos. E'
+                    // obbligatorio, perche' l'anteprima usa proprio rotation.y --
+                    // modelPivot (01-scene-setup.js) per l'oggetto attivo e il Group
+                    // in renderInactiveObjects() per gli altri. Con i segni invertiti
+                    // il campo "Rotazione Y" mostrava un verso e al commit l'oggetto
+                    // girava dall'altro.
+                    const rx = dx * cos + dz * sin;
+                    const rz = -dx * sin + dz * cos;
                     v.x = Math.round(c.x + rx + t.position.x);
                     v.y = Math.round(c.y + (v.y - c.y) * scale + t.position.y);
                     v.z = Math.round(c.z + rz + t.position.z);

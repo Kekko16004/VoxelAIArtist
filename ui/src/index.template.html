@@ -565,15 +565,6 @@
             }
         }
 
-        /* Pinned footer (export/save) — always visible under the tabs */
-        .sidebar-footer {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding-top: 14px;
-            border-top: 1px solid var(--glass-border);
-        }
-
         .logo-container {
             display: flex;
             align-items: center;
@@ -2008,8 +1999,8 @@
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.export">Esporta</button>
             <div class="menu-dropdown" id="menuExportDropdown">
                 <div class="menu-label" data-i18n="export.label3d">Modello 3D</div>
-                <button class="menu-item" id="exportObjBtn"><span class="mi-icon">📦</span><span data-i18n="export.obj">Esporta OBJ</span></button>
-                <button class="menu-item" id="exportMtlBtn"><span class="mi-icon"></span><span data-i18n="export.mtl">Esporta MTL</span></button>
+                <button class="menu-item" id="exportObjBtn" title="Esporta la mesh in Wavefront OBJ (con MTL)" data-i18n-title="toolbar.exportObjTitle"><span class="mi-icon">📦</span><span data-i18n="export.obj">Esporta OBJ</span></button>
+                <button class="menu-item" id="exportMtlBtn" title="Esporta il file materiali (.mtl) da affiancare all'OBJ" data-i18n-title="toolbar.exportMtlTitle"><span class="mi-icon"></span><span data-i18n="export.mtl">Esporta MTL</span></button>
                 <button class="menu-item" id="exportGlbBtn" title="Esporta GLB con scheletro e pesi rigidi (per Blender/Unity/Godot)." data-i18n-title="export.glbTitle">
                     <span class="mi-icon">🎞</span><span data-i18n="export.glb">Esporta GLB (riggato)</span></button>
                 <label class="menu-row" style="cursor:pointer;">

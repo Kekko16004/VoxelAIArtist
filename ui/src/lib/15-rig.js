@@ -2468,8 +2468,13 @@
                 if (!steps || !voxels || !voxels.length) return null;
                 const cos = [1, 0, -1, 0][steps];
                 const sin = [0, 1, 0, -1][steps];
-                const rx = (x, z) => x * cos - z * sin;
-                const rz = (x, z) => x * sin + z * cos;
+                // Stessa convenzione di THREE (Object3D.rotation.y) e di
+                // bakeTransform() in 04-objects.js: Ry(+a) porta +Z su +X, cioe'
+                // x' = x*cos + z*sin, z' = -x*sin + z*cos. Deve combaciare,
+                // altrimenti "+90" nel tab Rig e "Rotazione Y = 90" in Proprieta'
+                // girerebbero il modello in versi opposti.
+                const rx = (x, z) => x * cos + z * sin;
+                const rz = (x, z) => -x * sin + z * cos;
 
                 const g = Array.isArray(gridSize) ? gridSize.map(n => Math.round(Number(n) || 0)) : null;
                 const gx = g && g[0] > 0 ? g[0] : 0;

@@ -307,66 +307,19 @@
                         if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
                     });
-
-                    // Raggruppamento visivo (non funzionale) del pannello Scorciatoie T6:
-                    // gli anteponiamo un titolo di sezione senza spostarlo né toccarne gli id.
-                    try {
-                        const sc = document.getElementById('shortcutsPanel');
-                        if (sc && sc.parentElement && !sc.parentElement.dataset.scGrouped) {
-                            const prev = sc.parentElement.previousElementSibling;
-                            // Il titolo "Scorciatoie da tastiera" esiste già nel template; niente da fare.
-                            sc.parentElement.dataset.scGrouped = '1';
-                        }
-                    } catch (e) { }
                 }
 
-                /* ---------- 3. Toolbar/footer: raggruppamento + tooltip ----------
-                 * Riusa gli id e i listener esistenti: NON ricabliamo la logica dei
-                 * pulsanti. Aggiungiamo solo etichette di gruppo e tooltip (title) dove
-                 * mancano. Lo stato attivo degli strumenti è già gestito da setTool(). */
-                function enhanceToolbar() {
-                    const footer = document.querySelector('.sidebar-footer');
-                    if (!footer || footer.dataset.grouped) return;
-                    footer.dataset.grouped = '1';
-
-                    function groupLabel(key) {
-                        const d = document.createElement('div');
-                        d.className = 'screens-toolbar-group';
-                        d.setAttribute('data-i18n', key);
-                        d.textContent = t(key);
-                        d.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:6px 0 2px;';
-                        return d;
-                    }
-                    // Etichetta "Progetto" davanti al blocco salva/apri (primo figlio).
-                    const first = footer.firstElementChild;
-                    if (first) footer.insertBefore(groupLabel('toolbar.groupProject'), first);
-                    // Etichetta "File / Export" prima del primo btn-group (export OBJ/MTL).
-                    const firstBtnGroup = footer.querySelector('.btn-group');
-                    if (firstBtnGroup) footer.insertBefore(groupLabel('toolbar.groupFileExport'), firstBtnGroup);
-
-                    // Tooltip di rinforzo (solo se assenti) sui pulsanti principali.
-                    const tips = {
-                        savePlainJsonBtn: 'toolbar.savePlainJsonTitle',
-                        exportMtlBtn: 'toolbar.exportMtlTitle',
-                        exportObjBtn: 'toolbar.exportObjTitle',
-                        exportGlbBtn: 'toolbar.exportGlbTitle'
-                    };
-                    Object.keys(tips).forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el && !el.getAttribute('title')) {
-                            // data-i18n-title: il tooltip segue poi i cambi di lingua.
-                            el.setAttribute('data-i18n-title', tips[id]);
-                            el.setAttribute('title', t(tips[id]));
-                        }
-                    });
-                    if (typeof applyI18n === 'function') applyI18n(footer);
-                }
+                /* ---------- 3. Toolbar/footer ----------
+                 * RIMOSSA (2026-07-30): enhanceToolbar() cercava `.sidebar-footer`,
+                 * eliminata quando export/salvataggio sono passati nei menu della barra
+                 * in alto (WAVE3). Usciva sempre alla prima riga, quindi i tooltip che
+                 * doveva aggiungere non sono mai comparsi: ora stanno nel template
+                 * (data-i18n-title su #exportObjBtn / #exportMtlBtn). */
 
                 /* ---------- Init: applica prefs e mostra il launcher all'avvio ---------- */
                 injectStyles();
                 buildLauncherDom();
                 buildSettingsSections();
-                enhanceToolbar();
 
                 (async function initLauncherPref() {
                     let show = true; // default: mostra
