@@ -1948,6 +1948,19 @@
                         stEl.textContent = hide.join(',') + '{display:none}'
                             + arrow.join(',') + '{transform:rotate(-45deg)}';
                         document.head.appendChild(stEl);
+                        // Rete di sicurezza: se il bundle non arrivasse mai a
+                        // sbInitSections() (errore JS a monte) queste regole
+                        // resterebbero per sempre, e una sezione "chiusa" si
+                        // aprirebbe cliccandola al contrario. Il setTimeout gira
+                        // DOPO tutti gli handler di 'load' (quindi dopo
+                        // sbInitSections, che di norma lo ha gia' rimosso), cosi'
+                        // il caso peggiore e' "tutte aperte", non uno stato falso.
+                        window.addEventListener('load', function () {
+                            setTimeout(function () {
+                                var dead = document.getElementById('sbSectionsPrepaint');
+                                if (dead && dead.parentNode) dead.parentNode.removeChild(dead);
+                            }, 0);
+                        });
                     }
                 }
             } catch (e) { }

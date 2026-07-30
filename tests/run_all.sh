@@ -153,6 +153,13 @@ PY
   echo "bundle: sintassi valida"
 '
 
+# 5b. L'HTML GENERATO ha davvero le sezioni richiudibili. Il test 4c-nonies prova
+#     la logica di 34-sections.js su un DOM finto che si costruisce da solo: era
+#     verde anche con un ui/index.html senza un solo <details class="sb-section">
+#     (e' il caso in cui i titoli della sidebar non si chiudono). Questo controllo
+#     guarda l'artefatto che il browser carica, dopo il build del passo 5.
+run "Sezioni richiudibili nell'HTML generato (Node)" node tests/test_sections_markup.mjs
+
 # 6. Ogni lingua ha esattamente le chiavi della lingua di riferimento (it).
 #    Prima qui c'era un numero fisso (65) che non ha mai corrisposto alla
 #    realta' (le lingue hanno sempre avuto 53 chiavi pack/genMode): il
