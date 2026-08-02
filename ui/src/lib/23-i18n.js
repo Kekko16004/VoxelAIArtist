@@ -15,8 +15,17 @@
             const I18N_FALLBACK = 'it';
             let i18nLang = I18N_FALLBACK;
             let i18nApplied = false;           // true dopo la prima applicazione reale
-            let i18nDict = {};                 // dizionario lingua attiva
-            const i18nCache = { it: null };    // code -> dict (evita rifetch)
+            // ATTENZIONE, `var` NON e' una svista: tutti i moduli finiscono in UN SOLO
+            // scope condiviso e t() e' una dichiarazione di funzione, quindi e' hoistata
+            // e CHIAMABILE gia' prima che questo file venga eseguito (19-prefs.js lo fa,
+            // sta prima nel manifest). Con `let`/`const` queste due variabili sarebbero
+            // in temporal dead zone e leggerle non darebbe `undefined`: lancerebbe
+            // ReferenceError, uccidendo tutto il bootstrap da li' in poi — schermo nero
+            // e interfaccia morta. Con `var` sono hoistate a `undefined` e le guardie
+            // in t() fanno il loro lavoro: si ottiene la chiave nuda, che e' il ripiego
+            // documentato. Non sostituirle con let/const.
+            var i18nDict = {};                 // dizionario lingua attiva
+            var i18nCache = { it: null };      // code -> dict (evita rifetch)
             let i18nLocales = [{ code: 'it', name: 'Italiano' }]; // popolato da index.json
 
             // Base URL per i locali: nel desktop il server serve la app; i JSON stanno in
@@ -39,7 +48,7 @@
             // la chiave stessa (utile a scoprire chiavi mancanti in dev).
             function t(key, vars) {
                 let s = (i18nDict && key in i18nDict) ? i18nDict[key] : undefined;
-                if (s === undefined && i18nCache.it && key in i18nCache.it) s = i18nCache.it[key];
+                if (s === undefined && i18nCache && i18nCache.it && key in i18nCache.it) s = i18nCache.it[key];
                 if (s === undefined) s = key;
                 return interpolate(s, vars);
             }

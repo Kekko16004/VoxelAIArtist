@@ -24,7 +24,12 @@
                     const list = hit.object.userData.voxels || [];
                     const voxel = list[hit.instanceId];
                     if (voxel) {
-                        const n = hit.face ? hit.face.normal : new THREE.Vector3(0, 1, 0);
+                        const n = hit.face ? hit.face.normal.clone() : new THREE.Vector3(0, 1, 0);
+                        // Se colpiamo una faccia dall'interno (backface), la normale è concorde al raggio.
+                        // Invertiamo la normale per piazzare il voxel "dentro" (dal lato che stiamo guardando).
+                        if (raycaster.ray.direction.dot(n) > 0) {
+                            n.negate();
+                        }
                         return { voxel, normal: { x: Math.round(n.x), y: Math.round(n.y), z: Math.round(n.z) } };
                     }
                 }

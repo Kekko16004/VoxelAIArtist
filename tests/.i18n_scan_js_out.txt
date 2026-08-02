@@ -1,0 +1,194 @@
+
+===== 01-scene-setup.js =====
+L247    Sei sicuro di voler rimuovere tutti i voxel e azzerare il modello?
+
+===== 02-io-files.js =====
+L24     Formato non valido. Usa 'X,Y,Z' (es: 64,64,64)
+L74     Il file non contiene voxel validi.
+L84     Errore nel caricamento del file binario: 
+L94     Il modulo import-glb.js non è stato caricato.
+L116    Il modello importato non contiene voxel.
+L126    Errore importazione GLB: 
+L143    Il file non è in formato JSON in chiaro né in formato crittografato .voxelai valido.
+L165    File non valido: deve contenere un array 'voxels', 'ops' o 'objects'.
+L168    Errore nel caricamento del file: 
+L207    Per favore, incolla del testo JSON prima di caricare.
+L256    Il testo inserito non è JSON valido né un codice .voxelai valido.
+L276    Formato non valido: deve contenere un array 'voxels', 'ops', 'objects' o un oggetto 'parts'.
+L280    Errore nel parsing: 
+
+===== 04-objects.js =====
+L250    Modalità Oggetto
+L300    Seleziona per Unisci
+L311    Nascondi oggetto
+L379    Duplica come oggetto separato
+L400    Elimina parte/figlio
+L404    Eliminare la parte "
+L435    🗑 Elimina figlio: 
+L437    🗑 Elimina attivo
+L463    Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)
+L490    Nuovo nome per l\'oggetto:
+L500    Eliminare la parte/figlio "
+L509    Eliminare l\'oggetto "
+L539    Servono almeno due oggetti da unire. Spunta le caselle nell\'outliner.
+L546    Selezione non valida per l\'unione.
+
+===== 05-build-model.js =====
+L39     Senza Nome
+
+===== 08-generate-ai.js =====
+L62     Descrivi le modifiche (es. Aggiungi ali rosse)
+L63     Modifica Modello
+L66     Genera Modello
+L142    Inserisci una descrizione prima di procedere!
+L178    Errore sconosciuto
+L193    Errore nella generazione: 
+L204    Modifica Modello
+L206    Genera Modello
+
+===== 11-symmetry-tools.js =====
+L117    Eliminare la parte "
+
+===== 13-history.js =====
+L168    <span>🔧 <b>Asse Drag impostato:</b> ${lockedAxis}</span>
+
+===== 15-rig.js =====
+L585    Rig "${rig.type}" pronto: ${nSel} ossa. Clic sul PALLINO di un giunto per selezionarlo, poi R per ruotare (posa) o G per
+L731    Esci dalla pittura
+L739    ${n} voxel corretti a mano
+L754    Pittura pesi: posa azzerata (serve per cliccare nel punto giusto). 
+L922    Prima crea uno scheletro con Auto-Rig.
+L933    1 voxel
+L1125   Doppio clic per rinominare
+L1441   Elimina animazione
+L1472   Prima crea uno scheletro (Rig) per l'oggetto.
+L1483   Scheletro non pronto.
+L1485   Descrivi l'animazione da generare.
+L1495   Errore
+L1497   L'AI non ha restituito track validi.
+L1500   Nessun osso valido nei track generati.
+L1504   Animazione "${finalName}" creata e in riproduzione.
+L1506   Errore animazione: 
+L1521   Nessun voxel da riggare. Genera o carica un modello prima.
+
+===== 19-prefs.js =====
+L204    premi un tasto…
+L230    premi un tasto…
+L231    Clicca e premi la nuova combinazione (Esc per annullare)
+
+===== 20-formats.js =====
+L183    Magic .vox non valido (atteso "VOX ")
+L232    .vox senza modelli (nessun XYZI)
+L450    File .schem gzip ma non ho modo di decomprimerlo (manca pako/DecompressionStream).
+L474    Tag NBT non supportato: 
+L478    NBT root non e\' un compound
+L499    .schem senza BlockData
+L539    Errore export .vox: 
+L550    .schem esportato SENZA compressione gzip (gzip non disponibile qui). 
+L554    Errore export .schem: 
+
+===== 21-project.js =====
+L61     Dati progetto non validi.
+L63     Formato progetto non valido: manca "objects", "ops" o "voxels".
+L136    Errore salvataggio progetto: 
+L165    Apertura progetto non disponibile.
+L168    Errore apertura progetto: 
+L185    Il file non contiene voxel validi.
+L199    Formato binario non riconosciuto: 
+L202    Risposta apertura progetto non riconosciuta.
+L205    Errore apertura progetto: 
+L304    <div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi richiede l\'app avviata (python main.py)
+L307    <div style="opacity:0.7; font-size:12px; padding:8px;">Caricamento…</div>
+L310    <div style="opacity:0.7; font-size:12px; padding:8px;">Impossibile caricare la cronologia.</div>
+L313    <div style="opacity:0.7; font-size:12px; padding:8px;">Nessun salvataggio automatico presente.</div>
+L332    <div style="opacity:0.7; font-size:12px; padding:8px;">Errore nel caricamento della cronologia.</div>
+L338    Ripristinare questo salvataggio automatico? La scena corrente verrà sostituita.
+L341    Impossibile caricare il salvataggio selezionato.
+L350    Errore nel ripristino: 
+L355    Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.
+L357    Impossibile aprire la cartella: 
+
+===== 22-screens.js =====
+L57     Apri o crea un progetto
+L129    Seleziona "
+L163    <div class="screens-section-note" style="padding:8px;">Senza l\'app avviata (python main.py) i progetti recenti non sono
+L166    <div class="screens-section-note" style="padding:8px;">Caricamento…</div>
+L169    <div class="screens-section-note" style="padding:8px;">Nessun progetto recente. Creane uno nuovo o aprine uno esistente.
+L187    Rimuovi dai recenti
+L249    La finestra di scelta cartella è un dialog di sistema: serve la modalità desktop (avvia con "python main.py --py").
+L254    Impossibile aprire la finestra di selezione cartella: 
+L263    Errore nell\'apertura della finestra di selezione cartella.
+L279    Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.
+
+===== 24-plugins.js =====
+L161    lo script deve restituire un array di voxel
+L163    troppi voxel restituiti (
+
+===== 25-properties.js =====
+L18     <div class="screens-section-note" data-i18n="properties.empty">Nessun oggetto selezionato.</div>
+
+===== 27-pack.js =====
+L104    Rimuovi questo oggetto
+L156    Riferimento non valido: 
+L262    Errore sconosciuto
+L271    Errore avvio pack: 
+L274    Genera Pack
+L344    Coerenza del pack
+L479    clicca per riprovare
+L523    Asset non disponibile
+L534    Errore caricamento asset: 
+L562    Errore
+L564    Nessun asset pronto.
+L590    Errore: 
+L611    Errore
+L613    Nessun asset pronto.
+L671    Errore: 
+
+===== 28-incremental.js =====
+L330     — clic per usarlo come colore attivo
+
+===== 30-import-glb.js =====
+L239    Il modello non contiene mesh visibili.
+L317    Nessun triangolo trovato nel modello.
+L372    Il modello ha dimensione nulla.
+L446    La voxelizzazione non ha prodotto voxel.
+
+===== 31-help.js =====
+L25     Muoversi nella vista
+L35     Disegnare voxel
+L46     Simmetria, aree, estrusione
+L56     Oggetti, scena e proprietà
+L66     Generazione con l\'AI
+L87     Rig: scheletro e posa
+L103    Pittura pesi
+L114    Animazioni
+
+===== 32-rig-tools.js =====
+L381    Prima crea uno scheletro con Auto-Rig.
+L446    Nessuna posa da specchiare (
+L452    Posa specchiata su X (
+L463    Nessuna correzione da specchiare (
+L468    Pesi specchiati (
+L480    Scheletro gia\' simmetrico su X.
+L485    Scheletro simmetrizzato (
+L499    Seleziona prima l\'osso genitore nella lista.
+L502    Nome del nuovo osso (figlio di 
+L506    Usa solo lettere, numeri, _ . e -
+L507    Nome gia\' usato da un altro osso.
+L512    Osso "
+L521    Nuovo nome per "
+L529    Osso rinominato: 
+L548    Osso "
+L666    Attiva prima l\'anteprima del rig (Mostra rig).
+L674    Trascina la mano, il piede o l\'osso che vuoi puntare: la catena lo segue.
+L675    IK attiva: trascina con il tasto sinistro l\'estremita\' dell\'arto verso il punto voluto. 
+L735    Nessun osso in comune con la posa "
+L741    Posa "
+L749    Eliminare la posa "
+L768     ossa nella posa
+L778    Elimina questa posa
+L792    La posa e\' a zero: muovi qualche osso prima di salvarla.
+L793    Nome della posa da salvare:
+L803    Posa "
+
+--- 154 righe sospette ---

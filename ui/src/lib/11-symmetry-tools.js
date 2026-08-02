@@ -76,15 +76,25 @@
                 // rig data stays in memory, so returning re-shows it).
                 if (typeof rig !== 'undefined') {
                     if (name === 'rig' && rig && rig.bones.length) {
-                        rigPreviewActive = true;
-                        gizmoEnabled = true;
-                        updateRigVisibility();
-                        if (typeof updateGizmo === 'function') updateGizmo();
+                        if (typeof skinnedMesh === 'undefined' || !skinnedMesh) {
+                            if (typeof applyRig === 'function') applyRig();
+                        } else {
+                            rigPreviewActive = true;
+                            gizmoEnabled = true;
+                            updateRigVisibility();
+                            if (typeof updateGizmo === 'function') updateGizmo();
+                        }
+                        if (typeof updateRigUI === 'function') updateRigUI();
                     } else if (rigPreviewActive) {
+                        // Uscendo dall'anteprima l'IK va disarmata: se si lascia la scheda
+                        // durante un trascinamento il pointerup non riguarda piu' il rig e
+                        // l'orbita resterebbe spenta (rigDisableIk ripristina controls).
+                        if (typeof rigDisableIk === 'function') rigDisableIk();
                         rigPreviewActive = false;
                         gizmoEnabled = false;
                         updateRigVisibility();
                         if (typeof updateGizmo === 'function') updateGizmo();
+                        if (typeof updateRigUI === 'function') updateRigUI();
                     }
                 }
             }
@@ -102,8 +112,11 @@
                 bind('objMergeBtn', objMerge);
             })();
             window.addEventListener('keydown', (e) => {
-                const t = e.target;
-                if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+                // isTypingTarget (01-scene-setup.js) e' la fonte unica: blocca solo
+                // se si sta digitando o se il controllo consuma quel tasto. Tab non
+                // e' consumato da un <select>, quindi ora funziona anche subito
+                // dopo averne usato uno.
+                if (isTypingTarget(e)) return;
                 if (e.key === KEYMAP.toggleMode) {
                     e.preventDefault();
                     toggleEditorMode();

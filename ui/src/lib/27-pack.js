@@ -17,6 +17,15 @@
             const packGridSelect = document.getElementById('packGridSelect');
             const packEnforcePalette = document.getElementById('packEnforcePalette');
             const packModular = document.getElementById('packModular');
+            // Come nel pannello Genera: la regola umanoide richiede il formato
+            // multi-parte, quindi "oggetto unico" si spegne da solo.
+            const packHumanoid = document.getElementById('packHumanoid');
+            if (packHumanoid) {
+                packHumanoid.addEventListener('change', () => {
+                    const single = document.getElementById('packSingleObject');
+                    if (packHumanoid.checked && single && single.checked) single.checked = false;
+                });
+            }
             const packEstimate = document.getElementById('packEstimate');
             const packStartBtn = document.getElementById('packStartBtn');
             const packCancelBtn = document.getElementById('packCancelBtn');
@@ -255,7 +264,8 @@
                                 gridSize: packGridSelect ? packGridSelect.value : 'auto',
                                 enforcePalette: packEnforcePalette ? packEnforcePalette.checked : true,
                                 modular: packModular ? packModular.checked : false,
-                                single_object: document.getElementById('packSingleObject') ? document.getElementById('packSingleObject').checked : true
+                                single_object: document.getElementById('packSingleObject') ? document.getElementById('packSingleObject').checked : true,
+                                humanoid: document.getElementById('packHumanoid') ? document.getElementById('packHumanoid').checked : false
                             })
                         });
                         const data = await res.json();

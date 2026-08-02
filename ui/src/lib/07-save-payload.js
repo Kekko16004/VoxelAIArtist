@@ -86,20 +86,25 @@
             // Legacy single-object payload for the ACTIVE object. Kept for the AI
             // 'modify' request (which expects a single model) and as the save base.
             function getSavePayload() {
+                if (typeof stashRigToActiveObject === 'function') stashRigToActiveObject();
                 const out = buildObjectPayload(currentModelData);
-                if (rig && rig.bones && rig.bones.length) {
-                    out.rig = { type: rig.type, binding: rig.binding, bones: rig.bones, pose: rig.pose || {} };
-                }
+                const r = (typeof serializeRig === 'function') ? serializeRig(rig) : null;
+                if (r) out.rig = r;
                 return out;
             }
 
             // Scene-aware save payload. One object -> legacy flat/compact format
             // (fully backward compatible). Multiple objects -> extended { objects:[...] }.
             function getSceneSavePayload() {
+                // Il rig vive su obj.rig: quello dell'oggetto attivo va parcheggiato prima
+                // di leggerlo, altrimenti si salverebbe la versione precedente alle
+                // ultime modifiche (posa, pesi dipinti).
+                if (typeof stashRigToActiveObject === 'function') stashRigToActiveObject();
                 if (sceneObjects.length <= 1) {
                     return getSavePayload();
                 }
                 const out = { objects: [] };
+                const rigs = [];
                 sceneObjects.forEach(o => {
                     const p = buildObjectPayload(o.data);
                     const objPayload = {
@@ -111,12 +116,17 @@
                     };
                     if (p.parts) objPayload.parts = p.parts;
                     if (p.ops) objPayload.ops = p.ops;
+                    // Ogni oggetto porta il PROPRIO rig (scheletro, posa, pesi dipinti,
+                    // animazioni AI). Prima esisteva un solo rig per file, quindi in una
+                    // scena corpo + armatura uno dei due lo perdeva al salvataggio.
+                    const r = (typeof serializeRig === 'function') ? serializeRig(o.rig) : null;
+                    if (r) { objPayload.rig = r; rigs.push(r); }
                     out.objects.push(objPayload);
                 });
-                // Rig currently belongs to the active object only.
-                if (rig && rig.bones && rig.bones.length) {
-                    out.rig = { type: rig.type, binding: rig.binding, bones: rig.bones, pose: rig.pose || {} };
-                }
+                // Compatibilita': le versioni precedenti leggono solo `rig` di radice. Lo
+                // duplichiamo SOLO se un unico oggetto e' riggato (caso normale): con due o
+                // piu' rig non c'e' un "il" rig e duplicare raddoppierebbe i pesi salvati.
+                if (rigs.length === 1) out.rig = rigs[0];
                 return out;
             }
 

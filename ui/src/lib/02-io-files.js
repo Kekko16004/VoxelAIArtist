@@ -154,8 +154,12 @@
                             if (hasContent) appendSceneFromParsed(parsed);
                             else loadSceneFromParsed(parsed);
                             buildModel();
-                            if (!hasContent && parsed.rig && Array.isArray(parsed.rig.bones) && parsed.rig.bones.length) {
-                                restoreRig(parsed.rig);
+                            // Il rig e' stato attaccato all'oggetto giusto da
+                            // load/appendSceneFromParsed: qui si limita a riportarlo in
+                            // anteprima. Prima c'era `if (!hasContent && parsed.rig)`, cioe'
+                            // importare in una scena NON vuota buttava via lo scheletro.
+                            if (typeof restoreRigForActiveObject === 'function') {
+                                restoreRigForActiveObject();
                             }
                         } else {
                             alert("File non valido: deve contenere un array 'voxels', 'ops' o 'objects'.");
@@ -262,8 +266,10 @@
                         if (hasContent) appendSceneFromParsed(parsed);
                         else loadSceneFromParsed(parsed);
                         buildModel();
-                        if (!hasContent && parsed.rig && Array.isArray(parsed.rig.bones) && parsed.rig.bones.length) {
-                            restoreRig(parsed.rig);
+                        // Vedi il commento nell'import da file: il rig e' gia' sull'oggetto
+                        // corretto, anche quando si incolla in una scena non vuota.
+                        if (typeof restoreRigForActiveObject === 'function') {
+                            restoreRigForActiveObject();
                         }
                         return true;
                     } else {

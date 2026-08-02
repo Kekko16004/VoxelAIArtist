@@ -72,7 +72,17 @@
 
                 // Drive rig animation clips and keep the joint marker on the bone.
                 if (mixer) { mixer.update(dt); }
-                if (rigPreviewActive) { updateBoneMarker(); }
+                if (rigPreviewActive) {
+                    updateBoneMarker();
+                    // I pallini dei giunti hanno dimensione costante a SCHERMO: il raggio in
+                    // unita' mondo dipende dalla distanza dalla camera, quindi va ricalcolato
+                    // a ogni frame (qui e' gratis: con il rig attivo si renderizza comunque).
+                    updateJointHandles();
+                }
+
+                // Timeline: avanza il playhead con lo stesso dt del mixer, cosi' il
+                // cursore non deriva rispetto ai fotogrammi realmente mostrati.
+                if (typeof tlTick === 'function') tlTick(dt);
 
                 // T1 Fase B: mantieni il box di selezione allineato all'oggetto attivo.
                 if (selectionBoxHelper) selectionBoxHelper.update();
@@ -84,6 +94,7 @@
                 const animating = rotating
                     || mixer
                     || rigPreviewActive
+                    || (typeof tlIsPlaying === 'function' && tlIsPlaying())
                     || (controls && controls.autoRotate);
                 if (renderBudget > 0 || animating) {
                     renderer.render(scene, camera);
@@ -101,5 +112,9 @@
             // Build Initial Model & start animate
             buildModel();
             applyEditorMode(); // T1 Fase B: imposta badge/stato iniziale
+            // Sezioni di sinistra richiudibili. Va fatto qui, a DOM completo e dopo che
+            // i moduli hanno agganciato i loro listener: la funzione arricchisce il
+            // markup esistente e non sposta nodi, quindi non puo' rubare handler.
+            if (typeof initCollapsibleSections === 'function') initCollapsibleSections(document);
             animate();
         });

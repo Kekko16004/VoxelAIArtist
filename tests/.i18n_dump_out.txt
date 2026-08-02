@@ -1,0 +1,379 @@
+alert.fileLoadError                Errore nel caricamento del file: {error}
+alert.fileNoVoxels                 File non valido: deve contenere un array 'voxels', 'ops' o 'objects'.
+alert.generateError                Errore nella generazione: {error}
+alert.invalidGridFormat            Formato non valido. Usa 'X,Y,Z' (es: 64,64,64)
+alert.parseError                   Errore nel parsing: {error}
+alert.parseNoVoxels                Formato non valido: deve contenere un array 'voxels', 'ops' o 'objects'.
+alert.pasteEmpty                   Per favore, incolla del testo JSON prima di caricare.
+alert.promptEmpty                  Inserisci una descrizione prima di procedere!
+app.logo                           Voxel AI Artist
+app.themeToggle                    Cambia tema chiaro/scuro
+app.title                          Voxel AI Artist by KFDev - Visualizzatore ed Esportatore 3D
+confirm.clearAll                   Sei sicuro di voler rimuovere tutti i voxel e azzerare il modello?
+dragPlane.auto                     Auto
+dragPlane.autoTitle                Auto: basato sulla faccia cliccata
+dragPlane.label                    Piano Drag
+dragPlane.labelTitle               Blocca il trascinamento dell'area su un asse specifico (piano fisso). Premi Q durante il
+dragPlane.x                        X
+dragPlane.xTitle                   Piano YZ (Larghezza X fissa)
+dragPlane.y                        Y
+dragPlane.yTitle                   Piano XZ (Altezza Y fissa)
+dragPlane.z                        Z
+dragPlane.zTitle                   Piano XY (Profondità Z fissa)
+dropzone.hint                      Trascina il JSON/VoxelAI o clicca qui
+export.glb                         Esporta GLB (riggato) ↓
+export.glbAutoscale                Autoscale GLB 1/100 (Unity/Blender)
+export.glbTitle                    Esporta GLB con scheletro e pesi rigidi (per Blender/Unity/Godot). Se non c'è rig, espor
+export.label3d                     Modello 3D
+export.labelData                   Dati
+export.labelVoxel                  Voxel / Minecraft
+export.mtl                         Esporta MTL
+export.obj                         Esporta OBJ
+export.saveJson                    💾 Salva JSON
+export.saveJsonTitle               Salva come file JSON in chiaro (.json)
+export.saveVoxelai                 💾 Salva VoxelAI
+export.saveVoxelaiTitle            Salva come file VoxelAI crittografato (.voxelai)
+export.schem                       Esporta .schem (Minecraft)
+export.vox                         Esporta .vox (MagicaVoxel)
+file.autosaveHistory               Cronologia salvataggi
+file.openProject                   Apri progetto…
+file.saveProject                   Salva progetto (.voxai)
+file.saveProjectAs                 Salva con nome…
+genMode.pack                       Pack
+genMode.packTitle                  Genera un pack di asset coerenti
+genMode.single                     Singolo
+genMode.singleTitle                Genera un singolo modello
+generate.aiModel                   Modello AI
+generate.bigStructure              Struttura grande / alto dettaglio
+generate.bigStructureHint          L'IA userà tutta la griglia con interni ed elementi architettonici. La generazione è più
+generate.bigStructureTitle         Per case, edifici e scene: griglia ampia e istruzioni per un modello ricco di dettagli
+generate.generateBtn               Genera Modello
+generate.gridAuto                  Auto (Decide l'IA)
+generate.gridColossal              384x384x384 (Colossale)
+generate.gridDetailed              64x64x64 (Dettagliato)
+generate.gridExtreme               512x512x512 (Estrema)
+generate.gridFast                  32x32x32 (Veloce)
+generate.gridHuge                  192x192x192 (Enorme)
+generate.gridMassive               256x256x256 (Edifici)
+generate.gridMedium                48x48x48 (Media)
+generate.gridSize                  Dimensione Griglia
+generate.gridSlow                  128x128x128 (Lento)
+generate.mode                      Modalità
+generate.modeGenerate              Genera da zero
+generate.modeModify                Modifica esistente
+generate.modifyBtn                 Modifica Modello
+generate.processing                Elaborazione...
+generate.promptPlaceholder         Cosa generiamo? (es. Dinosauro)
+generate.promptPlaceholderModify   Descrivi le modifiche (es. Aggiungi ali rosse)
+generate.removeImage               Rimuovi immagine
+generate.sectionTitle              Generazione Voxel AI
+generate.thinkingModel             Modello Thinking
+generate.uploadImage               Aggiungi un'immagine di riferimento
+gizmo.hintRotate                   Modalità RUOTA (R): trascina gli anelli per posare l'osso. Premi G per spostare il giunt
+gizmo.hintTranslate                Modalità SPOSTA (G): trascina per muovere il giunto e adattare lo scheletro. Premi R per
+gizmo.rotate                       ⟳ Ruota
+gizmo.rotateTitle                  Ruota osso — posa (R)
+gizmo.translate                    ✥ Sposta
+gizmo.translateTitle               Sposta giunto — modifica scheletro (G)
+help.blenderAlt                    In alternativa usa l'editor Nonlinear Animation (NLA): lì trovi tutte le azioni pronte d
+help.blenderIntro                  Le animazioni (idle, walk, run, jump, wave) sono già dentro il .glb: Blender le importa 
+help.blenderStep1                  Seleziona l'Armature nell'outliner.
+help.blenderStep2                  Apri un editor Dope Sheet e passa alla modalità Action Editor.
+help.blenderStep3                  Clicca il menu Browse Action (l'icona a sinistra del nome) e scegli walk / run / ecc.
+help.blenderStep4                  Premi Spazio per riprodurre.
+help.blenderSummary                Non vedi le animazioni in Blender?
+help.close                         Chiudi
+help.noResults                     Nessun risultato nella guida.
+help.s.ai.b                        In *Genera* descrivi il modello ("un drago rosso in una griglia 32") e premi Genera. | I
+help.s.ai.t                        Generazione con l'AI
+help.s.anim.b                      Le clip pronte (idle, camminata, saluto...) si scelgono dal menu e partono subito nell'a
+help.s.anim.t                      Animazioni
+help.s.draw.b                      Strumenti: [1] Vista, [2] Piazza, [3] Rompi, [4] Disegna (traccia continua), [5] Preleva
+help.s.draw.t                      Disegnare voxel
+help.s.export.b                    *GLB* è il formato per Blender / Unity / Godot: porta scheletro, pesi rigidi e clip. L'a
+help.s.export.t                    Salvare ed esportare
+help.s.keys.b                      [1] [2] [3] [4] [5] strumenti — [ e ] dimensione del pennello. | [Tab] Modalità Oggetto 
+help.s.keys.t                      Scorciatoie
+help.s.nav.b                       *Rotella premuta* ruota la vista attorno al modello (come in Blender). | *Shift + rotell
+help.s.nav.t                       Muoversi nella vista
+help.s.objects.b                   [Tab] alterna *Modalità Oggetto* (sposti e selezioni interi oggetti) e *Modalità Modific
+help.s.objects.t                   Oggetti, scena e proprietà
+help.s.pack.b                      Un *pack* genera più oggetti (con varianti) in un'unica sessione, tenendo lo stesso stil
+help.s.pack.t                      Pack di asset
+help.s.rig.b                       *Genera scheletro* costruisce le ossa in proporzione al modello e assegna ogni voxel a u
+help.s.rig.t                       Rig: scheletro e posa
+help.s.start.b                     La sidebar a sinistra ha quattro schede: *Genera* (AI), *Vista* (aspetto), *Disegna* (st
+help.s.start.t                     Primi passi
+help.s.sym.b                       La *simmetria* X/Y/Z specchia ogni modifica rispetto al centro della griglia; il piano t
+help.s.sym.t                       Simmetria, aree, estrusione
+help.s.weights.b                   Il legame è *rigido*: ogni voxel appartiene a un osso solo. Se un pezzo si muove con l'o
+help.s.weights.t                   Pittura pesi
+help.search                        Cerca nella guida…
+help.title                         Guida a Voxel AI Artist
+hint.draw                          Disegna: trascina per ricolorare un'intera area. Premi Q per ciclare l'asse.
+hint.pick                          Contagocce: clic sinistro su un voxel per copiarne il colore.
+hint.place                         Aggiungi: trascina con tasto sinistro per creare un'area (Scrap Mechanic). Premi Q per c
+hint.remove                        Rimuovi: trascina con tasto destro o strumento attivo per cancellare aree. Premi Q per c
+hint.view                          Modalità Vista: trascina per orbitare, rotella per zoom.
+hud.dragAxis                       Asse Drag:
+hud.dragAxisChange                 Premi Q per cambiare
+hud.dragAxisSet                    Asse Drag impostato:
+hud.extrude                        Estrusione:
+hud.extrudeAxis                    asse {axis} {dir}
+hud.extrudeControls                Trascina · E cambia asse · click conferma · Esc annulla
+hud.extrudeInfo                    {faces} facce · {steps} passi
+import.file                        Da file…
+import.label                       Importa file
+import.paste                       Incolla JSON…
+info.apply                         Applica
+info.gridSize                      Dimensione Griglia
+info.name                          Nome
+info.nameDefault                   Senza Nome
+info.nameNone                      Nessuno
+info.nameRename                    Clicca per rinominare
+info.sectionTitle                  Informazioni Modello
+info.totalVoxels                   Voxel Totali
+info.visibleVoxels                 Voxel Visibili
+loader.subtext                     Attendere circa 1-2 minuti. L'AI sta creando i voxel.
+loader.text                        Generazione del modello 3D in corso...
+mode.edit                          Modalità Modifica
+mode.object                        Modalità Oggetto
+newProject.cancel                  Annulla
+newProject.create                  Crea
+newProject.defaultName             Nuovo_Modello
+newProject.gridHuge                128x128x128 (Molto Grande)
+newProject.gridLarge               64x64x64 (Grande)
+newProject.gridMedium              48x48x48 (Media)
+newProject.gridSize                Dimensione Griglia
+newProject.gridStandard            32x32x32 (Standard)
+newProject.gridTiny                16x16x16 (Piccola)
+newProject.name                    Nome Modello
+objects.confirmDelete              Eliminare l'oggetto "{name}"? L'operazione non è annullabile.
+objects.confirmNew                 Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)
+objects.delete                     🗑 Elimina attivo
+objects.deleteTitle                Elimina l'oggetto attivo
+objects.duplicate                  ⧉ Duplica
+objects.duplicateTitle             Duplica l'oggetto attivo
+objects.hide                       Nascondi oggetto
+objects.hint                       Premi Tab per passare da Modifica a Oggetto. In Modalità Oggetto clicca un oggetto per s
+objects.merge                      ⛓ Unisci
+objects.mergeInvalid               Selezione non valida per l'unione.
+objects.mergeNeedTwo               Servono almeno due oggetti da unire. Spunta le caselle nell'outliner.
+objects.mergeTitle                 Unisce gli oggetti spuntati in uno solo
+objects.new                        ＋ Nuovo
+objects.newTitle                   Aggiungi un nuovo oggetto vuoto
+objects.promptRename               Nuovo nome per l'oggetto:
+objects.rename                     ✎ Rinomina
+objects.renameTitle                Rinomina l'oggetto attivo
+objects.sectionTitle               Oggetti della Scena
+objects.selectForMerge             Seleziona per Unisci
+objects.show                       Mostra oggetto
+pack.addObj                        + Aggiungi oggetto
+pack.addObjTitle                   Aggiungi un altro oggetto
+pack.cancelBtn                     Annulla pack
+pack.cancelled                     annullato
+pack.clickToRetry                  clicca per riprovare
+pack.clickToView                   Clicca per vedere questo modello nella griglia
+pack.closePanel                    Chiudi pannello
+pack.coherenceOk                   Tutti gli asset hanno dimensioni coerenti.
+pack.coherenceOutliers             Alcuni asset sono fuori scala rispetto al resto del pack.
+pack.coherenceTitle                Coerenza del pack
+pack.confirmBig                    Stai per generare {total} asset. Può richiedere molto tempo. Procedere?
+pack.confirmCancel                 Annullare il pack? Gli asset già pronti restano disponibili.
+pack.enforcePalette                Forza palette condivisa
+pack.enforcePaletteTitle           Rimappa i colori di ogni asset sulla palette condivisa del pack
+pack.errors                        errori
+pack.estimate                      {total} asset da generare — circa {mins} minuti (uno alla volta, per non farsi limitare 
+pack.exportAll                     Esporta tutti (JSON)
+pack.exportAllTitle                Scarica ogni asset pronto come file JSON
+pack.exportZip                     Esporta pack (ZIP)
+pack.exportZipTitle                Scarica tutto il pack in un unico archivio ZIP con .vox, OBJ e GLB
+pack.exporting                     Preparazione ZIP...
+pack.gridLabel                     Griglia comune
+pack.inProgress                    in corso
+pack.intro                         Genera più oggetti in una sola volta, tutti con lo stesso stile e la stessa palette. Ide
+pack.loadAll                       Carica tutti nella scena
+pack.loadAllTitle                  Carica tutti gli asset pronti come oggetti separati nella scena
+pack.loadError                     Errore caricamento asset: 
+pack.minShort                       min
+pack.noObjects                     Scrivi almeno un oggetto da generare!
+pack.noSavedPacks                  Nessun pack salvato.
+pack.noneReady                     Nessun asset pronto.
+pack.objPlaceholder                Es. Vaso fiori
+pack.objectsLabel                  Oggetti da generare
+pack.refError                      Riferimento non valido: 
+pack.refsBtn                       Carica JSON di riferimento
+pack.refsBtnTitle                  Carica modelli JSON esistenti per definire lo stile del pack
+pack.refsHint                      Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.
+pack.refsHintLoaded                {n} riferimento(i): palette e stile verranno estratti da questi file.
+pack.refsLabel                     Riferimenti di stile (opzionali)
+pack.removeObjTitle                Rimuovi questo oggetto
+pack.resultsTitle                  Asset Pack
+pack.savedPacks                    Pack salvati
+pack.savedPacksTitle               Riapri un pack generato in precedenza
+pack.sectionTitle                  Asset Pack (multigenerazione)
+pack.sizeHintLabel                 Suggerimento: aggiungi :piccolo, :medio, :grande o :enorme dopo il nome per definire la 
+pack.startBtn                      Genera Pack
+pack.startError                    Errore avvio pack: 
+pack.starting                      Avvio...
+pack.variants                      Generazioni per oggetto
+palette.sectionTitle               Palette Colori
+palette.swatchTitle                {color} — clic per usarlo come colore attivo
+paste.cancel                       Annulla
+paste.load                         Carica
+paste.placeholder                  Incolla qui il codice JSON...
+plugins.codePlaceholder            // function transform(voxels, api) { ... return voxels; }
+plugins.done                       Fatto
+plugins.hint                       Gli script vengono eseguiti in una sandbox isolata (nessun accesso a rete, file o DOM). 
+plugins.reset                      ↺
+plugins.resetTitle                 Ripristina il codice del plugin selezionato
+plugins.run                        ▶ Esegui
+plugins.runTitle                   Esegui lo script nella sandbox
+plugins.running                    Esecuzione…
+plugins.sectionTitle               Plugin & Script
+plugins.selectTitle                Scegli un plugin
+plugins.timeout                    Tempo scaduto: script terminato
+properties.apply                   Applica trasformazione
+properties.bakeNote                Applica cuoce la trasformazione nei voxel (coordinate intere, rotazione a 90°).
+properties.empty                   Nessun oggetto selezionato.
+properties.liveNote                Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta
+properties.name                    Nome
+properties.rotation                Rotazione Y (90°)
+properties.scale                   Scala
+properties.sectionTitle            Proprietà
+properties.transform               Trasformazione
+properties.visible                 Visibile
+rig.aiAnimCancel                   Annulla
+rig.aiAnimEmpty                    Nessuna animazione AI. Premi + per crearne una da un prompt.
+rig.aiAnimGenerate                 Genera con AI
+rig.aiAnimHint                     L'AI crea keyframe per le ossa dello scheletro attuale. Le animazioni salvate restano ne
+rig.aiAnimName                     Nome (es. Danza)
+rig.aiAnimNew                      Nuova animazione AI
+rig.aiAnimPrompt                   Descrivi il movimento (es. saluta con la mano destra e inchinati)
+rig.aiAnims                        Animazioni AI
+rig.animations                     Animazioni
+rig.autoRig                        🦴 Auto-Rig
+rig.boneCount                      ({count})
+rig.bones                          Ossa
+rig.clip                           Clip
+rig.clipHint                       Le clip sono generate dallo scheletro e servono per l'anteprima. Vengono incluse nell'ex
+rig.clipIdle                       Idle (respiro)
+rig.clipJump                       Salto
+rig.clipNone                       Nessuna (posa fissa)
+rig.clipRun                        Corsa
+rig.clipWalk                       Camminata
+rig.clipWave                       Saluto
+rig.generic                        Generico
+rig.genericTitle                   Catena di ossa lungo l'asse principale (animali, armi, oggetti)
+rig.hintNeedModel                  Genera o carica un modello, poi premi "Crea Rig Automatico".
+rig.hintNoRig                      Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue 
+rig.hintNoVoxels                   Nessun voxel da riggare. Genera o carica un modello prima.
+rig.humanoid                       Umanoide
+rig.humanoidTitle                  Bipede: testa, busto, braccia, gambe
+rig.ready                          Rig "{type}" pronto: {count} ossa. Clic su un osso per selezionarlo, poi R per ruotare (
+rig.rotX                           Rot X
+rig.rotY                           Rot Y
+rig.rotZ                           Rot Z
+rig.sectionTitle                   Scheletro & Rigging
+rig.selectedPose                   Posa osso selezionato
+rig.showSkeleton                   Mostra scheletro
+rig.showSkeletonTitle              Mostra le ossa sovrapposte al modello
+rig.skeletonType                   Tipo di scheletro
+rig.weightColors                   Colora pesi per osso
+rig.weightColorsTitle              Colora ogni voxel in base all'osso che lo controlla
+settings.accent                    Colore accento
+settings.appearance                Aspetto
+settings.close                     Chiudi
+settings.font                      Carattere
+settings.fontSize                  Dimensione testo
+settings.language                  Lingua
+settings.session                   Sessione Gemini
+settings.sessionBadFile            File non valido: serve un cookies.json (oggetto o lista di cookie).
+settings.sessionChecking           Verifica della sessione...
+settings.sessionCount              {count} cookie salvati
+settings.sessionDelete             Rimuovi sessione
+settings.sessionDeleteConfirm      Rimuovere i cookie salvati? La generazione con l'AI non funzionera' piu' finche' non ne 
+settings.sessionDeleteError        Rimozione non riuscita: {error}
+settings.sessionDeleteOk           Cookie rimossi.
+settings.sessionEmpty              Inserisci almeno un cookie prima di salvare.
+settings.sessionFirstRun           Prima configurazione: la generazione con l'AI ha bisogno di una sessione Gemini attiva. 
+settings.sessionFolderError        Impossibile aprire la cartella delle impostazioni.
+settings.sessionLoadFile           Carica cookies.json
+settings.sessionMasked             valore attivo {mask}
+settings.sessionOff                Sessione non configurata
+settings.sessionOffHint            Serve una sessione Gemini per generare con l'AI.
+settings.sessionOffline            Backend non raggiungibile: la sessione si gestisce con l'app avviata.
+settings.sessionOn                 Sessione configurata
+settings.sessionOpenFolder         Apri cartella impostazioni
+settings.sessionPathLabel          Cartella impostazioni: {path}
+settings.sessionPrivacy            I cookie vengono salvati soltanto su questo computer, nella cartella impostazioni locale
+settings.sessionPsidLabel          Cookie __Secure-1PSID
+settings.sessionPsidPlaceholder    Incolla il valore del cookie
+settings.sessionPsidTsLabel        Cookie __Secure-1PSIDTS
+settings.sessionRawHelp            Accetta un cookies.json esportato (per esempio con Cookie-Editor) oppure la stringa comp
+settings.sessionRawLabel           Oppure incolla tutto
+settings.sessionRawPlaceholder     cookies.json esportato oppure __Secure-1PSID=...; __Secure-1PSIDTS=...
+settings.sessionRefresh            Aggiorna
+settings.sessionSave               Salva sessione
+settings.sessionSaveError          Salvataggio non riuscito: {error}
+settings.sessionSaveNet            Impossibile contattare il backend: sessione non salvata.
+settings.sessionSaveOk             Sessione salvata.
+settings.sessionSavedAt            salvati il {date}
+settings.sessionSavedUnknown       data di salvataggio non disponibile
+settings.sessionSaving             Salvataggio in corso...
+settings.sessionUnknown            Stato della sessione non disponibile
+settings.shortcuts                 Scorciatoie da tastiera
+settings.theme                     Tema
+settings.themeDark                 Scuro
+settings.themeLight                Chiaro
+settings.title                     Impostazioni
+symmetry.label                     Simmetria
+symmetry.labelTitle                Ogni modifica viene replicata specularmente rispetto al centro del modello sull'asse sce
+symmetry.off                       Off
+symmetry.offTitle                  Nessuna simmetria
+symmetry.x                         X
+symmetry.xTitle                    Specchia sull'asse X
+symmetry.y                         Y
+symmetry.yTitle                    Specchia sull'asse Y
+symmetry.z                         Z
+symmetry.zTitle                    Specchia sull'asse Z
+tabs.draw                          Disegna
+tabs.generate                      Genera
+tabs.rig                           Rig
+tabs.view                          Vista
+tools.activeColorTitle             Scegli il colore da posare
+tools.brushSize                    Dimensione
+tools.brushSizeTitle               Raggio del pennello: 1 = un solo voxel, valori maggiori agiscono su una sfera di voxel
+tools.clearAll                     Svuota Tutto
+tools.clearAllTitle                Rimuove tutti i voxel
+tools.draw                         Disegna
+tools.drawTitle                    Disegna: ricolora i voxel col colore attivo (tieni premuto e trascina)
+tools.fillPlane                    Riempi Piano
+tools.fillPlaneTitle               Riempie il piano base col colore attivo
+tools.pick                         Contagocce
+tools.pickTitle                    Contagocce: preleva il colore di un voxel
+tools.place                        Aggiungi
+tools.placeTitle                   Aggiungi voxel (clic sinistro)
+tools.sectionTitle                 Strumenti di Modifica
+tools.view                         Vista
+tools.viewTitle                    Solo visualizzazione (nessuna modifica)
+topbar.export                      Esporta
+topbar.file                        File
+topbar.help                        ❓ Aiuto
+topbar.helpTitle                   Guide e scorciatoie (F1)
+topbar.import                      Importa
+topbar.settings                    ⚙ Impostazioni
+topbar.settingsTitle               Apri le impostazioni
+view.rotation                      Rotazione
+view.rotationCamera                Camera
+view.rotationCameraTitle           La camera orbita fluidamente attorno all'oggetto (stile The Finals)
+view.rotationNone                  Nessuna
+view.rotationNoneTitle             Nessuna rotazione automatica
+view.rotationObject                Oggetto
+view.rotationObjectTitle           L'oggetto ruota su se stesso (giradischi)
+view.rotationSpeed                 Velocità di rotazione
+view.sectionTitle                  Opzioni di Visualizzazione
+view.showGrid                      Mostra Griglia Guida
+view.voxelGap                      Spazio Voxel (Gap)
+view.wireframe                     Wireframe
+--- 378 chiavi ---

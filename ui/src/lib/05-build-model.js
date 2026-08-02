@@ -5,11 +5,18 @@
             //   invariato (rebuild completo per load/generate/import/switch oggetto).
             function buildModel(resetCamera = true, skipInactive = false) {
                 if (typeof clearRigPreview === 'function') {
+                    // Il rig NON viene piu' distrutto qui. Un rebuild rende stale solo
+                    // l'ANTEPRIMA (la SkinnedMesh), non i dati: prima c'era `rig = null` e
+                    // bastava un import, un cambio oggetto o un toggle di visibilita' per
+                    // perdere scheletro, posa e pesi dipinti senza alcun avviso.
+                    // Il rig viene parcheggiato sull'oggetto attivo e riadottato subito
+                    // dopo, cosi' resta esportabile in JSON/GLB.
                     clearRigPreview();
-                    rig = null;
+                    if (typeof stashRigToActiveObject === 'function') stashRigToActiveObject();
+                    if (typeof adoptRigFromActiveObject === 'function') adoptRigFromActiveObject();
+                    else rig = null;
                     selectedBoneIndex = -1;
-                    if (rigDetails) rigDetails.style.display = 'none';
-                    if (rigHint) rigHint.textContent = 'Genera o carica un modello, poi premi "Crea Rig Automatico".';
+                    if (typeof updateRigUI === 'function') updateRigUI();
                 }
 
                 // Perf: libera geometrie/materiali GPU dei mesh precedenti PRIMA di

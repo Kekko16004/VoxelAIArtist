@@ -11,7 +11,19 @@
             function captureSnapshot() {
                 return {
                     voxels: JSON.parse(JSON.stringify(currentModelData.voxels || [])),
-                    rig: rig ? { bones: JSON.parse(JSON.stringify(rig.bones)), pose: JSON.parse(JSON.stringify(rig.pose || {})), type: rig.type, binding: rig.binding } : null,
+                    // Copia PROFONDA e completa del rig: prima mancavano `customAnims` (un
+                    // Ctrl+Z dopo aver generato un'animazione AI la cancellava) e `weights`
+                    // (annullava le correzioni del weight paint senza poterle ripristinare).
+                    rig: rig ? {
+                        bones: JSON.parse(JSON.stringify(rig.bones)),
+                        pose: JSON.parse(JSON.stringify(rig.pose || {})),
+                        // Canale di traslazione della posa: senza questa riga un
+                        // keyframe "Location" non sopravviveva a un Ctrl+Z.
+                        posePos: JSON.parse(JSON.stringify(rig.posePos || {})),
+                        weights: rig.weights ? JSON.parse(JSON.stringify(rig.weights)) : null,
+                        customAnims: JSON.parse(JSON.stringify(rig.customAnims || [])),
+                        type: rig.type, binding: rig.binding
+                    } : null,
                     selectedBoneIndex: selectedBoneIndex,
                     activeObjectId: activeObjectId,
                     sceneMeta: sceneObjects.map(o => ({
@@ -49,25 +61,42 @@
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 currentModelData.voxels = snap.voxels;
                 if (snap.rig) {
-                    rig = {
-                        type: snap.rig.type || 'humanoid',
-                        binding: snap.rig.binding || 'rigid',
-                        bones: snap.rig.bones,
-                        pose: snap.rig.pose || {}
-                    };
+                    // normalizeRig() ricostruisce l'oggetto COMPLETO (pesi dipinti +
+                    // animazioni AI incluse): prima qui si copiavano solo bones/pose e
+                    // ogni undo azzerava silenziosamente weight paint e clip generate.
+                    const restored = (typeof normalizeRig === 'function')
+                        ? normalizeRig(snap.rig)
+                        : {
+                            type: snap.rig.type || 'humanoid',
+                            binding: snap.rig.binding || 'rigid',
+                            bones: snap.rig.bones,
+                            pose: snap.rig.pose || {},
+                            posePos: snap.rig.posePos || {},
+                            weights: snap.rig.weights || null,
+                            customAnims: snap.rig.customAnims || []
+                        };
+                    rig = restored;
+                }
+                if (rig) {
                     rigType = rig.type;
                     rigTypeControl.querySelectorAll('.seg-btn').forEach(b =>
                         b.classList.toggle('active', b.dataset.rig === rigType));
+                    // Il rig vive sull'oggetto: parcheggiarlo subito evita che il primo
+                    // rebuild/cambio oggetto riadotti la versione pre-undo.
+                    if (typeof stashRigToActiveObject === 'function') stashRigToActiveObject();
                     applyRig();
                     if (snap.selectedBoneIndex >= 0 && snap.selectedBoneIndex < rig.bones.length) {
                         selectBone(snap.selectedBoneIndex);
                     } else if (rig.bones.length) {
-                        selectBone(0);
+                        selectBone(typeof firstSelectableBone === 'function' ? firstSelectableBone() : 0);
                     }
                 } else {
                     clearRigPreview();
                     rig = null;
                     selectedBoneIndex = -1;
+                    const _o = (typeof getActiveObject === 'function') ? getActiveObject() : null;
+                    if (_o) delete _o.rig;
+                    if (typeof updateRigUI === 'function') updateRigUI();
                 }
             }
 
@@ -76,8 +105,9 @@
                 redoStack.push(JSON.stringify(captureSnapshot()));
 
                 const prev = JSON.parse(undoStack.pop());
-                restoreSnapshot(prev);
+                currentModelData.voxels = prev.voxels;
                 buildModel(false);
+                restoreSnapshot(prev);
                 updateHistoryButtons();
             }
 
@@ -86,28 +116,43 @@
                 undoStack.push(JSON.stringify(captureSnapshot()));
 
                 const next = JSON.parse(redoStack.pop());
-                restoreSnapshot(next);
+                currentModelData.voxels = next.voxels;
                 buildModel(false);
+                restoreSnapshot(next);
                 updateHistoryButtons();
             }
 
             undoBtn.addEventListener('click', undo);
             redoBtn.addEventListener('click', redo);
             window.addEventListener('keydown', e => {
-                // Never hijack typing in a field.
                 const t = e.target;
-                if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+                // I cursori di posa del rig sono <input type="range">: non hanno un "undo"
+                // di testo nativo, quindi Ctrl+Z / Ctrl+Y deve restare GLOBALE anche quando
+                // uno di essi ha il focus (altrimenti annullare una posa nel Rig non fa
+                // nulla). I veri campi di testo, invece, tengono il loro undo nativo.
+                const isRange = !!(t && t.tagName === 'INPUT' && t.type === 'range');
+                // isTextEntry/isTypingTarget stanno in 01-scene-setup.js: unica fonte.
+                // Un <select> NON e' piu' un "campo di testo" per Ctrl+Z: non ha undo
+                // nativo, quindi bloccarlo lasciava l'undo morto dopo aver scelto una
+                // voce in un menu a tendina del pannello sinistro.
+                const isTextField = isTextEntry(t);
 
                 if (e.ctrlKey || e.metaKey) {
-                    if (e.key === 'z' || e.key === 'Z') {
+                    if (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y') {
+                        if (isTextField) return;               // lascia l'undo nativo del campo
                         e.preventDefault();
-                        if (e.shiftKey) redo(); else undo();
-                    } else if (e.key === 'y' || e.key === 'Y') {
-                        e.preventDefault();
-                        redo();
+                        if ((e.key === 'y' || e.key === 'Y') || e.shiftKey) redo(); else undo();
+                        // Togli il focus dal controllo cosi' etichette/gizmo riflettono lo
+                        // stato ripristinato (e la prossima scorciatoia non trova ostacoli).
+                        if (t && typeof t.blur === 'function' && !isTextField) t.blur();
                     }
                     return;
                 }
+
+                // Per le altre scorciatoie (Q/E/strumenti) non interferire mentre si
+                // digita in un campo, si trascina un cursore, o quando il controllo
+                // focalizzato usa davvero quel tasto (frecce/spazio su un <select>).
+                if (isTypingTarget(e) || isRange) return;
 
                 if (e.key === 'q' || e.key === 'Q') {
                     if (currentTool !== 'view') {

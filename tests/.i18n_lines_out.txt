@@ -1,0 +1,97 @@
+===== 32-rig-tools.js
+--
+L444   if (!res.changed) {
+L445   dropLastHistory();
+L446   if (rigHint) rigHint.textContent = 'Nessuna posa da specchiare (' + mirrorDirLabel() + '): le ossa gemelle non esistono o sono a zero.';
+L447   return;
+L448   }
+L449   rigSetEffectivePose(res.pose);
+L450   stashRigToActiveObject();
+L451   refreshPoseUI();
+L452   if (rigHint) rigHint.textContent = 'Posa specchiata su X (' + mirrorDirLabel() + '): ' + res.changed + ' ossa aggiornate.';
+L453   });
+L454   
+L455   // --- Idea 1: specchia pesi dipinti ---
+L456   if (mirrorWeightsBtn) mirrorWeightsBtn.addEventListener('click', () => {
+--
+L460   const res = mirrorWeightsData(voxels, rig.bones, rig.weights, mirrorDir);
+L461   if (!res.copied) {
+L462   dropLastHistory();
+L463   if (rigHint) rigHint.textContent = 'Nessuna correzione da specchiare (' + mirrorDirLabel() + '): dipingi prima un lato.';
+L464   return;
+L465   }
+L466   rig.weights = res.weights;
+L467   rebuildRigPreserving(selectedBoneIndex);
+L468   if (rigHint) rigHint.textContent = 'Pesi specchiati (' + mirrorDirLabel() + '): ' + res.copied + ' voxel'
+L469   + (res.skipped ? ', ' + res.skipped + ' senza gemello' : '') + '.';
+L470   });
+L471   
+L472   // --- Idea 2: simmetrizza lo scheletro ---
+--
+L478   if (!res.moved && !res.centred) {
+L479   dropLastHistory();
+L480   if (rigHint) rigHint.textContent = 'Scheletro gia\' simmetrico su X.';
+L481   return;
+L482   }
+L483   rig.bones = res.bones;
+L484   rebuildRigPreserving(selectedBoneIndex);
+L485   if (rigHint) rigHint.textContent = 'Scheletro simmetrizzato (' + mirrorDirLabel() + '): ' + res.moved
+L486   + ' ossa spostate, ' + res.pairs + ' coppie L/R'
+L487   + (res.centred ? ', ' + res.centred + ' ossa centrali riallineate' : '') + '.';
+L488   });
+L489   
+L490   // --- Idea 4: aggiungi / rinomina / elimina ossa (sopra lo scheletro automatico) ---
+--
+L510   if (idx < 0) { dropLastHistory(); return; }
+L511   rebuildRigPreserving(idx);
+L512   if (rigHint) rigHint.textContent = 'Osso "' + name + '" aggiunto sotto ' + parentName
+L513   + '. Con [G] sposti la sua articolazione, poi assegnagli i voxel con la pittura pesi.';
+L514   }
+L515   
+L516   function rigRenameBonePrompt(index) {
+--
+L526   if (err) { dropLastHistory(); alert(err); return; }
+L527   if (rig.bones[i].name === before) { dropLastHistory(); return; }
+L528   rebuildRigPreserving(i);
+L529   if (rigHint) rigHint.textContent = 'Osso rinominato: ' + before + ' -> ' + rig.bones[i].name
+L530   + ' (posa, pesi e animazioni aggiornati).';
+L531   }
+L532   
+--
+L546   const name = bd.name;
+L547   rebuildRigPreserving(res.select);
+L548   if (rigHint) rigHint.textContent = 'Osso "' + name + '" eliminato'
+L549   + (res.removed > 1 ? ' (con ' + (res.removed - 1) + ' punta/e helper)' : '') + '.';
+L550   }
+L551   
+L552   if (boneAddBtn) boneAddBtn.addEventListener('click', rigAddBonePrompt);
+--
+L672   ikActive = true;
+L673   ikToggleBtn.classList.add('active');
+L674   if (ikHintEl) ikHintEl.textContent = 'Trascina la mano, il piede o l\'osso che vuoi puntare: la catena lo segue.';
+L675   if (rigHint) rigHint.textContent = 'IK attiva: trascina con il tasto sinistro l\'estremita\' dell\'arto verso il punto voluto. '
+L676   + 'Ogni trascinamento e\' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire.';
+L677   if (typeof updateGizmo === 'function') updateGizmo();
+L678   } else {
+L679   rigDisableIk();
+L680   if (rigHint) rigHint.textContent = 'IK disattivata: [R] ruota, [G] sposta l\'articolazione.';
+--
+L738   rigSetEffectivePose(res.pose);
+L739   stashRigToActiveObject();
+L740   refreshPoseUI();
+L741   if (rigHint) rigHint.textContent = 'Posa "' + entry.name + '" applicata a ' + res.applied + ' ossa'
+L742   + (res.missing.length ? ' (' + res.missing.length + ' ossa della posa non esistono qui: ' + res.missing.slice(0, 4).join(', ') + ')' : '') + '.';
+L743   }
+L744   
+L745   function deletePoseFromLib(idx) {
+L746   const list = poseLibLoad();
+--
+L800   list.unshift({ name, pose: clean, ts: Date.now() });
+L801   poseLibSave(list);
+L802   renderPoseLib();
+L803   if (rigHint) rigHint.textContent = 'Posa "' + name + '" salvata (' + names.length
+L804   + ' ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.';
+L805   });
+L806   
+L807   renderPoseLib();
+L808   

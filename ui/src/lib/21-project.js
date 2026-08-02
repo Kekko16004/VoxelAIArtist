@@ -8,6 +8,11 @@
              * /api/autosave/*, /api/recent). WEB (nessun backend): fallback download del
              * wrapper .voxai e ultimo autosave in localStorage.
              *
+             * ATTENZIONE alla distinzione (vedi 19-prefs.js): hasLocalBackend() dice se
+             * c'e' il server Python (vero anche in modalita' web, quindi autosave e
+             * cronologia vanno su disco); hasNativeDialogs() dice se ci sono i dialog Qt
+             * (solo modalita' "py"), che servono per Apri / Salva con nome.
+             *
              * Il contenuto del progetto = getSceneSavePayload() (l'INTERA scena T1).
              * Tutte le fetch sono in try/catch: senza backend l'app non si rompe. */
 
@@ -19,7 +24,9 @@
             function projectApi(route) {
                 return (window.__API_BASE__ ? window.__API_BASE__ : '') + route;
             }
-            function isDesktopApp() { return !!window.__IS_DESKTOP__; }
+            // NIENTE isDesktopApp() qui: le due capacita' che contano sono
+            // hasLocalBackend() e hasNativeDialogs() (19-prefs.js). Un unico flag
+            // "desktop" faceva degradare la modalita' web senza motivo.
 
             function sceneHasVoxels() {
                 try { return sceneObjects.some(o => ((o.data && o.data.voxels) || []).length > 0); }
@@ -80,7 +87,7 @@
 
             // --- aggiornamento progetti recenti (best-effort) -------------------
             async function pushRecent(path, name) {
-                if (!isDesktopApp() || !path) return;
+                if (!hasLocalBackend() || !path) return;
                 try {
                     await fetch(projectApi('/api/recent'), {
                         method: 'POST',
@@ -95,13 +102,15 @@
              * =======================================================================*/
 
             // saveProject(forceDialog): salva la scena come .voxai.
-            //  - DESKTOP: POST /api/project/save { data, path? }. Senza path il backend
-            //    apre il dialog e ritorna il path (o { cancelled:true }).
-            //  - WEB: scarica il wrapper voxai come file .voxai.
+            //  - DIALOG NATIVI (modalita' "py"): POST /api/project/save { data, path? }.
+            //    Senza path il backend apre il dialog e ritorna il path (o { cancelled:true }).
+            //  - ALTRIMENTI (browser): scarica il wrapper voxai come file .voxai. Senza Qt
+            //    non esiste un "Salva con nome", e scrivere su un path arbitrario dal tab
+            //    non e' possibile: il download e' l'equivalente corretto.
             async function saveProject(forceDialog) {
                 const data = getSceneSavePayload();
-                if (!isDesktopApp()) {
-                    // WEB: nessun backend, ricrea il wrapper lato client e scarica.
+                if (!hasNativeDialogs()) {
+                    // BROWSER: nessun dialog nativo, ricrea il wrapper lato client e scarica.
                     const wrapper = { format: 'voxai', version: 1, savedAt: new Date().toISOString(), data: data };
                     downloadFile(JSON.stringify(wrapper), currentProjectName() + '.voxai', 'application/json');
                     markProjectSaved();
@@ -142,11 +151,11 @@
             function saveProjectAs() { return saveProject(true); }
 
             // openProject(): apre un .voxai / .json / .voxelai / .vox / .schem.
-            //  - DESKTOP: GET /api/project/open (dialog nativo). Gestisce encoding json
+            //  - DIALOG NATIVI: GET /api/project/open (dialog Qt). Gestisce encoding json
             //    (voxai/json) e base64 (vox/schem: decodifica coi decoder di 20-formats).
-            //  - WEB: riusa l'input file esistente (handleFile via #fileInput).
+            //  - ALTRIMENTI: riusa l'input file esistente (handleFile via #fileInput).
             async function openProject() {
-                if (!isDesktopApp()) {
+                if (!hasNativeDialogs()) {
                     const fi = document.getElementById('fileInput');
                     if (fi) fi.click();
                     return;
@@ -199,7 +208,10 @@
 
             /* =========================================================================
              * 2. AUTOSAVE (periodico ~90s + debounce dopo modifica), solo se dirty.
-             *    DESKTOP: POST /api/autosave. WEB: ultimo autosave in localStorage.
+             *    CON BACKEND (anche in modalita' web): POST /api/autosave, snapshot su
+             *    disco con rotazione. SENZA BACKEND (file://): ultimo autosave in
+             *    localStorage. Se la POST fallisce si ripiega comunque su localStorage,
+             *    cosi' una modifica non resta senza rete di sicurezza.
              * =======================================================================*/
             const AUTOSAVE_LS_KEY = 'voxelai-autosave';
             const AUTOSAVE_INTERVAL_MS = 90000;
@@ -224,20 +236,28 @@
                 });
                 const data = getSceneSavePayload();
                 const projectId = deriveProjectId();
+                const toLocalStorage = () => {
+                    // Conserva SOLO l'ultimo autosave: e' una rete di sicurezza, non una
+                    // cronologia (per quella serve il backend, che ruota i file).
+                    const wrapper = { format: 'voxai', version: 1, savedAt: new Date().toISOString(), projectId: projectId, data: data };
+                    try { localStorage.setItem(AUTOSAVE_LS_KEY, JSON.stringify(wrapper)); markProjectSaved(); } catch (e) { }
+                };
                 try {
-                    if (isDesktopApp()) {
+                    if (hasLocalBackend()) {
                         const res = await fetch(projectApi('/api/autosave'), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ data: data, projectId: projectId })
                         });
                         if (res && res.ok) markProjectSaved();
+                        else toLocalStorage();       // backend raggiunto ma in errore
                     } else {
-                        // WEB: conserva SOLO l'ultimo autosave in localStorage.
-                        const wrapper = { format: 'voxai', version: 1, savedAt: new Date().toISOString(), projectId: projectId, data: data };
-                        try { localStorage.setItem(AUTOSAVE_LS_KEY, JSON.stringify(wrapper)); markProjectSaved(); } catch (e) { }
+                        toLocalStorage();
                     }
-                } catch (e) { /* autosave best-effort: riproverà al prossimo tick */ }
+                } catch (e) {
+                    // Backend non raggiungibile: meglio localStorage che nessun autosave.
+                    try { toLocalStorage(); } catch (e2) { }
+                }
                 finally { autosaveInFlight = false; }
             }
 
@@ -280,8 +300,8 @@
             async function refreshAutosaveList() {
                 const listEl = document.getElementById('autosaveList');
                 if (!listEl) return;
-                if (!isDesktopApp()) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi è disponibile solo nell\'app desktop.</div>';
+                if (!hasLocalBackend()) {
+                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi richiede l\'app avviata (python main.py): aperta come file locale non c\'è il backend che la conserva.</div>';
                     return;
                 }
                 listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Caricamento…</div>';
@@ -332,7 +352,7 @@
             }
 
             async function openAutosaveFolder() {
-                if (!isDesktopApp()) { alert('Disponibile solo nell\'app desktop.'); return; }
+                if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
                 try { await fetch(projectApi('/api/autosave/open-folder')); }
                 catch (e) { alert('Impossibile aprire la cartella: ' + e.message); }
             }

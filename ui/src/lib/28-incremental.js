@@ -72,6 +72,15 @@
             // buildModel(): da quel momento gli edit possono usare il percorso rapido.
             function primeIncrementalState(voxels, visible, meshMap) {
                 try {
+                    // Con voxel NASCOSTI l'array completo (currentModelData.voxels) e la
+                    // lista filtrata `voxels` divergono: gli indici del percorso rapido
+                    // (costruiti su `voxels`) punterebbero ai voxel sbagliati nell'array
+                    // completo, corrompendo place/remove/draw. Finche' qualcosa e'
+                    // nascosto restiamo sul percorso completo (buildModel), che filtra
+                    // _hidden correttamente. Perf: penalita' solo mentre c'e' del nascosto.
+                    const fullLen = (currentModelData && Array.isArray(currentModelData.voxels))
+                        ? currentModelData.voxels.length : voxels.length;
+                    if (fullLen !== voxels.length) { incrementalReady = false; return; }
                     voxelIndex = new Map();
                     for (let i = 0; i < voxels.length; i++) {
                         const v = voxels[i];

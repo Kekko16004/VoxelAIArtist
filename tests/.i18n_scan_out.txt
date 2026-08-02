@@ -1,0 +1,105 @@
+TEXT         L7      <title> Voxel AI Artist by KFDev - 3D Viewer & Exporter
+TITLE        L1596   <button> Salva il progetto nativo (.voxai) — intera scena
+TITLE        L1598   <button> Salva il progetto con un nuovo nome (.voxai)
+TITLE        L1600   <button> Apri un progetto (.voxai / .json / .vox / .schem)
+TITLE        L1603   <button> Mostra la cronologia dei salvataggi automatici
+TITLE        L1614   <button> Importa .voxai / .json / .vox / .schem
+TEXT         L1616   <span> .vox .schem .voxai .json
+TITLE        L1617   <button> Incolla un modello JSON
+TITLE        L1636   <button> Esporta in formato MagicaVoxel (.vox)
+TITLE        L1638   <button> Esporta in formato Minecraft Sponge Schematic (.schem) per WorldEdit/Litematica
+TEXT         L1723   <button> 📷 Riferimento Foto
+TEXT         L1842   <option> 32 (veloce)
+TEXT         L1843   <option> 64 (consigliata)
+TEXT         L1844   <option> 96 (dettagliata)
+TEXT         L1845   <option> 128 (lenta)
+TEXT         L1882   <button> Incolla JSON
+TEXT         L1891   <button> Nuovo Modello
+TEXT         L1909   <label> Nome Modello
+TEXT         L1916   <label> Dimensione Griglia
+TEXT         L2151   <label> Colore Attivo
+TEXT         L2162   <label> Dimensione pennello
+TEXT         L2188   <p> Modalità Vista: trascina per orbitare. Scegli uno strumento per modificare il modello.
+TEXT         L2191   <button> ↶ Annulla
+TEXT         L2193   <button> ↷ Ripeti
+TEXT         L2227   <div> Scheletro & Rigging
+TITLE        L2242   <button> Rientra nell'anteprima del rig salvato su questo oggetto, senza rigenerarlo
+TEXT         L2246   <button> 👁 Mostra rig
+TITLE        L2248   <label> Ruota le ossa dello scheletro rispetto ai voxel senza spostare la mesh
+TEXT         L2248   <label> Ruota Scheletro
+TEXT         L2263   <label> Colora pesi per osso
+TEXT         L2272   <p> Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un solo osso
+TEXT         L2277   <div> Ossa
+TITLE        L2282   <button> Aggiunge un osso figlio all'osso selezionato, partendo dallo scheletro automatico
+TEXT         L2283   <button> + Osso
+TITLE        L2284   <button> Rinomina l'osso selezionato (anche con doppio clic nella lista)
+TEXT         L2285   <button> Rinomina
+TITLE        L2286   <button> Elimina l'osso selezionato: i figli passano al genitore
+TEXT         L2287   <button> Elimina
+TEXT         L2292   <p> Doppio clic su un osso per rinominarlo. Rinominare aggiorna posa, pesi dipinti e animazioni AI; elim
+TEXT         L2295   <div> Simmetria X
+TEXT         L2298   <label> Direzione
+TITLE        L2300   <button> Copia il lato sinistro (_L) su quello destro (_R)
+TITLE        L2301   <button> Copia il lato destro (_R) su quello sinistro (_L)
+TITLE        L2302   <button> Scambia i due lati fra loro (e allinea le ossa centrali)
+TEXT         L2302   <button> Scambia
+TITLE        L2306   <button> Specchia la posa delle ossa _L/_R: rotazione Y e Z invertite
+TEXT         L2307   <button> ⇄ Specchia posa
+TITLE        L2308   <button> Copia le correzioni dei pesi sul voxel simmetrico dell'altro lato
+TEXT         L2309   <button> ⇄ Specchia pesi dipinti
+TITLE        L2310   <button> Rende lo scheletro simmetrico dopo le correzioni con G: le articolazioni L/R combaciano al voxel
+TEXT         L2311   <button> ⇄ Simmetrizza scheletro
+TEXT         L2316   <p> Lo specchio è sull'asse X, rispetto al centro del modello. Su un personaggio simmetrico posi e dipin
+TITLE        L2321   <button> Riassegna a mano quali voxel segue l'osso selezionato
+TEXT         L2323   <button> 🖌 Dipingi pesi
+TEXT         L2326   <label> Modalità pennello
+TITLE        L2328   <button> Assegna i voxel toccati all'osso selezionato
+TEXT         L2329   <button> Dipingi
+TITLE        L2330   <button> Assegna in un clic tutto il pezzo collegato che ora segue lo stesso osso
+TEXT         L2331   <button> Riempi
+TITLE        L2332   <button> Rimuove la correzione manuale e torna all'assegnazione automatica
+TEXT         L2333   <button> Cancella
+TEXT         L2337   <label> Raggio pennello
+TEXT         L2337   <span> 2 voxel
+TEXT         L2341   <label> Osso bersaglio
+TEXT         L2344   <p> Nessuna correzione manuale
+TITLE        L2345   <button> Butta tutte le correzioni manuali e torna ai pesi automatici
+TEXT         L2347   <button> ↺ Azzera correzioni
+TEXT         L2352   <p> Seleziona un osso nella lista o clicca il suo pallino, poi trascina sul modello. In pittura la posa 
+TEXT         L2359   <label> Rot X
+TEXT         L2361   <label> Rot Y
+TEXT         L2363   <label> Rot Z
+TEXT         L2367   <button> ↺ Riporta a T-pose
+TEXT         L2370   <div> Punta arto (IK)
+TITLE        L2372   <button> Trascina la mano o il piede: spalla e gomito (anca e ginocchio) si sistemano da soli
+TEXT         L2373   <button> 🎯 Punta arto
+TEXT         L2379   <p> Attiva la modalità, poi trascina con il tasto sinistro l'estremità dell'arto verso il punto voluto: 
+TEXT         L2382   <div> Libreria pose
+TITLE        L2384   <button> Salva la posa corrente nella libreria, riusabile su altri oggetti
+TEXT         L2385   <button> 💾 Salva posa corrente
+TEXT         L2390   <p> Nessuna posa salvata. Le pose restano su questo computer e valgono per qualsiasi oggetto con gli ste
+TEXT         L2408   <p> Le clip sono generate dallo scheletro e servono per l'anteprima. Vengono incluse nell'export GLB.
+TEXT         L2487   <button> ✥ Sposta
+TITLE        L2521   <button> Apri la cartella dei salvataggi automatici
+TEXT         L2522   <button> 📁 Apri cartella autosave
+TEXT         L2537   <div> Premi
+TEXT         L2537   <b> Tab
+TEXT         L2538   <div> per passare da Modifica a Oggetto. In Modalità Oggetto clicca un oggetto per selezionarlo.
+TITLE        L2673   <button> Grafite
+TITLE        L2674   <button> Indaco
+TITLE        L2675   <button> Azzurro
+TITLE        L2676   <button> Verde
+TITLE        L2677   <button> Ambra
+TITLE        L2678   <button> Magenta
+TITLE        L2680   <input> Colore personalizzato
+TEXT         L2690   <option> Plus Jakarta Sans
+TEXT         L2691   <option> Sistema
+TEXT         L2692   <option> Segoe UI
+TEXT         L2693   <option> Georgia (serif)
+TEXT         L2694   <option> Monospazio
+TEXT         L2709   <div> Clicca il tasto accanto a un'azione, poi premi la nuova combinazione.
+TEXT         L2709   <b> Esc
+TEXT         L2710   <div> annulla.
+TITLE        L2716   <button> Ripristina tutte le scorciatoie ai valori predefiniti
+TEXT         L2716   <button> ↺ Ripristina predefiniti
+--- 104 stringhe non annotate ---

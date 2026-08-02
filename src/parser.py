@@ -234,6 +234,182 @@ def clean_json_string(s):
     s = re.sub(r',\s*([}\]])', r'\1', s)
     return s
 
+
+_BARE_STOP = ',:{}[]'
+_JSON_LITERALS = ('true', 'false', 'null', 'True', 'False', 'None',
+                  'NaN', 'Infinity', '-Infinity')
+
+
+def _read_quoted(s, i):
+    """Legge il letterale che inizia a `s[i]` (apice singolo o doppio).
+
+    Ritorna (contenuto_decodificato, indice_dopo_la_chiusura). Una stringa non
+    terminata viene chiusa a fine testo invece di sollevare: la risposta del
+    modello puo' essere troncata a meta'.
+    """
+    quote = s[i]
+    i += 1
+    buf = []
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c == '\\':
+            if i + 1 < n:
+                nxt = s[i + 1]
+                # \' non e' un escape JSON valido: se il modello ha usato gli
+                # apici singoli va normalizzato ad apostrofo semplice.
+                buf.append(nxt if nxt == "'" else c + nxt)
+                i += 2
+                continue
+            i += 1
+            continue
+        if c == quote:
+            return "".join(buf), i + 1
+        buf.append(c)
+        i += 1
+    return "".join(buf), n
+
+
+def _emit_string(raw, was_single):
+    """Rende `raw` un letterale JSON valido a doppi apici."""
+    import json
+    if not was_single:
+        # Veniva gia' da doppi apici: il contenuto conserva gli escape cosi'
+        # com'erano (`\"` e' due caratteri). Va riemesso INVARIATO — un
+        # replace('"', '\\"') qui trasformerebbe `\"` in `\\"`, cioe' un
+        # backslash letterale seguito dalla chiusura, e romperebbe la stringa.
+        return '"' + raw + '"'
+    return json.dumps(raw)
+
+
+def repair_json_syntax(s):
+    """Ripara le malformazioni "quasi-JSON" tipiche di un LLM.
+
+    Copre quattro famiglie viste in produzione sulle risposte di /api/animate:
+      1. separatore sbagliato dopo una CHIAVE: `"tracks"= [`, `"tracks", [`,
+         `"tracks"; [`, o separatore del tutto assente `"tracks" [`;
+      2. chiavi senza virgolette (`{name: "Corsa"}`);
+      3. apici singoli al posto dei doppi;
+      4. valore con virgoletta di apertura mancante (`"bone":upperLeg_R"`).
+
+    E' un parser a stati CONSAPEVOLE DELLE STRINGHE: dentro un letterale non
+    viene toccato nulla. Senza questa cautela un `#CCCCCC` o un nome di parte
+    contenente ':' verrebbe corrotto, e questa funzione e' sul percorso di
+    TUTTE le risposte AI (modelli voxel compresi), non solo delle animazioni.
+
+    Non solleva mai: se non riconosce qualcosa la ricopia invariata. E' un
+    tentativo di recupero, quindi il chiamante prova comunque json.loads dopo.
+    """
+    out = []
+    stack = []          # 'obj' | 'arr'
+    expect = 'value'    # al top level il primo token e' un valore
+    i = 0
+    n = len(s)
+
+    def at_key():
+        return expect == 'key' and bool(stack) and stack[-1] == 'obj'
+
+    def skip_ws(j):
+        while j < n and s[j].isspace():
+            j += 1
+        return j
+
+    def close_key(j):
+        """Dopo una chiave: garantisce che il separatore sia ':'.
+
+        Ritorna il nuovo indice. Consuma un separatore sbagliato (`=`, `;`, o
+        una `,` che in posizione di chiave non puo' essere un separatore di
+        array) e lo sostituisce; se manca del tutto, inserisce ':'.
+        """
+        k = skip_ws(j)
+        if k < n and s[k] == ':':
+            out.append(':')
+            return k + 1
+        if k < n and s[k] in '=;,':
+            out.append(':')
+            return k + 1
+        out.append(':')
+        return j
+
+    while i < n:
+        c = s[i]
+        if c.isspace():
+            out.append(c)
+            i += 1
+            continue
+        if c == '{':
+            out.append(c)
+            stack.append('obj')
+            expect = 'key'
+            i += 1
+            continue
+        if c == '[':
+            out.append(c)
+            stack.append('arr')
+            expect = 'value'
+            i += 1
+            continue
+        if c in '}]':
+            out.append(c)
+            if stack:
+                stack.pop()
+            expect = 'comma'
+            i += 1
+            continue
+        if c == ',':
+            out.append(c)
+            expect = 'key' if (stack and stack[-1] == 'obj') else 'value'
+            i += 1
+            continue
+        if c == ':':
+            out.append(c)
+            expect = 'value'
+            i += 1
+            continue
+        if c in '"\'':
+            raw, j = _read_quoted(s, i)
+            out.append(_emit_string(raw, c == "'"))
+            if at_key():
+                i = close_key(j)
+                expect = 'value'
+            else:
+                i = j
+                expect = 'comma'
+            continue
+        # Token nudo: chiave senza virgolette, letterale, numero, o valore a cui
+        # manca la virgoletta di apertura.
+        j = i
+        while j < n and s[j] not in _BARE_STOP:
+            j += 1
+        token = s[i:j].strip()
+        if not token:
+            out.append(s[i:j])
+            i = j
+            continue
+        if at_key():
+            out.append(_emit_string(token.strip('"\''), True))
+            i = close_key(j)
+            expect = 'value'
+            continue
+        if token in _JSON_LITERALS or _is_number(token):
+            out.append(token)
+        else:
+            # Es. `"bone":upperLeg_R"` -> il token e' `upperLeg_R"`.
+            out.append(_emit_string(token.strip('"\''), True))
+        i = j
+        expect = 'comma'
+
+    return "".join(out)
+
+
+def _is_number(tok):
+    try:
+        float(tok)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def repair_unescaped_quotes(s):
     chars = list(s)
     n = len(s)
@@ -301,6 +477,13 @@ def parse_with_recovery(s):
     try:
         repaired_quotes = repair_unescaped_quotes(cleaned)
         return json.loads(repaired_quotes)
+    except Exception:
+        pass
+    # Separatori sbagliati / chiavi nude / apici singoli. Va PRIMA del
+    # bilanciamento delle graffe: quello ripara il troncamento, non la
+    # sintassi, e su `"tracks"= [...]` fallirebbe comunque.
+    try:
+        return json.loads(clean_json_string(repair_json_syntax(cleaned)))
     except Exception:
         pass
     chars = []
@@ -377,7 +560,56 @@ def parse_with_recovery(s):
     repaired = clean_json_string(repaired)
     return json.loads(repaired)
 
+def _scan_balanced_end(b, start_idx):
+    """Indice di chiusura del valore JSON che inizia a `start_idx`, o -1.
+
+    Scansione consapevole delle stringhe (e degli escape) identica a quella
+    storica di extract_json_candidate: serve sia per gli oggetti `{...}` che per
+    gli array `[...]`.
+    """
+    opener = b[start_idx]
+    closer = '}' if opener == '{' else ']'
+    stack = []
+    in_string = False
+    escaped = False
+    for idx in range(start_idx, len(b)):
+        c = b[idx]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif c == '\\':
+                escaped = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+        elif c in ('{', '['):
+            stack.append(c)
+        elif c in ('}', ']'):
+            if stack:
+                stack.pop()
+            if not stack:
+                # Chiudiamo solo sul delimitatore coerente con l'apertura,
+                # altrimenti un `]` spaiato troncherebbe un oggetto.
+                if c == closer:
+                    return idx
+                return -1
+    return -1
+
+
 def extract_json_candidate(text):
+    """Ritaglia dal testo del modello tutti i possibili payload JSON.
+
+    Vengono emessi PIU' candidati, nell'ordine in cui vanno provati:
+      1. il primo `{` di ogni blocco (comportamento storico);
+      2. gli eventuali `{`/`[` successivi NON annidati in un candidato gia'
+         emesso.
+    Il punto 2 copre due casi reali: prosa che contiene graffe prima del JSON
+    vero (es. "Uso la struttura {name, duration, tracks}. Ecco:\\n{...}"), che
+    prima faceva fallire tutto sull'unico candidato sbagliato, e una risposta
+    con array JSON al top level (nessun `{` iniziale valido).
+    """
     import re
     blocks = []
     matches = list(re.finditer(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL))
@@ -391,42 +623,30 @@ def extract_json_candidate(text):
         blocks = [text]
     candidates = []
     for b in blocks:
-        start_idx = b.find('{')
-        if start_idx == -1:
-            continue
-        stack = []
-        in_string = False
-        escaped = False
-        json_end_idx = -1
-        for idx in range(start_idx, len(b)):
-            c = b[idx]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif c == '\\':
-                    escaped = True
-                elif c == '"':
-                    in_string = False
+        spans = []          # (start, end_or_len) dei candidati accettati
+        first_brace = b.find('{')
+        if first_brace != -1:
+            end = _scan_balanced_end(b, first_brace)
+            if end != -1:
+                candidates.append(b[first_brace:end + 1])
+                spans.append((first_brace, end))
             else:
-                if c == '"':
-                    in_string = True
-                elif c == '{':
-                    stack.append('{')
-                elif c == '}':
-                    if stack:
-                        stack.pop()
-                    if not stack:
-                        json_end_idx = idx
-                        break
-                elif c == '[':
-                    stack.append('[')
-                elif c == ']':
-                    if stack and stack[-1] == '[':
-                        stack.pop()
-        if json_end_idx != -1:
-            candidates.append(b[start_idx:json_end_idx+1])
-        else:
-            candidates.append(b[start_idx:])
+                candidates.append(b[first_brace:])
+                spans.append((first_brace, len(b) - 1))
+        for idx, c in enumerate(b):
+            if c not in ('{', '['):
+                continue
+            if idx == first_brace:
+                continue
+            if any(s <= idx <= e for s, e in spans):
+                continue    # annidato in un candidato gia' emesso
+            end = _scan_balanced_end(b, idx)
+            if end != -1:
+                candidates.append(b[idx:end + 1])
+                spans.append((idx, end))
+            else:
+                candidates.append(b[idx:])
+                spans.append((idx, len(b) - 1))
     return candidates
 
 def extract_and_parse_json(text):
@@ -437,17 +657,26 @@ def extract_and_parse_json(text):
             candidates = [text[start_idx:]]
     last_error = None
     parsed_objects = []
+    parsed_arrays = []
     for cand in candidates:
         try:
             parsed = parse_with_recovery(cand)
-            if isinstance(parsed, dict):
-                if "voxels" in parsed or "ops" in parsed or "parts" in parsed:
-                    return expand_ops(parsed)
-                parsed_objects.append(parsed)
         except Exception as e:
             last_error = e
+            continue
+        if isinstance(parsed, dict):
+            if "voxels" in parsed or "ops" in parsed or "parts" in parsed:
+                return expand_ops(parsed)
+            parsed_objects.append(parsed)
+        elif isinstance(parsed, list) and parsed:
+            # Risposta con array al top level (tipico delle animazioni: una
+            # lista di track). expand_ops lascia passare i non-dict, quindi la
+            # restituiamo solo se non c'e' nessun oggetto utilizzabile.
+            parsed_arrays.append(parsed)
     if parsed_objects:
         return expand_ops(parsed_objects[0])
+    if parsed_arrays:
+        return parsed_arrays[0]
     if last_error:
         raise last_error
     raise ValueError("No valid JSON found in response.")

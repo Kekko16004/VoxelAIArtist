@@ -9,11 +9,26 @@ VoxelAIArtist is a desktop voxel modeling app with integrated AI generation. A P
 ## Run & build
 
 ```bash
-python main.py                 # launch desktop app (needs PyQt6 + PyQt6-WebEngine)
+python main.py                 # launch (default: WEB mode, see APP_MODE below)
+python main.py --py            # launch the PyQt6 desktop window instead
+VOXELAI_MODE=web python main.py    # same as --web
 pyinstaller --clean VoxelAI.spec   # build dist/VoxelAIArtist.exe (or run build.bat on Windows)
 ```
 
-- If no Qt binding is importable, `main.py` falls back to opening `ui/index.html` in the system browser.
+- **`APP_MODE` (top of `main.py`) picks the launch mode** and defaults to `"web"`:
+  no Qt window at all — only the local HTTP server starts and the UI opens in the
+  system browser (`webbrowser.open`), which removes the QWebEngineView flicker
+  entirely. `"py"` is the classic embedded webview. Override order: CLI
+  (`--web` / `--py` / `--mode=web`) > env `VOXELAI_MODE` > the constant. An
+  unknown value prints a warning and falls back to `"py"`.
+- In web mode the Qt import block is **skipped**, so `window.__IS_DESKTOP__` /
+  `window.__API_BASE__` are NOT injected (relative `fetch('/api/...')` still works:
+  same origin) and the native dialogs (`/api/project/open`, `/api/settings/choose-dir`)
+  answer `501` — the UI already degrades to browser download/file input.
+- Startup never opens `ui/settings.html` any more: `GET /api/settings` exposes
+  `needsCookies` (plus `app_mode` / `is_desktop`) and the in-app settings modal
+  decides. Missing cookies only print a console hint.
+- If no Qt binding is importable in `"py"` mode, `main.py` degrades to web mode.
 - Qt binding is auto-detected in priority order PyQt6 → PySide6 → PyQt5 (`GUI_LIBRARY`).
 - `PORT = 0` lets the OS pick a free port; the main thread spin-waits until the server thread sets it.
 
@@ -48,7 +63,7 @@ Additionally verify by:
   - `generate` → `prompt.txt`, replaces `[INSERISCI QUI IL MODELLO DESIDERATO]`.
   - `modify` → `prompt-edit.txt`, injects the current model JSON + the edit request.
   The AI answer is run through `extract_and_parse_json()` before being returned as JSON.
-- `src/settings.py` — cookies and settings live in `%APPDATA%/VoxelAIArtist/` (`cookies.json`, `settings.json`), **not** in the repo. On first launch with no cookies, the settings page (`ui/settings.html`) opens so the user can paste them.
+- `src/settings.py` — cookies and settings live in `%APPDATA%/VoxelAIArtist/` (`cookies.json`, `settings.json`), **not** in the repo. With no cookies nothing is opened automatically: `main.py` prints a console hint and `GET /api/settings` returns `needsCookies: true` so the in-app settings modal can open itself. `ui/settings.html` and its `/settings.html` route survive as a manual fallback only.
 - `src/parser.py` — contains a legacy standalone `start_local_server()` / `__main__` block; the live app path is `main.py`, which only uses `expand_ops` and `extract_and_parse_json` from this module. The rest (OBJ export, standalone server) is legacy/CLI. NOTE (2026-07-19): the top-level `import perplexity` was removed — it's now a lazy import inside `start_local_server()` only, so `perplexity-api` is no longer a runtime dependency (Gemini is the live generator). The old `scratch/test_perplexity.py` (contained a hardcoded session token) was deleted.
 
 ### Asset Pack / multi-generation (`src/pack.py` + `ui/src/lib/27-pack.js`)
@@ -152,6 +167,70 @@ Everything is inline in one HTML file. Major systems:
 - **Export**:
   - OBJ/MTL via `greedyMesh()` (sweep-plane, merges coplanar same-color faces into maximal quads) — export-only, far smaller than per-voxel. `buildObjText()`/`buildMtlText()` share `matNameFor()`; the export button downloads **both** `.obj` and `.mtl` (staggered ~150ms) — Blender shows white materials unless the `.mtl` sits beside the `.obj` with a matching `mtllib` name.
   - GLB via `GLTFExporter` (`exportGLB()`), used for rigged/animated exports.
+    Four invariants, each one a bug that shipped — see `tests/test_glb_pose_export.mjs`:
+    1. **Never put translation/scale on the skinned mesh node.** A glTF importer
+       ignores it by spec (the pose comes from joints + inverse bind matrices), so
+       Blender relocates it onto the Armature. Origin and scale are baked into
+       vertices and bones instead (`buildFullSkinnedMesh({bake:{origin,scale}})`).
+    2. **The mesh is built at rest, the pose rides on the bone nodes.** `bind()`
+       computes the inverse bind matrices at rest; baking the pose into the vertices
+       too would apply it twice. Never zero `rig.pose`/`rig.posePos` to "export at
+       rest" — that throws the user's pose away and exports a T-pose.
+    3. **Clip `.position` tracks are ABSOLUTE voxel coordinates** (rest + delta, see
+       `bob()`), so on baked bones they must be rebased, not just scaled:
+       `(v - oldRest) * K + newRest`. Scaling alone snapped the root back to its
+       voxel coordinate (+0.62 m on X).
+    4. **The pose must be the FIRST clip** (`buildPoseClip`). Blender auto-assigns
+       the first action on import and its tracks override the node pose on every
+       bone they animate — with `idle` first the arms snapped back to T-pose while
+       the legs, which `idle` doesn't touch, stayed posed. Re-measured 2026-08-02:
+       dropping the pose clip makes Blender assign `idle` and the silhouette goes
+       back to 0.911 m wide (T-pose) instead of 0.550 m. **Do not remove it.**
+    5. **In export, cull the face between two voxels only if they deform
+       IDENTICALLY** — same 4 weights on the same bones (`deformsAlike` in
+       `buildSkinnedMesh`). Only that face stays internal in every pose. The face
+       between voxels that deform *differently* is a JOINT: at rest its two halves
+       are coincident and buried, but as soon as the pose separates the bones those
+       halves are exactly the WALLS of the gap. Culling them leaves the shell OPEN,
+       and since export materials are `THREE.FrontSide` (= backface culling in
+       Blender) you see straight into the hollow model.
+       Measured on the user's model (24 bones, `parts` binding): 1268 joints, which
+       in the saved pose open by 5.3 mm on average and up to **55 mm** (5.5 voxel);
+       Blender counted 0 boundary edges at rest and **936 on the POSED mesh**, and
+       the render showed 7 see-through regions. Keeping both halves: 936 → 0, and
+       the silhouette is unchanged. Cost on that model: +28% faces.
+       **The z-fighting that originally motivated the cull is solved by FrontSide,
+       not by culling**: the two coincident quads face OPPOSITE ways (one +X, one
+       −X), so backface culling always draws exactly one. Verified in all three
+       binding modes — parts 1268/1268, smooth 41605/41605, rigid 2144/2144
+       opposite, **zero same-winding pairs**. So: export materials are
+       `THREE.FrontSide`, never `DoubleSide`. On screen the rule is different and
+       looser (keep the face when the dominant BONE differs, drop the rest): the
+       preview is `DoubleSide`, so a gap still shows its far wall, and the per-bone
+       border is what makes weight painting readable.
+    6. **Delete the `color` attribute before exporting the rigged mesh.** The
+       rigged geometry always carries one (preview needs it for per-bone colours
+       and the weight ramp), and `GLTFExporter` r128 writes it to COLOR_0 by
+       looking at the GEOMETRY, not `material.vertexColors` (the upstream source
+       still has the `@QUESTION Detect if .vertexColors = true?` TODO). In glTF the
+       result is `baseColorFactor * COLOR_0`, so the same colour on both gives the
+       linear colour SQUARED — the model imported almost black. Confirmed in
+       Blender: 31 of 31 materials had Base Color driven by a vertex-colour node
+       (`#0A0A0C` rendered as `#E7E7E7` multiplied); after the fix all 31 match
+       their hex exactly. The tell-tale was `#FFFFFF` being the only correct
+       colour, because for white the exporter omits `baseColorFactor`.
+    Invariants 5 and 6 are guarded by `tests/test_glb_rigged_artifacts.mjs`. It
+    checks the exact rule face by face (2 quads on every joint, 0 on the
+    forever-internal faces), that every coincident pair is front/back, and that the
+    shell has **no boundary edges once welded by deformation** — vertices are welded
+    by position AND weights, because welding by position alone would make an open
+    shell look closed at rest, which is the whole trap. It also asserts the PREVIEW
+    keeps the per-bone border (so the fix can't degrade into an indiscriminate cull)
+    and that the preview shell *is* open by that measure (so the check has teeth).
+    Verified against real Blender by `tests/.glb_export_harness.mjs` (writes the GLB
+    plus a `.expect.json` silhouette measured with the real skinning) and
+    `tests/.blender_verify_glb.py` (imports it and compares). Both are gitignored
+    dev tools, not part of `run_all.sh` — they need Blender installed.
   - Save JSON exports flat `voxels` for reload.
 - **Rigging/animation** (the `rig` tab): a bone skeleton with pose sliders, animation clips (`buildAnimationClips`, `playClip`), and a `TransformControls` gizmo to move joints (`updateGizmo`, `pickBone`).
 - **UI shell**: tabbed sidebar (`Genera` / `Vista` / `Disegna` / `Rig`), `.tab-content` scrolls, `.sidebar-footer` pins export/save. `switchTab()` drops back to the `view` tool when leaving `Disegna`. Styling is a dark glassmorphism theme via `:root` CSS custom properties (`--accent-primary`, `--glass-bg`, etc.) with `backdrop-filter` blur and rounded corners.
