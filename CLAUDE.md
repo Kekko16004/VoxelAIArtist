@@ -233,9 +233,53 @@ Everything is inline in one HTML file. Major systems:
     dev tools, not part of `run_all.sh` — they need Blender installed.
   - Save JSON exports flat `voxels` for reload.
 - **Rigging/animation** (the `rig` tab): a bone skeleton with pose sliders, animation clips (`buildAnimationClips`, `playClip`), and a `TransformControls` gizmo to move joints (`updateGizmo`, `pickBone`).
+  Preset clips (`idle`/`walk`/`run`/`jump`/`wave`) are authored as Euler XYZ **degrees**
+  in `buildAnimationClips`; `pos` is an offset in **voxel units** from the bone's rest
+  position. Two conventions, both **measured** (`tests/.diag_signs.mjs` rotates one bone
+  and prints where its tip lands in world space) — not deduced, because deducing them is
+  what produced the bugs below:
+  1. **Arms must be rotated on Z, not X.** At rest the arm bone is *aligned with the X
+     axis*, so `rot(30,0,0)` on `upperArm_R` moves its tip by exactly (0,0,0) — a
+     rotation about a bone's own axis is a no-op. Every old preset swung the arms on X
+     only, which is why the arms stayed in T-pose in nearly every clip. Only Z brings
+     them down: **`-78` on `_R` / `+78` on `_L`** is the "alongside the body" baseline
+     every preset starts from. **Z positive on the right arm = arm UP**, negative = down.
+     Z does *not* depend on facing: the `_R` bone is always at greater X, so "toward the
+     body" is always `-X`.
+  2. **X is the forward/back swing and DOES depend on facing.** For a bone pointing down
+     at rest, `X > 0` moves the tip toward `-Z`, so `X > 0` is *forward* only when the
+     character faces `-Z`. The presets are written in the frame of the hand-validated
+     reference walk (`faceYaw === 180`, where `X > 0` = forward) and `S` rebases them
+     onto the real facing: `const S = (faceYaw === 180) ? 1 : -1`. The old `legSign` had
+     the **opposite** sign and produced a mirrored walk that pushed backwards.
+  At 90°/270° signs aren't enough (the legs would swing sideways), so the rotation is
+  conjugated instead: `faceRotate(q, qFace)` with `qFace` threaded into
+  `buildClipFromAnimData`. **Presets get `qFace`; AI custom clips must NOT** — the AI sees
+  the real bones and already writes in the correct frame, so conjugating would apply the
+  facing twice. Guarded by `tests/test_anim_presets.mjs`, which asserts the arm tips
+  actually *move* (>40% of arm length, so an arbitrary rotation can't satisfy it) and that
+  `walk` reproduces the reference clip key-for-key.
 - **UI shell**: tabbed sidebar (`Genera` / `Vista` / `Disegna` / `Rig`), `.tab-content` scrolls, `.sidebar-footer` pins export/save. `switchTab()` drops back to the `view` tool when leaving `Disegna`. Styling is a dark glassmorphism theme via `:root` CSS custom properties (`--accent-primary`, `--glass-bg`, etc.) with `backdrop-filter` blur and rounded corners.
 
 ## Conventions & gotchas
+- **`ui/index.html` is generated, but it is NOT disposable.** `node ui/build.mjs`
+  overwrites it from `ui/src/` with no backup. On 2026-08-02 the sources in
+  `ui/src/lib/15-rig.js` had been overwritten by an older branch revision while the
+  **committed bundle still held the only copy** of ~500 lines of rigging engine
+  (`bindContext`, `deformsAlike`, `posePosOf`, `buildPoseClip`, `buildFullSkinnedMesh`,
+  `restrictToParts`, the "three binding modes" work). Rebuilding destroyed it, and the
+  rigged model went back to see-through holes and exploding parts in both the viewer and
+  Blender. **Before running the build, check that the bundle isn't ahead of the sources:**
+  `grep -c deformsAlike ui/index.html ui/src/lib/15-rig.js` — if the bundle has symbols
+  the sources don't, stop and reconcile first. The recovery path, if it happens again:
+  the bundle is a plain concatenation of the manifest modules, so a module can be cut
+  back out of it by locating its first line (`sed -n 'A,Bp'`) and re-indenting by 12
+  spaces; `git fsck --dangling` may also surface a dropped stash of the same lineage.
+- The five tests `test_glb_rigged_artifacts`, `test_rig_weights`, `test_channel_keys`,
+  `test_glb_pose_export`, `test_rig_parts_legs` are the tripwire for exactly that loss.
+  A `ReferenceError: <symbol> is not defined` from them means engine code is **missing
+  from the sources**, not that the test is stale. Do not dismiss it as pre-existing
+  because it also fails at HEAD — HEAD can be broken too.
 - Editing op semantics requires a **paired edit** in `src/parser.py` (`expand_ops`) and `ui/index.html` (`expandOps`).
 - `token.txt` and any `cookies.json` hold session credentials — never commit or echo their contents.
 - The Three.js version is pinned to r128 via CDN; APIs differ in newer versions, so don't assume modern Three.js when editing viewer code.

@@ -118,6 +118,20 @@ run "Export GLB: posa dell'editor (Node)" node tests/test_glb_pose_export.mjs
 #            quasi nero.
 run "Export GLB: artefatti del riggato (Node)" node tests/test_glb_rigged_artifacts.mjs
 
+# 4c-undecies. Preset di animazione (idle/walk/run/jump/wave). Due invarianti:
+#            (1) le BRACCIA devono uscire dalla T-pose. A riposo il braccio e'
+#            allineato all'asse X, quindi ruotarlo su X non lo muove di un
+#            millimetro: le clip vecchie facevano esattamente quello e le
+#            braccia restavano spalancate in ogni animazione. Il test misura in
+#            cinematica diretta dove finisce la punta del braccio e pretende uno
+#            spostamento reale ad ogni chiave.
+#            (2) la `walk` deve riprodurre ESATTAMENTE la clip di riferimento
+#            validata a mano, e i preset devono specchiarsi sull'imbardata
+#            (faceYaw) senza specchiare la Z delle braccia, che non dipende da
+#            dove guarda il personaggio. Le clip AI invece NON vanno coniugate:
+#            sono gia' scritte nel frame delle ossa vere.
+run "Preset di animazione (Node)" node tests/test_anim_presets.mjs
+
 # 4c-septies. Separazione delle gambe nel binding "Pezzi": con parti PER ARTO ogni
 #            catena riceve i suoi voxel e nessuno finisce sull'osso del lato
 #            opposto (era la saldatura che strappava la camminata). Una parte

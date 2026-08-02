@@ -9685,119 +9685,235 @@
                 if (typeof updateGizmo === 'function') updateGizmo();
             });
 
+            function rigFacingYaw(bones) {
+                const list = Array.isArray(bones) ? bones : [];
+                const vec = b => (b && Array.isArray(b.head) && Array.isArray(b.tail));
+                let fx = 0, fz = 0;
+                list.forEach(b => {
+                    if (!vec(b) || !/^(foot|toeTip)_[LR]$/.test(b.name || '')) return;
+                    fx += b.tail[0] - b.head[0];
+                    fz += b.tail[2] - b.head[2];
+                });
+                if (Math.hypot(fx, fz) < 1e-3) {
+                    let rx = 0, rz = 0, n = 0;
+                    list.forEach(b => {
+                        const m = /^(.*)_R$/.exec((b && b.name) || '');
+                        if (!m || !vec(b)) return;
+                        const twin = list.find(o => o && o.name === m[1] + '_L');
+                        if (!vec(twin)) return;
+                        rx += b.head[0] - twin.head[0];
+                        rz += b.head[2] - twin.head[2];
+                        n++;
+                    });
+                    if (n && Math.hypot(rx, rz) > 1e-3) { fx = -rz; fz = rx; }
+                }
+                if (Math.hypot(fx, fz) < 1e-3) return 0;
+                // yaw = angolo attorno a Y che porta il davanti canonico (+Z) sul davanti
+                // reale: R_y(yaw) * (0,0,1) = (sin yaw, 0, cos yaw).
+                const steps = ((Math.round(Math.atan2(fx, fz) / (Math.PI / 2)) % 4) + 4) % 4;
+                return steps * 90;
+            }
+
+            // Porta una rotazione scritta nel frame canonico in quello del personaggio:
+            // q' = qFace * q * qFace^-1 (coniugazione). Essendo un omomorfismo, coniugare
+            // ogni rotazione LOCALE equivale a coniugare l'intera posa mondo, quindi il
+            // movimento resta lo stesso "visto dal personaggio". qFace null = identita'
+            // (nessun calcolo: cosi' il caso canonico resta bit-identico a prima).
+            function faceRotate(q, qFace) {
+                if (!qFace) return q;
+                return qFace.clone().multiply(q).multiply(qFace.clone().invert());
+            }
+
             // --- Preset animations --------------------------------------------------
             // Build a few clips procedurally from the bone names present. These are for
             // preview and are embedded into the exported GLB.
             function buildAnimationClips() {
                 rigClips = [];
                 if (!skeleton) return;
-                const byName = {};
-                rig.bones.forEach((bd, i) => byName[bd.name] = skeleton.bones[i]);
-                const q = (rx, ry, rz) => new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
 
-                // Helper: quaternion track for a bone from keyframes [{t, e:[x,y,z]}].
-                const track = (boneName, keys) => {
-                    const bone = byName[boneName];
-                    if (!bone) return null;
-                    const times = [], values = [];
-                    keys.forEach(k => {
-                        times.push(k.t);
-                        const qq = q(k.e[0], k.e[1], k.e[2]);
-                        values.push(qq.x, qq.y, qq.z, qq.w);
-                    });
-                    return new THREE.QuaternionKeyframeTrack(`${bone.name}.quaternion`, times, values);
+                // CONVENZIONE DEI PRESET (misurata, non dedotta: tests/.diag_signs.mjs
+                // ruota un osso e stampa dove finisce la punta in coordinate mondo).
+                //
+                // 1) La Z delle braccia e' obbligatoria. Nello scheletro a riposo il
+                //    braccio e' in T-pose, cioe' ALLINEATO ALL'ASSE X: `rot(30,0,0)` su
+                //    upperArm_R sposta la punta di (0,0,0) -- una rotazione attorno al
+                //    proprio asse non muove niente. Le clip vecchie ruotavano le braccia
+                //    solo su X: da qui le braccia rimaste in T-pose in quasi ogni clip.
+                //    Solo Z le fa scendere: -78 sul destro / +78 sul sinistro le porta
+                //    lungo il corpo (misurato: dX -10.0 dY -12.5, cioe' giu' e verso il
+                //    centro). Ogni preset parte da quella posa, mai dalla T-pose.
+                //    La Z NON dipende dall'imbardata: "verso il corpo" per l'osso _R (che
+                //    sta sempre a X maggiore) e' sempre -X.
+                //
+                // 2) La X e' l'oscillazione avanti/indietro e DIPENDE dall'imbardata.
+                //    Per un osso che a riposo punta in giu', X>0 muove la punta verso -Z
+                //    (proprieta' della matrice, non dello scheletro). Quindi X>0 e' avanti
+                //    se il personaggio guarda -Z (faceYaw 180), indietro se guarda +Z.
+                //    I valori qui sotto sono scritti nel frame della walk di riferimento,
+                //    validata a mano su uno scheletro con faceYaw 180, dove X>0 = avanti;
+                //    `S` li riporta sull'imbardata reale. Il vecchio `legSign` aveva il
+                //    segno OPPOSTO (assumeva il frame +Z) e su quello scheletro produceva
+                //    la camminata specchiata, con le gambe che spingevano all'indietro.
+                //
+                // Le braccia contro-oscillano rispetto alle gambe: con upperLeg_R avanti
+                // (+30) upperArm_R va indietro (-30).
+                const faceYaw = rigFacingYaw(rig.bones);
+                const S = (faceYaw === 180) ? 1 : -1;
+                // A 90/270 i segni non bastano (le gambe oscillerebbero DI FIANCO): li'
+                // si coniuga la rotazione. Caso limite e per definizione approssimato --
+                // un umanoide con le ossa _R a X maggiore che guarda lungo X avrebbe le
+                // braccia davanti, quindi una posa "lungo il corpo" non esiste.
+                const yawRad = (faceYaw === 90 || faceYaw === 270) ? faceYaw * Math.PI / 180 : 0;
+                const qFace = yawRad
+                    ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawRad)
+                    : null;
+
+                // Respiro + micro-oscillazioni. Le braccia NON sono a riposo: stanno lungo
+                // il corpo (Z -78/+78) come nella walk, altrimenti l'idle e' una T-pose.
+                const newIdle = {
+                    name: 'idle', duration: 3, loop: true,
+                    tracks: [
+                        { bone: 'hips', keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.75, pos: [0, -0.03, 0], rot: [0, 1, 0] }, { t: 1.5, pos: [0, -0.05, 0], rot: [0, 0, 0] }, { t: 2.25, pos: [0, -0.03, 0], rot: [0, -1, 0] }, { t: 3, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                        { bone: 'spine', keys: [{ t: 0, rot: [1 * S, 0, 0] }, { t: 1.5, rot: [-1.5 * S, 0, 0] }, { t: 3, rot: [1 * S, 0, 0] }] },
+                        { bone: 'chest', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.5, rot: [-2.5 * S, 0, 0] }, { t: 3, rot: [0, 0, 0] }] },
+                        { bone: 'neck', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.5, rot: [1 * S, 0, 0] }, { t: 3, rot: [0, 0, 0] }] },
+                        { bone: 'head', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1, rot: [-1 * S, 3, 0] }, { t: 2, rot: [1 * S, -3, 0] }, { t: 3, rot: [0, 0, 0] }] },
+                        { bone: 'upperLeg_R', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 3, rot: [2 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_R', keys: [{ t: 0, rot: [-4 * S, 0, 0] }, { t: 1.5, rot: [-3 * S, 0, 0] }, { t: 3, rot: [-4 * S, 0, 0] }] },
+                        { bone: 'foot_R', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 3, rot: [2 * S, 0, 0] }] },
+                        { bone: 'upperLeg_L', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 3, rot: [2 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_L', keys: [{ t: 0, rot: [-3 * S, 0, 0] }, { t: 1.5, rot: [-4 * S, 0, 0] }, { t: 3, rot: [-3 * S, 0, 0] }] },
+                        { bone: 'foot_L', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 3, rot: [2 * S, 0, 0] }] },
+                        { bone: 'shoulder_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.5, rot: [0, 0, -1.5] }, { t: 3, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_R', keys: [{ t: 0, rot: [2 * S, 0, -78] }, { t: 1.5, rot: [-2 * S, 0, -76] }, { t: 3, rot: [2 * S, 0, -78] }] },
+                        { bone: 'forearm_R', keys: [{ t: 0, rot: [10 * S, 0, 0] }, { t: 1.5, rot: [14 * S, 0, 0] }, { t: 3, rot: [10 * S, 0, 0] }] },
+                        { bone: 'hand_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.5, rot: [4 * S, 0, 0] }, { t: 3, rot: [0, 0, 0] }] },
+                        { bone: 'shoulder_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.5, rot: [0, 0, 1.5] }, { t: 3, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_L', keys: [{ t: 0, rot: [2 * S, 0, 78] }, { t: 1.5, rot: [-2 * S, 0, 76] }, { t: 3, rot: [2 * S, 0, 78] }] },
+                        { bone: 'forearm_L', keys: [{ t: 0, rot: [12 * S, 0, 0] }, { t: 1.5, rot: [16 * S, 0, 0] }, { t: 3, rot: [12 * S, 0, 0] }] },
+                        { bone: 'hand_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.5, rot: [4 * S, 0, 0] }, { t: 3, rot: [0, 0, 0] }] }
+                    ]
                 };
-                const clip = (name, dur, tracks) => new THREE.AnimationClip(name, dur,
-                    tracks.filter(Boolean));
-
-                // Vertical bob: offset the hips bone up/down from its rest position. Keys
-                // are relative dy (in voxel units), added to the bone's rest y.
-                const hipsBone = byName['hips'];
-                const hipsRest = hipsBone ? hipsBone.position.clone() : null;
-                const bob = (keys) => {
-                    if (!hipsBone) return null;
-                    const times = [], values = [];
-                    keys.forEach(k => {
-                        times.push(k.t);
-                        values.push(hipsRest.x, hipsRest.y + k.dy, hipsRest.z);
-                    });
-                    return new THREE.VectorKeyframeTrack(`${hipsBone.name}.position`, times, values);
+                // Camminata di riferimento: la clip "NaturalWalk" validata a mano, con i
+                // suoi numeri esatti (su uno scheletro faceYaw 180, dove S vale 1, questa
+                // ricostruisce quella clip identica -- lo verifica test_anim_presets.mjs).
+                // Le altre tre sono derivate da qui: cambiando una convenzione si parte da
+                // questa e poi si riallineano le altre.
+                const newWalk = {
+                    name: 'walk', duration: 1, loop: true,
+                    tracks: [
+                        { bone: 'hips', keys: [{ t: 0, pos: [0, -0.04, 0], rot: [0, 5, 2] }, { t: 0.25, pos: [0, 0.08, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, -0.04, 0], rot: [0, -5, -2] }, { t: 0.75, pos: [0, 0.08, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, -0.04, 0], rot: [0, 5, 2] }] },
+                        { bone: 'spine', keys: [{ t: 0, rot: [2 * S, -4, 0] }, { t: 0.25, rot: [2 * S, 0, 0] }, { t: 0.5, rot: [2 * S, 4, 0] }, { t: 0.75, rot: [2 * S, 0, 0] }, { t: 1, rot: [2 * S, -4, 0] }] },
+                        { bone: 'chest', keys: [{ t: 0, rot: [0, -3, -1] }, { t: 0.25, rot: [0, 0, 0] }, { t: 0.5, rot: [0, 3, 1] }, { t: 0.75, rot: [0, 0, 0] }, { t: 1, rot: [0, -3, -1] }] },
+                        { bone: 'head', keys: [{ t: 0, rot: [-2 * S, 0, 0] }, { t: 0.25, rot: [1 * S, 0, 0] }, { t: 0.5, rot: [-2 * S, 0, 0] }, { t: 0.75, rot: [1 * S, 0, 0] }, { t: 1, rot: [-2 * S, 0, 0] }] },
+                        { bone: 'neck', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1, rot: [0, 0, 0] }] },
+                        { bone: 'upperLeg_R', keys: [{ t: 0, rot: [30 * S, 0, 0] }, { t: 0.25, rot: [0, 0, 0] }, { t: 0.5, rot: [-30 * S, 0, 0] }, { t: 0.75, rot: [10 * S, 0, 0] }, { t: 1, rot: [30 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_R', keys: [{ t: 0, rot: [-5 * S, 0, 0] }, { t: 0.25, rot: [-15 * S, 0, 0] }, { t: 0.5, rot: [-10 * S, 0, 0] }, { t: 0.75, rot: [-60 * S, 0, 0] }, { t: 1, rot: [-5 * S, 0, 0] }] },
+                        { bone: 'foot_R', keys: [{ t: 0, rot: [-15 * S, 0, 0] }, { t: 0.25, rot: [0, 0, 0] }, { t: 0.5, rot: [25 * S, 0, 0] }, { t: 0.75, rot: [-5 * S, 0, 0] }, { t: 1, rot: [-15 * S, 0, 0] }] },
+                        { bone: 'upperLeg_L', keys: [{ t: 0, rot: [-30 * S, 0, 0] }, { t: 0.25, rot: [10 * S, 0, 0] }, { t: 0.5, rot: [30 * S, 0, 0] }, { t: 0.75, rot: [0, 0, 0] }, { t: 1, rot: [-30 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_L', keys: [{ t: 0, rot: [-10 * S, 0, 0] }, { t: 0.25, rot: [-60 * S, 0, 0] }, { t: 0.5, rot: [-5 * S, 0, 0] }, { t: 0.75, rot: [-15 * S, 0, 0] }, { t: 1, rot: [-10 * S, 0, 0] }] },
+                        { bone: 'foot_L', keys: [{ t: 0, rot: [25 * S, 0, 0] }, { t: 0.25, rot: [-5 * S, 0, 0] }, { t: 0.5, rot: [-15 * S, 0, 0] }, { t: 0.75, rot: [0, 0, 0] }, { t: 1, rot: [25 * S, 0, 0] }] },
+                        { bone: 'shoulder_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_R', keys: [{ t: 0, rot: [-30 * S, 0, -78] }, { t: 0.25, rot: [0, 0, -78] }, { t: 0.5, rot: [30 * S, 0, -78] }, { t: 0.75, rot: [0, 0, -78] }, { t: 1, rot: [-30 * S, 0, -78] }] },
+                        { bone: 'forearm_R', keys: [{ t: 0, rot: [15 * S, 0, 0] }, { t: 0.25, rot: [25 * S, 0, 0] }, { t: 0.5, rot: [45 * S, 0, 0] }, { t: 0.75, rot: [25 * S, 0, 0] }, { t: 1, rot: [15 * S, 0, 0] }] },
+                        { bone: 'hand_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1, rot: [0, 0, 0] }] },
+                        { bone: 'shoulder_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_L', keys: [{ t: 0, rot: [30 * S, 0, 78] }, { t: 0.25, rot: [0, 0, 78] }, { t: 0.5, rot: [-30 * S, 0, 78] }, { t: 0.75, rot: [0, 0, 78] }, { t: 1, rot: [30 * S, 0, 78] }] },
+                        { bone: 'forearm_L', keys: [{ t: 0, rot: [45 * S, 0, 0] }, { t: 0.25, rot: [25 * S, 0, 0] }, { t: 0.5, rot: [15 * S, 0, 0] }, { t: 0.75, rot: [25 * S, 0, 0] }, { t: 1, rot: [45 * S, 0, 0] }] },
+                        { bone: 'hand_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1, rot: [0, 0, 0] }] }
+                    ]
+                };
+                // La walk accelerata: stesse fasi e stessi segni, ampiezze quasi doppie,
+                // busto inclinato in avanti, gomiti piegati ~75 gradi (e' quello che
+                // distingue una corsa da una camminata veloce) e una fase di volo, cioe'
+                // il bacino sale invece di scendere a meta' appoggio.
+                const newRun = {
+                    name: 'run', duration: 0.6, loop: true,
+                    tracks: [
+                        { bone: 'hips', keys: [{ t: 0, pos: [0, -0.06, 0], rot: [0, 7, 4] }, { t: 0.15, pos: [0, 0.22, 0], rot: [0, 0, 0] }, { t: 0.3, pos: [0, -0.06, 0], rot: [0, -7, -4] }, { t: 0.45, pos: [0, 0.22, 0], rot: [0, 0, 0] }, { t: 0.6, pos: [0, -0.06, 0], rot: [0, 7, 4] }] },
+                        { bone: 'spine', keys: [{ t: 0, rot: [8 * S, -5, 0] }, { t: 0.15, rot: [8 * S, 0, 0] }, { t: 0.3, rot: [8 * S, 5, 0] }, { t: 0.45, rot: [8 * S, 0, 0] }, { t: 0.6, rot: [8 * S, -5, 0] }] },
+                        { bone: 'chest', keys: [{ t: 0, rot: [7 * S, -6, -2] }, { t: 0.15, rot: [7 * S, 0, 0] }, { t: 0.3, rot: [7 * S, 6, 2] }, { t: 0.45, rot: [7 * S, 0, 0] }, { t: 0.6, rot: [7 * S, -6, -2] }] },
+                        { bone: 'neck', keys: [{ t: 0, rot: [-6 * S, 0, 0] }, { t: 0.6, rot: [-6 * S, 0, 0] }] },
+                        { bone: 'head', keys: [{ t: 0, rot: [-9 * S, 0, 0] }, { t: 0.15, rot: [-7 * S, 0, 0] }, { t: 0.3, rot: [-9 * S, 0, 0] }, { t: 0.45, rot: [-7 * S, 0, 0] }, { t: 0.6, rot: [-9 * S, 0, 0] }] },
+                        { bone: 'upperLeg_R', keys: [{ t: 0, rot: [52 * S, 0, 0] }, { t: 0.15, rot: [5 * S, 0, 0] }, { t: 0.3, rot: [-38 * S, 0, 0] }, { t: 0.45, rot: [15 * S, 0, 0] }, { t: 0.6, rot: [52 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_R', keys: [{ t: 0, rot: [-22 * S, 0, 0] }, { t: 0.15, rot: [-28 * S, 0, 0] }, { t: 0.3, rot: [-20 * S, 0, 0] }, { t: 0.45, rot: [-105 * S, 0, 0] }, { t: 0.6, rot: [-22 * S, 0, 0] }] },
+                        { bone: 'foot_R', keys: [{ t: 0, rot: [-18 * S, 0, 0] }, { t: 0.15, rot: [5 * S, 0, 0] }, { t: 0.3, rot: [35 * S, 0, 0] }, { t: 0.45, rot: [-12 * S, 0, 0] }, { t: 0.6, rot: [-18 * S, 0, 0] }] },
+                        { bone: 'upperLeg_L', keys: [{ t: 0, rot: [-38 * S, 0, 0] }, { t: 0.15, rot: [15 * S, 0, 0] }, { t: 0.3, rot: [52 * S, 0, 0] }, { t: 0.45, rot: [5 * S, 0, 0] }, { t: 0.6, rot: [-38 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_L', keys: [{ t: 0, rot: [-20 * S, 0, 0] }, { t: 0.15, rot: [-105 * S, 0, 0] }, { t: 0.3, rot: [-22 * S, 0, 0] }, { t: 0.45, rot: [-28 * S, 0, 0] }, { t: 0.6, rot: [-20 * S, 0, 0] }] },
+                        { bone: 'foot_L', keys: [{ t: 0, rot: [35 * S, 0, 0] }, { t: 0.15, rot: [-12 * S, 0, 0] }, { t: 0.3, rot: [-18 * S, 0, 0] }, { t: 0.45, rot: [5 * S, 0, 0] }, { t: 0.6, rot: [35 * S, 0, 0] }] },
+                        { bone: 'shoulder_R', keys: [{ t: 0, rot: [-4 * S, 0, 0] }, { t: 0.3, rot: [4 * S, 0, 0] }, { t: 0.6, rot: [-4 * S, 0, 0] }] },
+                        { bone: 'upperArm_R', keys: [{ t: 0, rot: [-48 * S, 0, -74] }, { t: 0.15, rot: [-5 * S, 0, -72] }, { t: 0.3, rot: [42 * S, 0, -74] }, { t: 0.45, rot: [-5 * S, 0, -72] }, { t: 0.6, rot: [-48 * S, 0, -74] }] },
+                        { bone: 'forearm_R', keys: [{ t: 0, rot: [62 * S, 0, 0] }, { t: 0.15, rot: [78 * S, 0, 0] }, { t: 0.3, rot: [88 * S, 0, 0] }, { t: 0.45, rot: [78 * S, 0, 0] }, { t: 0.6, rot: [62 * S, 0, 0] }] },
+                        { bone: 'hand_R', keys: [{ t: 0, rot: [10 * S, 0, 0] }, { t: 0.6, rot: [10 * S, 0, 0] }] },
+                        { bone: 'shoulder_L', keys: [{ t: 0, rot: [4 * S, 0, 0] }, { t: 0.3, rot: [-4 * S, 0, 0] }, { t: 0.6, rot: [4 * S, 0, 0] }] },
+                        { bone: 'upperArm_L', keys: [{ t: 0, rot: [42 * S, 0, 74] }, { t: 0.15, rot: [-5 * S, 0, 72] }, { t: 0.3, rot: [-48 * S, 0, 74] }, { t: 0.45, rot: [-5 * S, 0, 72] }, { t: 0.6, rot: [42 * S, 0, 74] }] },
+                        { bone: 'forearm_L', keys: [{ t: 0, rot: [88 * S, 0, 0] }, { t: 0.15, rot: [78 * S, 0, 0] }, { t: 0.3, rot: [62 * S, 0, 0] }, { t: 0.45, rot: [78 * S, 0, 0] }, { t: 0.6, rot: [88 * S, 0, 0] }] },
+                        { bone: 'hand_L', keys: [{ t: 0, rot: [10 * S, 0, 0] }, { t: 0.6, rot: [10 * S, 0, 0] }] }
+                    ]
+                };
+                // Salto in cinque pose: 0 in piedi, 0.22 caricamento (bacino giu', braccia
+                // indietro), 0.38 stacco (gambe distese, braccia in alto), 0.62 apice
+                // (gambe raccolte), 0.85 atterraggio (ammortizza), 1.2 ritorno in piedi.
+                // Il bacino e' l'osso radice, quindi `pos` in voxel sposta tutto il corpo:
+                // -1.6 in caricamento e +3.2 all'apice su un personaggio da ~40 voxel.
+                const newJump = {
+                    name: 'jump', duration: 1.2, loop: false,
+                    tracks: [
+                        { bone: 'hips', keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.22, pos: [0, -1.6, 0], rot: [16 * S, 0, 0] }, { t: 0.38, pos: [0, 0.6, 0], rot: [-6 * S, 0, 0] }, { t: 0.62, pos: [0, 3.2, 0], rot: [10 * S, 0, 0] }, { t: 0.85, pos: [0, -1.3, 0], rot: [20 * S, 0, 0] }, { t: 1.2, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                        { bone: 'spine', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.22, rot: [12 * S, 0, 0] }, { t: 0.38, rot: [-8 * S, 0, 0] }, { t: 0.62, rot: [6 * S, 0, 0] }, { t: 0.85, rot: [14 * S, 0, 0] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'chest', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.22, rot: [14 * S, 0, 0] }, { t: 0.38, rot: [-10 * S, 0, 0] }, { t: 0.62, rot: [4 * S, 0, 0] }, { t: 0.85, rot: [16 * S, 0, 0] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'neck', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.22, rot: [-6 * S, 0, 0] }, { t: 0.62, rot: [-3 * S, 0, 0] }, { t: 0.85, rot: [-8 * S, 0, 0] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'head', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.22, rot: [-9 * S, 0, 0] }, { t: 0.38, rot: [6 * S, 0, 0] }, { t: 0.62, rot: [-4 * S, 0, 0] }, { t: 0.85, rot: [-11 * S, 0, 0] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'upperLeg_R', keys: [{ t: 0, rot: [3 * S, 0, 0] }, { t: 0.22, rot: [58 * S, 0, 0] }, { t: 0.38, rot: [-8 * S, 0, 0] }, { t: 0.62, rot: [42 * S, 0, 0] }, { t: 0.85, rot: [50 * S, 0, 0] }, { t: 1.2, rot: [3 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_R', keys: [{ t: 0, rot: [-4 * S, 0, 0] }, { t: 0.22, rot: [-88 * S, 0, 0] }, { t: 0.38, rot: [-3 * S, 0, 0] }, { t: 0.62, rot: [-75 * S, 0, 0] }, { t: 0.85, rot: [-70 * S, 0, 0] }, { t: 1.2, rot: [-4 * S, 0, 0] }] },
+                        { bone: 'foot_R', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 0.22, rot: [-26 * S, 0, 0] }, { t: 0.38, rot: [42 * S, 0, 0] }, { t: 0.62, rot: [24 * S, 0, 0] }, { t: 0.85, rot: [-14 * S, 0, 0] }, { t: 1.2, rot: [2 * S, 0, 0] }] },
+                        { bone: 'upperLeg_L', keys: [{ t: 0, rot: [3 * S, 0, 0] }, { t: 0.22, rot: [58 * S, 0, 0] }, { t: 0.38, rot: [-8 * S, 0, 0] }, { t: 0.62, rot: [44 * S, 0, 0] }, { t: 0.85, rot: [50 * S, 0, 0] }, { t: 1.2, rot: [3 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_L', keys: [{ t: 0, rot: [-4 * S, 0, 0] }, { t: 0.22, rot: [-88 * S, 0, 0] }, { t: 0.38, rot: [-3 * S, 0, 0] }, { t: 0.62, rot: [-80 * S, 0, 0] }, { t: 0.85, rot: [-70 * S, 0, 0] }, { t: 1.2, rot: [-4 * S, 0, 0] }] },
+                        { bone: 'foot_L', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 0.22, rot: [-26 * S, 0, 0] }, { t: 0.38, rot: [42 * S, 0, 0] }, { t: 0.62, rot: [24 * S, 0, 0] }, { t: 0.85, rot: [-14 * S, 0, 0] }, { t: 1.2, rot: [2 * S, 0, 0] }] },
+                        { bone: 'shoulder_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.38, rot: [0, 0, -6] }, { t: 0.62, rot: [0, 0, -6] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_R', keys: [{ t: 0, rot: [0, 0, -78] }, { t: 0.22, rot: [45 * S, 0, -85] }, { t: 0.38, rot: [-40 * S, 0, 40] }, { t: 0.62, rot: [15 * S, 0, 110] }, { t: 0.85, rot: [12 * S, 0, -95] }, { t: 1.2, rot: [0, 0, -78] }] },
+                        { bone: 'forearm_R', keys: [{ t: 0, rot: [10 * S, 0, 0] }, { t: 0.22, rot: [48 * S, 0, 0] }, { t: 0.38, rot: [8 * S, 0, 0] }, { t: 0.62, rot: [22 * S, 0, 0] }, { t: 0.85, rot: [58 * S, 0, 0] }, { t: 1.2, rot: [10 * S, 0, 0] }] },
+                        { bone: 'hand_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.38, rot: [-10 * S, 0, 0] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'shoulder_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.38, rot: [0, 0, 6] }, { t: 0.62, rot: [0, 0, 6] }, { t: 1.2, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_L', keys: [{ t: 0, rot: [0, 0, 78] }, { t: 0.22, rot: [45 * S, 0, 85] }, { t: 0.38, rot: [-40 * S, 0, -40] }, { t: 0.62, rot: [15 * S, 0, -110] }, { t: 0.85, rot: [12 * S, 0, 95] }, { t: 1.2, rot: [0, 0, 78] }] },
+                        { bone: 'forearm_L', keys: [{ t: 0, rot: [10 * S, 0, 0] }, { t: 0.22, rot: [48 * S, 0, 0] }, { t: 0.38, rot: [8 * S, 0, 0] }, { t: 0.62, rot: [22 * S, 0, 0] }, { t: 0.85, rot: [58 * S, 0, 0] }, { t: 1.2, rot: [10 * S, 0, 0] }] },
+                        { bone: 'hand_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.38, rot: [-10 * S, 0, 0] }, { t: 1.2, rot: [0, 0, 0] }] }
+                    ]
+                };
+                // Saluto: il braccio destro sale, il SINISTRO resta lungo il corpo. Prima
+                // il sinistro non era animato affatto e restava dov'era, cioe' in T-pose.
+                const newWave = {
+                    name: 'wave', duration: 1.6, loop: true,
+                    tracks: [
+                        { bone: 'hips', keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.8, pos: [0, -0.03, 0], rot: [0, -2, 0] }, { t: 1.6, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                        { bone: 'spine', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.8, rot: [0, -3, 1] }, { t: 1.6, rot: [0, 0, 0] }] },
+                        { bone: 'chest', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.4, rot: [0, -4, 2] }, { t: 1.6, rot: [0, -4, 2] }] },
+                        { bone: 'head', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.4, rot: [-3 * S, -6, 0] }, { t: 1.6, rot: [-3 * S, -6, 0] }] },
+                        { bone: 'upperLeg_R', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 1.6, rot: [2 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_R', keys: [{ t: 0, rot: [-4 * S, 0, 0] }, { t: 1.6, rot: [-4 * S, 0, 0] }] },
+                        { bone: 'upperLeg_L', keys: [{ t: 0, rot: [2 * S, 0, 0] }, { t: 1.6, rot: [2 * S, 0, 0] }] },
+                        { bone: 'lowerLeg_L', keys: [{ t: 0, rot: [-4 * S, 0, 0] }, { t: 1.6, rot: [-4 * S, 0, 0] }] },
+                        { bone: 'shoulder_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.4, rot: [0, 0, -12] }, { t: 1.6, rot: [0, 0, -12] }] },
+                        { bone: 'upperArm_R', keys: [{ t: 0, rot: [0, 0, -78] }, { t: 0.4, rot: [-10 * S, 0, 148] }, { t: 1.6, rot: [-10 * S, 0, 148] }] },
+                        { bone: 'forearm_R', keys: [{ t: 0, rot: [10 * S, 0, 0] }, { t: 0.4, rot: [0, 0, -14] }, { t: 0.7, rot: [0, 0, 20] }, { t: 1, rot: [0, 0, -14] }, { t: 1.3, rot: [0, 0, 20] }, { t: 1.6, rot: [0, 0, -14] }] },
+                        { bone: 'hand_R', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 0.4, rot: [0, 0, -8] }, { t: 0.7, rot: [0, 0, 12] }, { t: 1, rot: [0, 0, -8] }, { t: 1.3, rot: [0, 0, 12] }, { t: 1.6, rot: [0, 0, -8] }] },
+                        { bone: 'shoulder_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.6, rot: [0, 0, 0] }] },
+                        { bone: 'upperArm_L', keys: [{ t: 0, rot: [0, 0, 78] }, { t: 0.8, rot: [3 * S, 0, 76] }, { t: 1.6, rot: [0, 0, 78] }] },
+                        { bone: 'forearm_L', keys: [{ t: 0, rot: [12 * S, 0, 0] }, { t: 0.8, rot: [18 * S, 0, 0] }, { t: 1.6, rot: [12 * S, 0, 0] }] },
+                        { bone: 'hand_L', keys: [{ t: 0, rot: [0, 0, 0] }, { t: 1.6, rot: [0, 0, 0] }] }
+                    ]
                 };
 
-                const rad = d => d * Math.PI / 180;
-
-                // Detect foot facing direction from the foot bone orientation in rest space.
-                const ftBone = rig.bones.find(b => b.name === 'foot_R' || b.name === 'foot_L');
-                const isFacingNegZ = ftBone ? (ftBone.tail[2] < ftBone.head[2]) : false;
-                const legSign = isFacingNegZ ? -1 : 1;
-                const kneeSign = isFacingNegZ ? 1 : -1;
-
-                // Idle: gentle chest/arm breathing.
-                rigClips.push(clip('idle', 2.4, [
-                    track('chest', [{ t: 0, e: [0, 0, 0] }, { t: 1.2, e: [rad(3), 0, 0] }, { t: 2.4, e: [0, 0, 0] }]),
-                    track('upperArm_L', [{ t: 0, e: [0, 0, 0] }, { t: 1.2, e: [0, 0, rad(4)] }, { t: 2.4, e: [0, 0, 0] }]),
-                    track('upperArm_R', [{ t: 0, e: [0, 0, 0] }, { t: 1.2, e: [0, 0, rad(-4)] }, { t: 2.4, e: [0, 0, 0] }]),
-                    bob([{ t: 0, dy: 0 }, { t: 1.2, dy: 0.12 }, { t: 2.4, dy: 0 }])
-                ]));
-
-                // Walk: opposing legs/arms with knee bend, plus subtle torso counter-sway
-                // and a two-per-cycle vertical bob so it reads as real weight shifting.
-                // In Three.js (+Y up, +Z forward), negative X rotation bends knees backward.
-                const wLeg = rad(28), wKnee = rad(34), wArm = rad(26), wElb = rad(20);
-                rigClips.push(clip('walk', 1, [
-                    track('upperLeg_L', [{ t: 0, e: [wLeg * legSign, 0, 0] }, { t: 0.5, e: [-wLeg * legSign, 0, 0] }, { t: 1, e: [wLeg * legSign, 0, 0] }]),
-                    track('lowerLeg_L', [{ t: 0, e: [0, 0, 0] }, { t: 0.25, e: [wKnee * kneeSign, 0, 0] }, { t: 0.5, e: [wKnee * 0.3 * kneeSign, 0, 0] }, { t: 0.75, e: [0, 0, 0] }, { t: 1, e: [0, 0, 0] }]),
-                    track('upperLeg_R', [{ t: 0, e: [-wLeg * legSign, 0, 0] }, { t: 0.5, e: [wLeg * legSign, 0, 0] }, { t: 1, e: [-wLeg * legSign, 0, 0] }]),
-                    track('lowerLeg_R', [{ t: 0, e: [0, 0, 0] }, { t: 0.25, e: [0, 0, 0] }, { t: 0.5, e: [0, 0, 0] }, { t: 0.75, e: [wKnee * kneeSign, 0, 0] }, { t: 1, e: [0, 0, 0] }]),
-                    track('upperArm_L', [{ t: 0, e: [-wArm * legSign, 0, 0] }, { t: 0.5, e: [wArm * legSign, 0, 0] }, { t: 1, e: [-wArm * legSign, 0, 0] }]),
-                    track('forearm_L', [{ t: 0, e: [wElb, 0, 0] }, { t: 0.5, e: [wElb * 0.4, 0, 0] }, { t: 1, e: [wElb, 0, 0] }]),
-                    track('upperArm_R', [{ t: 0, e: [wArm * legSign, 0, 0] }, { t: 0.5, e: [-wArm * legSign, 0, 0] }, { t: 1, e: [wArm * legSign, 0, 0] }]),
-                    track('forearm_R', [{ t: 0, e: [wElb * 0.4, 0, 0] }, { t: 0.5, e: [wElb, 0, 0] }, { t: 1, e: [wElb * 0.4, 0, 0] }]),
-                    // Torso: tiny forward lean + side-to-side counter rotation.
-                    track('hips', [{ t: 0, e: [rad(2), 0, rad(2)] }, { t: 0.5, e: [rad(2), 0, rad(-2)] }, { t: 1, e: [rad(2), 0, rad(2)] }]),
-                    track('spine', [{ t: 0, e: [0, rad(-3), 0] }, { t: 0.5, e: [0, rad(3), 0] }, { t: 1, e: [0, rad(-3), 0] }]),
-                    track('chest', [{ t: 0, e: [0, rad(3), 0] }, { t: 0.5, e: [0, rad(-3), 0] }, { t: 1, e: [0, rad(3), 0] }]),
-                    bob([{ t: 0, dy: 0 }, { t: 0.25, dy: 0.18 }, { t: 0.5, dy: 0 }, { t: 0.75, dy: 0.18 }, { t: 1, dy: 0 }])
-                ]));
-
-                // Run: bigger, faster swing, strong knee bend, pronounced forward lean and
-                // a higher bob (both feet leave the ground at the extremes).
-                const rLeg = rad(45), rKnee = rad(70), rArm = rad(55), rElb = rad(75);
-                rigClips.push(clip('run', 0.66, [
-                    track('upperLeg_L', [{ t: 0, e: [rLeg * legSign, 0, 0] }, { t: 0.33, e: [-rLeg * legSign, 0, 0] }, { t: 0.66, e: [rLeg * legSign, 0, 0] }]),
-                    track('lowerLeg_L', [{ t: 0, e: [rKnee * 0.4 * kneeSign, 0, 0] }, { t: 0.16, e: [rKnee * kneeSign, 0, 0] }, { t: 0.33, e: [rKnee * 0.5 * kneeSign, 0, 0] }, { t: 0.66, e: [rKnee * 0.4 * kneeSign, 0, 0] }]),
-                    track('upperLeg_R', [{ t: 0, e: [-rLeg * legSign, 0, 0] }, { t: 0.33, e: [rLeg * legSign, 0, 0] }, { t: 0.66, e: [-rLeg * legSign, 0, 0] }]),
-                    track('lowerLeg_R', [{ t: 0, e: [rKnee * 0.5 * kneeSign, 0, 0] }, { t: 0.33, e: [rKnee * 0.4 * kneeSign, 0, 0] }, { t: 0.5, e: [rKnee * kneeSign, 0, 0] }, { t: 0.66, e: [rKnee * 0.5 * kneeSign, 0, 0] }]),
-                    track('upperArm_L', [{ t: 0, e: [-rArm * legSign, 0, 0] }, { t: 0.33, e: [rArm * legSign, 0, 0] }, { t: 0.66, e: [-rArm * legSign, 0, 0] }]),
-                    track('forearm_L', [{ t: 0, e: [rElb, 0, 0] }, { t: 0.33, e: [rElb * 0.6, 0, 0] }, { t: 0.66, e: [rElb, 0, 0] }]),
-                    track('upperArm_R', [{ t: 0, e: [rArm * legSign, 0, 0] }, { t: 0.33, e: [-rArm * legSign, 0, 0] }, { t: 0.66, e: [rArm * legSign, 0, 0] }]),
-                    track('forearm_R', [{ t: 0, e: [rElb * 0.6, 0, 0] }, { t: 0.33, e: [rElb, 0, 0] }, { t: 0.66, e: [rElb * 0.6, 0, 0] }]),
-                    track('hips', [{ t: 0, e: [rad(-10), 0, 0] }]),
-                    track('spine', [{ t: 0, e: [rad(6), rad(-5), 0] }, { t: 0.33, e: [rad(6), rad(5), 0] }, { t: 0.66, e: [rad(6), rad(-5), 0] }]),
-                    bob([{ t: 0, dy: 0.1 }, { t: 0.16, dy: 0.5 }, { t: 0.33, dy: 0.1 }, { t: 0.5, dy: 0.5 }, { t: 0.66, dy: 0.1 }])
-                ]));
-
-                // Jump: crouch (bend knees), explode up + extend, airborne tuck, land soft.
-                const jK = rad(75), jH = rad(45);
-                rigClips.push(clip('jump', 1.4, [
-                    track('upperLeg_L', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [jH, 0, 0] }, { t: 0.5, e: [-rad(10), 0, 0] }, { t: 0.9, e: [rad(20), 0, 0] }, { t: 1.1, e: [jH, 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    track('upperLeg_R', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [jH, 0, 0] }, { t: 0.5, e: [-rad(10), 0, 0] }, { t: 0.9, e: [rad(20), 0, 0] }, { t: 1.1, e: [jH, 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    track('lowerLeg_L', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [jK, 0, 0] }, { t: 0.5, e: [rad(10), 0, 0] }, { t: 0.9, e: [jK * 0.8, 0, 0] }, { t: 1.1, e: [jK, 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    track('lowerLeg_R', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [jK, 0, 0] }, { t: 0.5, e: [rad(10), 0, 0] }, { t: 0.9, e: [jK * 0.8, 0, 0] }, { t: 1.1, e: [jK, 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    track('upperArm_L', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [rad(40), 0, 0] }, { t: 0.5, e: [rad(-120), 0, 0] }, { t: 0.9, e: [rad(-90), 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    track('upperArm_R', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [rad(40), 0, 0] }, { t: 0.5, e: [rad(-120), 0, 0] }, { t: 0.9, e: [rad(-90), 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    track('spine', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [rad(15), 0, 0] }, { t: 0.5, e: [rad(-5), 0, 0] }, { t: 1.4, e: [0, 0, 0] }]),
-                    bob([{ t: 0, dy: 0 }, { t: 0.3, dy: -0.9 }, { t: 0.5, dy: 0.3 }, { t: 0.75, dy: 1.6 }, { t: 0.9, dy: 0.3 }, { t: 1.1, dy: -0.9 }, { t: 1.4, dy: 0 }])
-                ]));
-
-                // Wave: right arm up and waving.
-                rigClips.push(clip('wave', 1.2, [
-                    track('upperArm_R', [{ t: 0, e: [0, 0, 0] }, { t: 0.3, e: [0, 0, -2.4] }, { t: 1.2, e: [0, 0, -2.4] }]),
-                    track('forearm_R', [{ t: 0.3, e: [0, 0, 0] }, { t: 0.6, e: [0, 0.5, 0] }, { t: 0.9, e: [0, -0.5, 0] }, { t: 1.2, e: [0, 0.5, 0] }])
-                ]));
+                const animsToAdd = [newIdle, newWalk, newRun, newJump, newWave];
+                for (const anim of animsToAdd) {
+                    // I preset sono scritti nel frame canonico -> vanno coniugati (qFace).
+                    const c = buildClipFromAnimData(anim, qFace);
+                    if (c) { c.name = anim.name; rigClips.push(c); }
+                }
 
                 // Clip AI personalizzate salvate nel rig (Animation Director): le
                 // ricostruiamo qui cosi' sopravvivono a save/load e a ogni applyRig.
+                // NIENTE qFace: l'AI vede le ossa vere, scrive gia' nel frame giusto.
                 (rig.customAnims || []).forEach(a => {
                     const c = buildClipFromAnimData(a);
                     if (c) { c.name = a.name; rigClips.push(c); }
@@ -9809,13 +9925,23 @@
             // Converte i dati di animazione dell'AI (o salvati) in un AnimationClip.
             // Formato: { name, duration, loop, tracks:[{ bone, keys:[{t, rot:[gx,gy,gz]?, pos:[dx,dy,dz]?}] }] }
             // rot = Euler in GRADI (XYZ), pos = offset in voxel dalla posizione di riposo.
-            function buildClipFromAnimData(anim) {
+            //
+            // `qFace` (opzionale) porta una clip scritta nel frame CANONICO (personaggio
+            // rivolto a +Z) su uno scheletro girato di 90 o 270 gradi: le rotazioni si
+            // coniugano, gli spostamenti si ruotano. Lo passano solo i preset, che sono
+            // scritti nel frame canonico; le clip dell'AI arrivano gia' nel frame dello
+            // scheletro reale (l'AI vede i nomi e le posizioni delle ossa vere) e quindi
+            // non vanno toccate, altrimenti si ruoterebbero due volte.
+            function buildClipFromAnimData(anim, qFace) {
                 if (!skeleton || !anim || !Array.isArray(anim.tracks)) return null;
                 const byName = {};
                 rig.bones.forEach((bd, i) => byName[bd.name] = skeleton.bones[i]);
                 const rad = d => (Number(d) || 0) * Math.PI / 180;
                 const dur = Math.max(0.1, Number(anim.duration) || 1);
                 const clampT = t => Math.min(dur, Math.max(0, Number(t) || 0));
+                // Le traslazioni sono vettori, non rotazioni: si ruotano, non si coniugano.
+                const yaw = qFace ? 2 * Math.atan2(qFace.y, qFace.w) : 0;
+                const fCos = Math.cos(yaw), fSin = Math.sin(yaw);
                 const tracks = [];
                 anim.tracks.forEach(tr => {
                     const bone = byName[tr && tr.bone];
@@ -9826,7 +9952,9 @@
                         const times = [], values = [];
                         rotKeys.forEach(k => {
                             times.push(clampT(k.t));
-                            const qq = new THREE.Quaternion().setFromEuler(new THREE.Euler(rad(k.rot[0]), rad(k.rot[1]), rad(k.rot[2])));
+                            const qq = faceRotate(
+                                new THREE.Quaternion().setFromEuler(new THREE.Euler(rad(k.rot[0]), rad(k.rot[1]), rad(k.rot[2]))),
+                                qFace);
                             values.push(qq.x, qq.y, qq.z, qq.w);
                         });
                         tracks.push(new THREE.QuaternionKeyframeTrack(`${bone.name}.quaternion`, times, values));
@@ -9836,7 +9964,8 @@
                         const times = [], values = [];
                         posKeys.forEach(k => {
                             times.push(clampT(k.t));
-                            values.push(rest.x + (Number(k.pos[0]) || 0), rest.y + (Number(k.pos[1]) || 0), rest.z + (Number(k.pos[2]) || 0));
+                            const dx = Number(k.pos[0]) || 0, dy = Number(k.pos[1]) || 0, dz = Number(k.pos[2]) || 0;
+                            values.push(rest.x + dx * fCos + dz * fSin, rest.y + dy, rest.z + (-dx * fSin + dz * fCos));
                         });
                         tracks.push(new THREE.VectorKeyframeTrack(`${bone.name}.position`, times, values));
                     }
@@ -9844,6 +9973,8 @@
                 if (!tracks.length) return null;
                 return new THREE.AnimationClip(anim.name || 'ai_anim', dur, tracks);
             }
+
+
 
 
             function playClip(name) {
@@ -10500,6 +10631,7 @@
             }
 
             // --- CUBE_FACES: shared cube face table (used by GLB static export) -----
+
             const CUBE_FACES = [
                 { n: [1, 0, 0], v: [[.5, -.5, -.5], [.5, .5, -.5], [.5, .5, .5], [.5, -.5, .5]] },
                 { n: [-1, 0, 0], v: [[-.5, -.5, .5], [-.5, .5, .5], [-.5, .5, -.5], [-.5, -.5, -.5]] },
