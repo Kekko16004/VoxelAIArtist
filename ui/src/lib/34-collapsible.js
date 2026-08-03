@@ -85,3 +85,43 @@
                     });
                 });
             }
+
+            // --- Pannello destro: le sezioni ricordano aperto/chiuso -----------------
+            // A destra le sezioni sono gia' dei <details class="rp-section"> con id
+            // stabili scritti nel template, quindi non serve arricchire il markup:
+            // basta salvare quali id sono CHIUSI e ripristinarli al bootstrap.
+            //
+            // Si salva la lista dei chiusi, non quella degli aperti: cosi' una sezione
+            // nuova aggiunta al template in futuro nasce con il default del template
+            // invece di apparire chiusa perche' mancava dalla lista salvata.
+            function initRightPanelPersist() {
+                const RP_LS_KEY = 'voxelai.rpSections';
+                const panels = document.querySelectorAll('.rp-section[id]');
+                if (!panels.length || panels[0].dataset.rpPersist === '1') return;
+                // Carica la lista degli id CHIUSI salvati. Se non c'e' nulla, lo stato
+                // del template e' quello giusto (tre aperti, uno chiuso): non toccare.
+                let closed;
+                try {
+                    const raw = localStorage.getItem(RP_LS_KEY);
+                    closed = raw ? new Set(JSON.parse(raw)) : null;
+                } catch (e) { closed = null; }
+                panels.forEach(panel => {
+                    panel.dataset.rpPersist = '1';
+                    if (closed !== null) panel.open = !closed.has(panel.id);
+                    // 'toggle', non 'click': <details> emette toggle QUANDO `open` e'
+                    // gia' cambiato, sia da click che da codice. Con 'click' si
+                    // leggerebbe lo stato vecchio (il click precede il cambio).
+                    panel.addEventListener('toggle', () => {
+                        let cur;
+                        try {
+                            const raw = localStorage.getItem(RP_LS_KEY);
+                            cur = new Set(raw ? JSON.parse(raw) : []);
+                        } catch (e) { cur = new Set(); }
+                        if (panel.open) cur.delete(panel.id);
+                        else cur.add(panel.id);
+                        try {
+                            localStorage.setItem(RP_LS_KEY, JSON.stringify([...cur]));
+                        } catch (e) { /* storage non disponibile */ }
+                    });
+                });
+            }
