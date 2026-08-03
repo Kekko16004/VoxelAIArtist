@@ -51,9 +51,15 @@
                 const r = S / 2, ry = H / 2;
                 const out = [];
                 for (let y = 0; y < H; y++) {
-                    // Frazione di altezza al CENTRO della cella: con (y/H) il livello 0
-                    // avrebbe raggio pieno e l'ultimo raggio zero, sbilanciato in basso.
-                    const t = (y + 0.5) / H;
+                    // Frazione di altezza dal BASSO: t=0 al livello 0 (raggio pieno) e
+                    // t=1 all'ultimo livello (apice). La forma precedente (y + 0.5) / H
+                    // campionava il centro del layer, e con H < S/2 la base nasceva
+                    // ristretta: piramide 16 alta 1 usciva larga 8 invece di 16, 32x4
+                    // usciva 28. Un tetto piatto e' una richiesta normale, quindi la base
+                    // deve valere il lato chiesto a QUALUNQUE altezza. Il max(1, H-1)
+                    // evita la divisione per zero a H=1, dove l'unico livello e' la base.
+                    // Pinnata dal gruppo [8-bis] del test, che copre proprio H < S/2.
+                    const t = y / Math.max(1, H - 1);
                     const rAt = Math.max(PRIM_APEX_MIN, r * (1 - t));
                     const dy = y - cy;
                     for (let x = 0; x < S; x++) {
@@ -124,7 +130,13 @@
                 const r = S / 2, ry = H / 2;
                 let n = 0;
                 for (let y = 0; y < H; y++) {
-                    const t = (y + 0.5) / H;
+                    // IDENTICA alla formula del generatore qui sopra: se una delle due
+                    // cambia senza l'altra, il conteggio diverge dalla geometria e il
+                    // budget si decide su un numero sbagliato. Il gruppo [8] del test
+                    // confronta i due valori forma per forma.
+                    // (Nessun nome di funzione qui dentro: il gruppo [9] ispeziona questo
+                    //  corpo per garantire che contare non allochi.)
+                    const t = y / Math.max(1, H - 1);
                     const rAt = Math.max(PRIM_APEX_MIN, r * (1 - t));
                     const dy = y - cy;
                     if (id === 'pyramid') {

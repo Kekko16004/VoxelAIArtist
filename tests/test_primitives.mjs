@@ -153,6 +153,46 @@ console.log('[8] il conteggio in forma chiusa e\' IDENTICO al ciclo sulle celle'
     }
 }
 
+console.log('[8-bis] la base occupa il lato chiesto ANCHE nelle forme schiacciate');
+{
+    // Il buco che ha lasciato passare un difetto vero sotto 107 asserzioni verdi: i
+    // gruppi [4] e [5] provano solo altezze H >= S, cioe' l'unico regime in cui la
+    // vecchia formula (y + 0.5) / H azzeccava la base. Con H < S/2 campionava il
+    // centro del layer invece della base, e la piramide 16x1 nasceva larga 8.
+    // Un tetto piatto e un cono schiacciato sono richieste normali: qui si pinnano.
+    const spanBase = (id, S, H) => {
+        const xs = new Set();
+        for (const v of api.primitiveCells(id, S, H)) if (v.y === 0) xs.add(v.x);
+        return xs.size;
+    };
+    const altezza = (id, S, H) => {
+        let maxY = -1;
+        for (const v of api.primitiveCells(id, S, H)) if (v.y > maxY) maxY = v.y;
+        return maxY + 1;
+    };
+    const rotte = [];
+    for (const id of ['pyramid', 'cone']) {
+        for (const [S, H] of [[16, 1], [16, 2], [16, 4], [16, 8], [32, 4], [40, 3], [7, 1], [8, 2]]) {
+            if (spanBase(id, S, H) !== S) rotte.push(`${id}(${S},${H}) base=${spanBase(id, S, H)} invece di ${S}`);
+            if (altezza(id, S, H) !== H) rotte.push(`${id}(${S},${H}) altezza=${altezza(id, S, H)} invece di ${H}`);
+        }
+    }
+    ok(rotte.length === 0, `piramide/cono schiacciati: base piena e altezza esatta (${rotte.length} rotti)`);
+    if (rotte.length) console.log('     ' + rotte.slice(0, 6).join('\n     '));
+    // Il caso singolo piu' facile da leggere, tenuto a parte perche' e' quello che
+    // l'utente vede per primo: un tetto di altezza 1 e' un quadrato pieno.
+    ok(spanBase('pyramid', 16, 1) === 16, 'piramide 16 alta 1 -> base larga 16, non 8');
+    // E l'affusolamento non deve sparire: a H alta la cima resta una punta.
+    const cima = (id, S, H) => {
+        let maxY = -1; const top = new Set();
+        for (const v of api.primitiveCells(id, S, H)) if (v.y > maxY) maxY = v.y;
+        for (const v of api.primitiveCells(id, S, H)) if (v.y === maxY) top.add(v.x + ',' + v.z);
+        return top.size;
+    };
+    ok(cima('pyramid', 16, 16) <= 4, 'piramide 16x16: la cima resta una punta');
+    ok(cima('cone', 12, 18) <= 4, 'cono 12x18: la cima resta una punta');
+}
+
 console.log('[9] contare NON deve allocare: 512 va contato, non costruito');
 {
     // Questo gruppo tiene in piedi il cap di CLAUDE.md. La regressione da cogliere
