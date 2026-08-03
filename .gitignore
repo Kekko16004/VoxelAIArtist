@@ -32,6 +32,12 @@ dist/
 # Le copie .bak / .tar.gz sono utili in locale ma pesano nel repo e sono
 # ricostruibili: la storia di git E' il sistema di backup.
 .claude/backups/
+# Worktree isolati creati da Claude Code: copie di lavoro del repo, non
+# contenuto del repo. Senza questa riga finirebbero nell'indice per intero.
+.claude/worktrees/
+# Scratch di subagent-driven-development (ledger, brief, pacchetti di review):
+# artefatti di processo rigenerabili, la storia git e' il record definitivo.
+.superpowers/
 *.bak
 *.orig
 *.rej
