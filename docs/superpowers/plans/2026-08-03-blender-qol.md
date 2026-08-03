@@ -621,18 +621,28 @@ console.log('[8] il conteggio in forma chiusa e\' IDENTICO al ciclo sulle celle'
 
 console.log('[9] contare NON deve allocare: 512 va contato, non costruito');
 {
-    // Questo e' il test che tiene in piedi il cap di CLAUDE.md. Se qualcuno
-    // "semplifica" primitiveVoxelCount in primitiveCells().length, qui il processo
-    // muore con "Reached heap limit" (misurato: ~13 s e oltre 4 GB) invece di
-    // stampare FAIL. Il tempo e la memoria sono l'asserzione.
-    const t0 = process.hrtime.bigint();
+    // Questo gruppo tiene in piedi il cap di CLAUDE.md. La regressione da cogliere
+    // e' una sola e ha un nome: "semplificare" primitiveVoxelCount in
+    // primitiveCells().length. Costa un OOM (misurato: ~13 s e oltre 4 GB su un cubo
+    // 512) in una funzione che gira a ogni battuta di tasto nel campo Dimensione.
+    //
+    // L'asserzione e' STRUTTURALE, non cronometrica: una soglia di tempo o di heap
+    // dipenderebbe dal carico della macchina e prima o poi fallirebbe senza una vera
+    // regressione. Qui si legge il sorgente e si pretende che il conteggio non passi
+    // dal costruttore di celle.
+    const from = src.indexOf('function primitiveVoxelCount');
+    ok(from >= 0, 'primitiveVoxelCount esiste');
+    const body = src.slice(from, src.indexOf('\n            function ', from + 10));
+    ok(!/primitiveCells/.test(body),
+       'primitiveVoxelCount NON chiama primitiveCells (contare non deve allocare)');
+
+    // E il conteggio a 512 deve comunque tornare il numero giusto: se la forma chiusa
+    // sbaglia sulle misure grandi, il budget viene deciso su un numero falso.
     const counts = IDS.map(id => api.primitiveVoxelCount(id, 512, 512));
-    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
     ok(counts[0] === 512 * 512 * 512, 'cubo 512 = 134217728 voxel');
     ok(counts.every(n => Number.isFinite(n) && n > 0), 'ogni forma da\' un numero finito');
-    ok(ms < 500, `cinque conteggi a 512 in ${ms.toFixed(0)} ms (< 500)`);
-    ok(process.memoryUsage().heapUsed < 800e6,
-       `heap ${(process.memoryUsage().heapUsed / 1e6).toFixed(0)} MB (< 800)`);
+    ok(counts[3] < counts[2] && counts[2] < counts[0],
+       'a 512 sfera < cilindro < cubo (i volumi restano ordinati)');
 }
 
 console.log('[10] budget: la forma piu\' costosa va rifiutata, non troncata');
