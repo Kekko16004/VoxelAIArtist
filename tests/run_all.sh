@@ -186,6 +186,14 @@ run "Voxelizzazione GLB (Node)" node tests/test_import_glb.mjs
 #         costosa venga RIFIUTATA a monte invece di essere troncata.
 run "Primitive voxel (Node)" node tests/test_primitives.mjs
 
+# 4d-quater. Ctrl+A nella timeline = seleziona tutti i keyframe. La scorciatoia era
+#         rivendicata da TRE punti (timeline, gizmo globale, rig) e la timeline la
+#         scartava a monte con `if (ev.ctrlKey ...) return`, quindi non ci arrivava
+#         mai. Il test verifica sia la selezione (tutte le tracce, conteggi diversi,
+#         toggle) sia lo scoping: dentro l'area consuma l'evento, fuori lo lascia
+#         passare al gizmo, e Ctrl+Shift+A resta del rig.
+run "Ctrl+A sui keyframe (Node)" node tests/test_timeline_select_all.mjs
+
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 

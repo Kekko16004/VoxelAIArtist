@@ -47,6 +47,8 @@
             let tlKeyDrag = null;           // {startX, moved, orig:[{bone,t}]}
             let tlDockHeight = 190;
             let tlRowsBuilt = '';           // firma dell'ultimo render (evita rebuild inutili)
+            let tlAreaHover = false;        // puntatore sopra il dock
+            let tlAreaFocus = false;        // focus dentro il dock
 
             const tlDock = document.getElementById('timelineDock');
             const tlClipSel = document.getElementById('tlClip');
@@ -388,6 +390,42 @@
 
             function tlIsSelectedKey(bone, t) {
                 return tlSelected.some(s => s.bone === bone && Math.abs(s.t - t) < 1e-6);
+            }
+
+            // L'area e' "attiva" col puntatore sopra il dock OPPURE col focus dentro:
+            // dopo aver cliccato una chiave il mouse spesso si sposta, e pretendere che
+            // resti fermo renderebbe la scorciatoia inaffidabile. Un solo booleano per
+            // ciascuna condizione, nessun hit-testing.
+            function tlAreaActive() {
+                return tlVisible && (tlAreaHover || tlAreaFocus);
+            }
+
+            // Ctrl+A: seleziona tutti i keyframe dell'animazione attiva.
+            // Riporta false se non c'era nulla da fare (nessuna clip modificabile, o
+            // clip senza chiavi), cosi' il chiamante sa se ha senso consumare l'evento.
+            //
+            // Toggle deliberato: ripremendo con tutto selezionato la selezione si svuota.
+            // Blender separa A (seleziona) da Alt+A (deseleziona), ma qui Ctrl+A e' la
+            // SOLA scorciatoia di selezione, e senza il toggle non ci sarebbe modo di
+            // deselezionare da tastiera.
+            function tlSelectAllKeys() {
+                // Il menu dei canali si prende i tasti quando e' aperto: va chiuso prima,
+                // altrimenti resta a schermo sopra una selezione che e' cambiata sotto.
+                if (tlChanMenuOpen()) tlCloseChanMenu();
+                const anim = tlActiveAnim();
+                const times = tlKeyTimesByBone(anim);
+                const all = [];
+                Object.keys(times).forEach(bone => {
+                    times[bone].forEach(t0 => all.push({ bone: bone, t: t0 }));
+                });
+                if (!all.length) return false;
+                const allAlready = all.every(k => tlIsSelectedKey(k.bone, k.t))
+                    && tlSelected.length === all.length;
+                tlSelected = allAlready ? [] : all;
+                // La selezione NON e' stato del documento: nessun pushHistory().
+                tlRedraw();
+                tlUpdateToolbar();
+                return true;
             }
 
             // Quali canali contiene la chiave di quell'osso a quel tempo. Serve al
@@ -1273,6 +1311,17 @@
                     tlResizeEl.addEventListener('pointercancel', endRz);
                 }
 
+                if (tlDock) {
+                    tlDock.addEventListener('pointerenter', () => { tlAreaHover = true; });
+                    tlDock.addEventListener('pointerleave', () => {
+                        // Durante un trascinamento di chiavi il puntatore esce spesso dal
+                        // dock: azzerare qui spegnerebbe la scorciatoia a meta' gesto.
+                        if (!tlKeyDrag && !tlScrubbing) tlAreaHover = false;
+                    });
+                    tlDock.addEventListener('focusin', () => { tlAreaFocus = true; });
+                    tlDock.addEventListener('focusout', () => { tlAreaFocus = false; });
+                }
+
                 // Scorciatoie: valgono solo con la timeline a schermo e fuori dai campi di
                 // testo. Si registrano in CAPTURE perche' 'Delete' e' gia' preso da
                 // "elimina oggetto": qui va fermato prima che ci arrivi.
@@ -1290,6 +1339,18 @@
                     // slider, non il frame corrente.
                     const isRange = !!(el && el.tagName === 'INPUT' && el.type === 'range');
                     if (isTypingTarget(ev) || isRange) return;
+                    // Ctrl+A appartiene alla timeline solo quando si e' DENTRO la sua
+                    // area: fuori resta del gizmo globale (01-scene-setup.js). Shift e Alt
+                    // esclusi: Ctrl+Shift+A e' del rig (15-rig.js).
+                    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey
+                        && (ev.key === 'a' || ev.key === 'A')) {
+                        if (!tlAreaActive() || tlModalOpen()) return;
+                        if (tlSelectAllKeys()) {
+                            ev.preventDefault();
+                            ev.stopImmediatePropagation();
+                        }
+                        return;
+                    }
                     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
                     if (tlModalOpen()) return;               // una modale aperta ha la priorita'
                     if (tlIsTogglePlayKey(ev.key)) {

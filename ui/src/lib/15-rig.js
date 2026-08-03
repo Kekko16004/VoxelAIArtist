@@ -3422,23 +3422,33 @@
                 setHoveredBone(pickBone(e.clientX, e.clientY));
             }, { passive: true });
 
+            // Toast di conferma. Prima ogni scorciatoia si ricostruiva il proprio div con
+            // 200 caratteri di style inline: una copia per messaggio, e nessuna traducibile.
+            function rigToast(msg) {
+                const el = document.createElement('div');
+                el.className = 'rig-toast';
+                el.textContent = msg;
+                document.body.appendChild(el);
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 300);
+                }, 1500);
+            }
+
             // --- QOL Shortcuts ---
             window.poseClipboard = null;
             window.addEventListener('keydown', (ev) => {
                 if (!rigPreviewActive) return;
                 if (isTypingTarget(ev)) return;
                 
-                // Ctrl+A: Seleziona tutte le ossa (tramite timeline)
-                if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')) {
+                // Ctrl+SHIFT+A: ambito "inserisci chiave su tutte le ossa".
+                // Ctrl+A liscio e' della timeline (seleziona i keyframe): erano due
+                // funzioni diverse sulla stessa scorciatoia, e vinceva chi capitava.
+                if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && (ev.key === 'a' || ev.key === 'A')) {
                     ev.preventDefault();
                     if (typeof window.tlSetKeyAllBones === 'function') {
                         window.tlSetKeyAllBones(true);
-                        // Feedback visivo rapido
-                        const toast = document.createElement('div');
-                        toast.textContent = "Tutte le ossa selezionate per Keyframe (Timeline)";
-                        toast.style.cssText = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--primary); color:white; padding:8px 16px; border-radius:8px; z-index:9999; pointer-events:none; transition:opacity 0.3s; font-size:12px;";
-                        document.body.appendChild(toast);
-                        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 1500);
+                        rigToast(t('rig.allBonesKeyed'));
                     }
                 }
                 
@@ -3455,11 +3465,7 @@
                     ev.preventDefault();
                     if (rig && rig.pose) {
                         window.poseClipboard = JSON.parse(JSON.stringify(rig.pose));
-                        const toast = document.createElement('div');
-                        toast.textContent = "Posa Copiata!";
-                        toast.style.cssText = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--primary); color:white; padding:8px 16px; border-radius:8px; z-index:9999; pointer-events:none; transition:opacity 0.3s; font-size:12px;";
-                        document.body.appendChild(toast);
-                        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 1000);
+                        rigToast(t('rig.poseCopied'));
                     }
                 }
 

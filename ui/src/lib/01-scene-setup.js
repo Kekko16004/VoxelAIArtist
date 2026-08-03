@@ -309,7 +309,9 @@
             window.addEventListener('keydown', (e) => {
                 if (isTypingTarget(e)) return;
 
-                if (e.ctrlKey && e.key.toLowerCase() === 'a') {
+                // Shift escluso: Ctrl+Shift+A e' del rig. Senza questo controllo la
+                // scorciatoia del rig sgancerebbe il gizmo globale di nascosto.
+                if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a') {
                     e.preventDefault();
                     if (globalTransformControls.object) {
                         globalTransformControls.detach();

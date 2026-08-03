@@ -576,6 +576,8 @@
   "rig.aiNoValidBones": "Kein gültiger Knochen in den erzeugten Tracks.",
   "rig.animCreated": "Animation \"{name}\" erstellt und wird abgespielt.",
   "rig.animError": "Animationsfehler: {error}",
+  "rig.allBonesKeyed": "Alle Knochen für Keyframes aktiv",
+  "rig.poseCopied": "Pose kopiert",
   "timeline.summary": "Übersicht",
   "timeline.play": "Abspielen",
   "timeline.pause": "Pause",

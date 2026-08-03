@@ -576,6 +576,8 @@
   "rig.aiNoValidBones": "No valid bone in the generated tracks.",
   "rig.animCreated": "Animation \"{name}\" created and playing.",
   "rig.animError": "Animation error: {error}",
+  "rig.allBonesKeyed": "All bones set for keyframing",
+  "rig.poseCopied": "Pose copied",
   "timeline.summary": "Summary",
   "timeline.play": "Play",
   "timeline.pause": "Pause",
