@@ -256,9 +256,18 @@
             function primRefreshInfo() {
                 if (!primShapeId) return;
                 const d = primReadDims();
-                if (primEl('primKeepRatio').checked || primitiveShape(primShapeId).fixedRatio) {
-                    primEl('primHeight').value = String(d.height);
-                }
+                // Altezza DERIVATA (proporzione mantenuta, o forma a rapporto fisso):
+                // il campo si riscrive da solo a ogni battuta, quindi va anche
+                // DISABILITATO. Lasciarlo abilitato faceva sembrare che il dialogo
+                // rifiutasse quel che si scrive — si digitava un'altezza e la si vedeva
+                // tornare indietro. I voxel non erano mai sbagliati (primReadDims
+                // ignora il campo in questo stato), ma era un difetto visibile.
+                // E' cio' che la sfera gia' faceva grazie a fixedRatio: qui vale per
+                // tutte le forme.
+                const hEl = primEl('primHeight');
+                const derivata = primEl('primKeepRatio').checked || primitiveShape(primShapeId).fixedRatio;
+                hEl.disabled = !!derivata;
+                if (derivata) hEl.value = String(d.height);
                 const g = primitiveGridFor(d.size, d.height, primCurrentGrid());
                 const n = primitiveVoxelCount(primShapeId, d.size, d.height);
                 const budget = voxelBudgetFor([g, g, g]);
@@ -330,9 +339,19 @@
                 // (13-history.js:196) e non va consumato.
                 document.addEventListener('keydown', e => {
                     if (ov.style.display !== 'flex') return;
-                    if (e.key === 'Escape') { e.preventDefault(); primClose(); }
+                    // stopPropagation, non solo preventDefault: questo listener e' sul
+                    // DOCUMENT e quello dell'estrusione su WINDOW (13-history.js:224).
+                    // Il document sta piu' in basso nell'albero, quindi in bubble corre
+                    // prima e senza fermarlo un solo Esc annullava l'estrusione armata
+                    // E chiudeva il dialogo. Non serve stopImmediatePropagation: le
+                    // altre modali (26-settings-modal.js:33, 31-help.js:281) sono anche
+                    // loro sul document e girano PRIMA di questa (moduli 26/31 contro
+                    // 35), quindi non le raggiungerebbe comunque — a tenerle fuori dai
+                    // piedi e' la guardia tlModalOpen() qui sotto, che impedisce al
+                    // dialogo di aprirsi sopra di esse.
+                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); primClose(); }
                     else if (e.key === 'Enter' && primShapeId && !primEl('primCreate').disabled) {
-                        e.preventDefault(); primCreate();
+                        e.preventDefault(); e.stopPropagation(); primCreate();
                     }
                 });
                 window.addEventListener('keydown', e => {
@@ -343,6 +362,14 @@
                     if (e.key !== 'A' && e.key !== 'a') return;
                     if (isTypingTarget(e)) return;
                     if (ov.style.display !== 'none') return;   // gia' aperto
+                    // Nessuna primitiva sopra un'altra modale: senza questa riga
+                    // Shift+A apriva il dialogo sopra Impostazioni/Aiuto/Importa
+                    // (z-index 95 contro 90/70/60, quindi sopra e cliccabile), e da
+                    // li' un Esc chiudeva due cose. tlModalOpen() e' l'elenco che il
+                    // progetto gia' usa per questo (33-timeline.js:661) e comprende
+                    // 'primOverlay', quindi la riga sopra resta come guardia locale
+                    // se un giorno il modulo girasse senza la timeline.
+                    if (typeof tlModalOpen === 'function' && tlModalOpen()) return;
                     e.preventDefault();
                     primOpen();
                 });

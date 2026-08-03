@@ -65,6 +65,22 @@ console.log('[1] ogni id toccato dal modulo esiste nel template');
     const iM = tl.indexOf('function tlModalOpen(');
     ok(iM > 0 && tl.slice(iM, iM + 400).includes("'primOverlay'"),
        'primOverlay e\' fra le modali di tlModalOpen (lo Spazio non parte)');
+    // Le scorciatoie QOL del rig (I, Ctrl+C, Ctrl+V) uscivano solo su
+    // isTypingTarget, che non basta: dopo un clic sull'imbottitura del dialogo il
+    // fuoco torna al <body> e `I` inseriva un keyframe DIETRO al dialogo aperto.
+    // Controllo strutturale perche' quel blocco non ha un harness proprio.
+    const rig = fs.readFileSync(path.join(ROOT, 'ui/src/lib/15-rig.js'), 'utf8');
+    const iQ = rig.indexOf('// --- QOL Shortcuts ---');
+    // Cercare il solo nome `tlModalOpen()` NON basta: il commento accanto alla
+    // guardia lo nomina, quindi togliere la riga e lasciare il commento passava
+    // inosservato (mutazione F6 di .superpowers/mut-fixround.mjs). Serve la forma
+    // dell'ISTRUZIONE: un `if (...tlModalOpen()...) return;`. Righe intere, non
+    // frammenti, cosi' un commento non puo' fare da comparsa.
+    const guardia = (rig.slice(iQ, iQ + 1400).split('\n')
+        .filter(l => !l.trim().startsWith('//'))
+        .some(l => /if\s*\(.*tlModalOpen\s*\(\s*\).*\)\s*return\s*;/.test(l)));
+    ok(iQ > 0 && guardia,
+       'anche le scorciatoie del rig escono su tlModalOpen prima di agire');
 }
 
 // --- 2. il DOM finto -------------------------------------------------------
@@ -120,6 +136,10 @@ function makeHarness(opts) {
     let activeColorHex = COLOR;
     function pushHistory() { L.history++; }
     function isTypingTarget(e) { return !!(e && e.__typing); }
+    // L'elenco delle modali della timeline. Qui e' pilotato dal test, ma il
+    // modulo deve chiamarlo: senza, Shift+A apriva il dialogo SOPRA Impostazioni
+    // o Aiuto (z-index 95 contro 90/70) e un Esc chiudeva due cose insieme.
+    function tlModalOpen() { return !!L.altraModale; }
     let __nextId = 7;
     function createObject(data) {
         const o = { id: __nextId++, data: data };
@@ -157,7 +177,7 @@ function makeHarness(opts) {
 // --- 3. la scorciatoia -----------------------------------------------------
 console.log('[2] Shift+A apre, e non ruba i tasti di nessun altro');
 {
-    const { api, els, win } = makeHarness();
+    const { api, els, win, log } = makeHarness();
     ok(win._lis.keydown && win._lis.keydown.length === 1, 'un solo listener keydown registrato');
     const key = (k, mod) => {
         const ev = Object.assign({ key: k, __prevented: 0, preventDefault() { this.__prevented++; } }, mod || {});
@@ -184,6 +204,15 @@ console.log('[2] Shift+A apre, e non ruba i tasti di nessun altro');
         ok(chiuso(), nome + ': non apre');
         ok(ev.__prevented === 0, nome + ': e non consuma l\'evento');
     }
+
+    // Nemmeno con un'altra modale aperta: il dialogo delle primitive ha z-index
+    // 95 contro i 90/70/60 delle altre, quindi si aprirebbe SOPRA e sarebbe
+    // cliccabile, e poi un solo Esc chiuderebbe due cose.
+    log.altraModale = true;
+    let evM = key('A', { shiftKey: true });
+    ok(chiuso(), 'con Impostazioni/Aiuto aperti: non apre');
+    ok(evM.__prevented === 0, 'e non consuma l\'evento (resta di chi ha la modale)');
+    log.altraModale = false;
 
     // E i casi che devono aprire: 'A' maiuscola arriva quando Shift e' premuto.
     const ev = key('A', { shiftKey: true });
@@ -240,17 +269,30 @@ console.log('[4] la sfera non ha un\'altezza indipendente');
     ok(els.primHeight.value === '20', 'l\'altezza segue il diametro');
     ok(api.dims().height === 20, 'e primReadDims concorda');
 
-    // Il cubo invece lascia scegliere: togliendo la spunta l'altezza e' libera.
+    // Il cubo invece lascia scegliere, ma solo togliendo la spunta: finche' la
+    // proporzione e' mantenuta l'altezza e' DERIVATA e il campo resta disabilitato.
+    // Senza questo, digitare un'altezza la faceva tornare indietro a ogni battuta
+    // (primRefreshInfo la riscrive) e il dialogo sembrava rifiutare quel che si
+    // scriveva. I voxel non erano sbagliati, l'aspetto si'.
     const { api: a2, els: e2 } = makeHarness();
     a2.open();
     e2.primShapeList.children[0].fire('click');
-    ok(e2.primHeight.disabled === false, 'il cubo lascia l\'altezza modificabile');
+    ok(e2.primHeight.disabled === true,
+       'col cubo e la proporzione mantenuta l\'altezza e\' derivata: campo disabilitato');
     e2.primKeepRatio.checked = false;
     e2.primKeepRatio.fire('change');
+    ok(e2.primHeight.disabled === false, 'togliendo la spunta il campo si riabilita');
     e2.primHeight.value = '3';
     e2.primHeight.fire('input');
     ok(a2.dims().height === 3, 'senza proporzione l\'altezza vale quella scritta');
+    ok(e2.primHeight.value === '3', 'e il campo NON viene riscritto sotto le dita');
     ok(a2.dims().size === 16, 'e la dimensione resta la sua');
+
+    // Rimettendo la spunta il campo torna derivato e disabilitato.
+    e2.primKeepRatio.checked = true;
+    e2.primKeepRatio.fire('change');
+    ok(e2.primHeight.disabled === true, 'rimettendo la spunta torna disabilitato');
+    ok(e2.primHeight.value === '16', 'e riprende a seguire la dimensione');
 }
 
 console.log('[5] le misure sono sempre pulite: mai NaN, mai fuori da 1..512');
@@ -364,7 +406,11 @@ console.log('[8] chiusura: Esc, clic sullo sfondo, Annulla; Invio crea');
     // funzionare proprio li'. E' il modo in cui chiudono tutte le altre modali
     // del progetto (26-settings-modal.js:33, 31-help.js:279).
     const docKey = k => {
-        const ev = { key: k, __p: 0, preventDefault() { this.__p++; } };
+        const ev = {
+            key: k, __p: 0, __s: 0,
+            preventDefault() { this.__p++; },
+            stopPropagation() { this.__s++; }
+        };
         (doc._lis.keydown || []).forEach(fn => fn(ev));
         return ev;
     };
@@ -377,6 +423,11 @@ console.log('[8] chiusura: Esc, clic sullo sfondo, Annulla; Invio crea');
     let ev = docKey('Escape');
     ok(els.primOverlay.style.display === 'none', 'Esc chiude');
     ok(ev.__p === 1, 'e consuma il tasto');
+    // stopPropagation, non solo preventDefault: l'estrusione ascolta su WINDOW
+    // (13-history.js) e questo handler sta sul DOCUMENT, che in bubble corre
+    // prima. Senza fermare l'evento, con l'estrusione armata un solo Esc
+    // annullava l'estrusione E chiudeva il dialogo.
+    ok(ev.__s === 1, 'e ferma la risalita a window (l\'estrusione non lo vede)');
     api.create();
     ok(log.created.length === 0, 'dopo la chiusura non c\'e\' piu\' una forma da creare');
 
@@ -384,6 +435,7 @@ console.log('[8] chiusura: Esc, clic sullo sfondo, Annulla; Invio crea');
     // (13-history.js:196) e Invio serve altrove. Consumarli qui li ruberebbe.
     ev = docKey('Escape');
     ok(ev.__p === 0, 'a dialogo chiuso Esc passa oltre (l\'estrusione lo usa)');
+    ok(ev.__s === 0, 'e non viene nemmeno fermato');
     ev = docKey('Enter');
     ok(ev.__p === 0 && log.created.length === 0, 'e Invio non crea nulla');
 
@@ -393,6 +445,7 @@ console.log('[8] chiusura: Esc, clic sullo sfondo, Annulla; Invio crea');
     ev = docKey('Enter');
     ok(log.created.length === 1, 'Invio crea la primitiva');
     ok(ev.__p === 1, 'consumando il tasto');
+    ok(ev.__s === 1, 'e fermandolo prima di window');
 
     api.open();
     els.primShapeList.children[0].fire('click');

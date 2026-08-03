@@ -24,7 +24,7 @@ if (from < 0 || to < 0) {
     process.exit(1);
 }
 const block = src.slice(from, to);
-ok(/addEventListener\(\s*'pointerdown'[\s\S]{0,400}?true\s*\)/.test(block),
+ok(/addEventListener\(\s*'pointerdown'[\s\S]{0,1200}?true\s*\)/.test(block),
    'il blocco registra un pointerdown in capture (la fix e\' presente)');
 
 // --- THREE finto: solo cio' che il blocco usa, ma con matematica REALE ---
@@ -143,8 +143,8 @@ const api = new Function(
 // --- scenario ---
 const REST = new Quat().setFromEuler(new Euler(0, 0, 0));          // osso a riposo
 const STALE = new Quat().setFromEuler(new Euler(0.9, 0.3, -0.7));  // proxy stantio
-const firePointerDown = () => (winL['pointerdown'] || [])
-    .filter(x => x.capture).forEach(x => x.f({ button: 0 }));
+const firePointerDown = (button = 0) => (winL['pointerdown'] || [])
+    .filter(x => x.capture).forEach(x => x.f({ button: button }));
 
 // Porta i controls nello stato in cui li lascia updateGizmo() sulla scheda Rig:
 // abilitati e agganciati al proxy. La fix si autolimita a quello stato, quindi il
@@ -194,6 +194,23 @@ console.log('[4] la risincronizzazione non scatta a meta\' trascinamento');
     ok(Math.abs(api.proxy.quaternion.dot(before)) > 0.999999,
        'un pointerdown durante il drag non risincronizza (non annulla il gesto)');
     api.tc.pointerUp();
+}
+
+console.log('[5] solo il tasto SINISTRO risincronizza');
+// TransformControls r128 esce da pointerDown() se `pointer.button !== 0`: destro e
+// centrale sono di OrbitControls (orbita e pan). Risincronizzare li' sarebbe lavoro
+// a vuoto a ogni giro di camera, e il filtro qui e' lo stesso di TC.
+{
+    const bone = makeBone('upperArm_R', REST);
+    api.set({ bones: [bone] }, 0, { bones: [{ name: 'upperArm_R' }], pose: {} });
+    armGizmo();
+    api.proxy.quaternion.copy(STALE);
+    firePointerDown(2);                         // tasto destro: non deve toccare nulla
+    ok(Math.abs(api.proxy.quaternion.dot(STALE)) > 0.999999,
+       'il tasto destro (orbita) non risincronizza il proxy');
+    firePointerDown(0);                         // sinistro: risincronizza
+    ok(Math.abs(api.proxy.quaternion.dot(REST)) > 0.999999,
+       'il tasto sinistro invece si\'');
 }
 
 console.log(`\n${pass} OK, ${fail} FAIL`);

@@ -3170,7 +3170,12 @@
             // Non serve sapere QUALE percorso lascia il proxy stantio (selezione osso,
             // scrub della timeline, mixer di una clip...): qui si risincronizza a ogni
             // pressione, quindi vanno tutti bene.
-            window.addEventListener('pointerdown', () => {
+            window.addEventListener('pointerdown', (e) => {
+                // Stesso filtro che TransformControls applica a se' stesso: in r128
+                // `pointerDown` esce subito se `pointer.button !== 0`. Un tasto destro
+                // (orbita) o centrale (pan) non puo' quindi aprire un trascinamento, e
+                // risincronizzare li' sarebbe lavoro a vuoto a ogni giro di camera.
+                if (e && e.button !== undefined && e.button !== 0) return;
                 // A trascinamento in corso NON si tocca: risincronizzare a meta' gesto
                 // butterebbe via la rotazione appena fatta.
                 if (transformControls.dragging) return;
@@ -3440,7 +3445,15 @@
             window.addEventListener('keydown', (ev) => {
                 if (!rigPreviewActive) return;
                 if (isTypingTarget(ev)) return;
-                
+                // Con una modale aperta questi tasti non sono nostri. isTypingTarget
+                // non basta: basta un clic sull'imbottitura del pannello e il fuoco
+                // torna al <body>, quindi `I` inseriva un keyframe DIETRO al dialogo,
+                // e Ctrl+C copiava la posa invece del testo. tlModalOpen() e' l'elenco
+                // che il progetto gia' usa per questo (33-timeline.js) e comprende
+                // primOverlay; il typeof lo rende innocuo se un giorno questo modulo
+                // girasse senza la timeline.
+                if (typeof tlModalOpen === 'function' && tlModalOpen()) return;
+
                 // Ctrl+SHIFT+A: ambito "inserisci chiave su tutte le ossa".
                 // Ctrl+A liscio e' della timeline (seleziona i keyframe): erano due
                 // funzioni diverse sulla stessa scorciatoia, e vinceva chi capitava.
