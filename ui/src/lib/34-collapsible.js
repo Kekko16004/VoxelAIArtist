@@ -111,10 +111,18 @@
                 if (!panels.length || panels[0].dataset.rpPersist === '1') return;
                 // Carica la lista degli id CHIUSI salvati. Se non c'e' nulla, lo stato
                 // del template e' quello giusto (tre aperti, uno chiuso): non toccare.
+                // Il controllo Array.isArray non e' cerimonia: `new Set(JSON.parse(x))`
+                // accetta qualunque iterabile, quindi un valore salvato che vale
+                // `null` o `"abc"` diventava un Set NON nullo (vuoto, o {a,b,c}) e
+                // faceva riaprire il pannello Vista, che il template spedisce chiuso —
+                // esattamente il difetto che l'istantanea ha appena eliminato. Il
+                // blocco inline del template scarta i non-array; senza questa riga le
+                // due implementazioni divergevano proprio sui valori spazzatura.
                 let closed;
                 try {
                     const raw = localStorage.getItem(RP_LS_KEY);
-                    closed = raw ? new Set(JSON.parse(raw)) : null;
+                    const arr = raw ? JSON.parse(raw) : null;
+                    closed = Array.isArray(arr) ? new Set(arr) : null;
                 } catch (e) { closed = null; }
                 panels.forEach(panel => {
                     panel.dataset.rpPersist = '1';

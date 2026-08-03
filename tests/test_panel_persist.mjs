@@ -185,11 +185,22 @@ console.log('[9] anti-flash: il ripristino gira PRIMA del primo paint');
     const inline = new Function('document', 'localStorage',
         body + '}\nreturn restoreRightPanels;')(doc, ls);
 
+    // Gli ultimi cinque casi NON sono array: sono il punto in cui le due
+    // implementazioni divergevano davvero. `new Set(JSON.parse(x))` accetta
+    // qualunque iterabile, quindi un `null` o un `"abc"` salvato (storage
+    // condivisa, versione precedente, estensione del browser) diventava un Set
+    // NON nullo e faceva riaprire il pannello Vista, che il template spedisce
+    // chiuso — di nuovo il difetto appena corretto, per un'altra strada.
+    // Passati come stringhe GREZZE: JSON.stringify(null) darebbe "null" e
+    // JSON.stringify('"abc"') aggiungerebbe un altro livello di virgolette.
     let diverse = [];
     for (const salvato of [null, [], ['rpView'], ['rpPalette'], ['rpOutliner', 'rpView'],
                            ['rpOutliner', 'rpProperties', 'rpPalette', 'rpView'],
-                           ['rpFantasma']]) {
+                           ['rpFantasma'],
+                           { raw: 'null' }, { raw: '"abc"' }, { raw: '{"a":1}' },
+                           { raw: '5' }, { raw: 'non-json' }]) {
         if (salvato === null) ls.removeItem('voxelai.rpSections');
+        else if (salvato.raw !== undefined) ls.setItem('voxelai.rpSections', salvato.raw);
         else ls.setItem('voxelai.rpSections', JSON.stringify(salvato));
 
         panels = makePanels();
@@ -205,8 +216,19 @@ console.log('[9] anti-flash: il ripristino gira PRIMA del primo paint');
         }
     }
     ok(diverse.length === 0,
-       'inline e initRightPanelPersist concordano su 7 stati salvati' +
+       'inline e initRightPanelPersist concordano su 12 stati salvati, array e spazzatura' +
        (diverse.length ? ' -- DIVERGONO: ' + diverse.join(' | ') : ''));
+
+    // E il valore spazzatura non deve solo essere trattato allo STESSO modo dalle
+    // due: deve lasciare in piedi il template. Concordare su "riapri tutto"
+    // sarebbe concordare sul difetto.
+    for (const raw of ['null', '"abc"', 'non-json']) {
+        ls.setItem('voxelai.rpSections', raw);
+        panels = makePanels();
+        api.initRightPanelPersist();
+        ok(panels[3].open === false,
+           'con la storage a ' + raw + ' Vista resta chiuso come nel template');
+    }
 
     // Il blocco inline non deve toccare la storage: scriverla e' compito del
     // listener 'toggle'. Se scrivesse, al primo avvio inventerebbe un elenco.

@@ -133,13 +133,29 @@ function makeScope() {
     // secondo modello della stessa decisione, e un test che stuba la funzione
     // sotto esame resta verde anche se quella diventa `return true`.
     const iAA = tlSrc.indexOf('function tlAreaActive(');
-    if (iEnter < 0 || iFocus < 0 || iEP < 0 || iAA < 0) {
-        console.log('FAIL: listener del puntatore, tlEndPointer o tlAreaActive non trovati');
+    // isTypingTarget dal sorgente VERO, con tutta la sua catena (isTextEntry,
+    // keyConsumedByControl, le due tabelle di tasti). Era stubbata con un
+    // booleano `S.typing` che nessun caso accendeva mai: togliere
+    // `isTypingTarget(ev)` dalla guardia del keydown lasciava il test VERDE,
+    // cioe' la protezione piu' importante del ramo (Ctrl+A non deve essere
+    // inghiottito mentre si scrive nel prompt AI o si rinomina un'animazione)
+    // non era asserita affatto. Estrarla invece di ricopiarla e' la stessa
+    // regola gia' applicata a tlAreaActive: una copia qui sarebbe un secondo
+    // modello della stessa decisione, libero di divergere in silenzio.
+    const iTT = sceneSrc.indexOf('const TEXT_INPUT_TYPES = [');
+    const iTTend = sceneSrc.indexOf('function isTypingTarget(');
+    if (iEnter < 0 || iFocus < 0 || iEP < 0 || iAA < 0 || iTT < 0 || iTTend < 0) {
+        console.log('FAIL: listener del puntatore, tlEndPointer, tlAreaActive o isTypingTarget non trovati');
+        process.exit(1);
+    }
+    const typingSrc = sceneSrc.slice(iTT, endOf(sceneSrc, iTTend));
+    if (!/function isTextEntry\(/.test(typingSrc) || !/function keyConsumedByControl\(/.test(typingSrc)) {
+        console.log('FAIL: il blocco estratto non contiene isTextEntry/keyConsumedByControl');
         process.exit(1);
     }
 
     const stato = {
-        tlVisible: true, chanOpen: false, modal: false, typing: false,
+        tlVisible: true, chanOpen: false, modal: false,
         anim: null, drag: false, scrub: false
     };
     const log = { prevented: 0, stopped: 0, selectAll: 0, selectAllRet: true, commits: 0 };
@@ -155,7 +171,7 @@ function makeScope() {
     function tlChanMenuOpen() { return S.chanOpen; }
     function tlChanMenuKey() { return true; }
     function tlModalOpen() { return S.modal; }
-    function isTypingTarget() { return S.typing; }
+    ${typingSrc}
     function tlActiveAnim() { return S.anim; }
     ${tlSrc.slice(iAA, endOf(tlSrc, iAA))}
     function tlSelectAllKeys() { L.selectAll++; return L.selectAllRet; }
@@ -255,7 +271,68 @@ console.log('[5] Ctrl+A: la timeline lo prende SOLO dentro la sua area');
     ok(L2.selectAll === 1, 'basta il focus dentro il dock, senza puntatore sopra');
 }
 
-console.log('[6] l\'uscita a meta\' gesto non lascia il flag acceso per sempre');
+console.log('[6] chi sta SCRIVENDO tiene Ctrl+A: la timeline non lo inghiotte');
+{
+    // La guardia `isTypingTarget(ev)` sta prima del ramo Ctrl+A. Se cadesse, con
+    // il puntatore sopra il dock (che e' in basso, quindi ci si passa sopra
+    // continuamente) Ctrl+A dentro un campo di testo selezionerebbe i keyframe
+    // invece del testo, e l'evento verrebbe consumato: l'utente perde il
+    // "seleziona tutto" nel prompt AI e non capisce perche'.
+    const { api, L } = makeScope();
+    api.enter();                       // area attiva: il ramo e' raggiungibile
+    api.key('a', { ctrlKey: true });
+    ok(L.selectAll === 1, 'controllo: senza campo a fuoco il ramo scatta');
+
+    const campi = [
+        ['<input type=text> (nome animazione)', { tagName: 'INPUT', type: 'text' }],
+        ['<input type=number> (dimensione griglia)', { tagName: 'INPUT', type: 'number' }],
+        ['<textarea> (prompt AI)', { tagName: 'TEXTAREA' }],
+        ['contenteditable', { isContentEditable: true, tagName: 'DIV' }],
+        ['<input type=search>', { tagName: 'INPUT', type: 'search' }],
+        ['<input> senza type (default text)', { tagName: 'INPUT' }]
+    ];
+    for (const [nome, target] of campi) {
+        const a0 = L.selectAll, p0 = L.prevented, s0 = L.stopped;
+        api.key('a', { ctrlKey: true, target });
+        ok(L.selectAll === a0, 'con il fuoco in ' + nome + ' non seleziona i keyframe');
+        ok(L.prevented === p0 && L.stopped === s0,
+           'e non consuma l\'evento: il campo riceve il suo "seleziona tutto"');
+    }
+
+    // Lo slider e' escluso da TUTTA la guardia del keydown, Ctrl+A compreso
+    // (`isTypingTarget(ev) || isRange`, 33-timeline.js): la riga esiste perche'
+    // le frecce su uno slider di posa devono muovere lo slider e non il frame.
+    // Con uno slider a fuoco Ctrl+A percio' non e' della timeline: resta del
+    // gizmo globale. E' il comportamento scritto nel sorgente, non un effetto
+    // collaterale, e questo caso lo tiene fermo — se qualcuno restringesse
+    // l'esclusione ai soli tasti di navigazione, il test lo direbbe.
+    {
+        const a0 = L.selectAll, p0 = L.prevented;
+        api.key('a', { ctrlKey: true, target: { tagName: 'INPUT', type: 'range' } });
+        ok(L.selectAll === a0, 'con uno slider a fuoco la timeline non prende Ctrl+A');
+        ok(L.prevented === p0, 'e lo lascia passare intatto');
+    }
+
+    // Il rovescio: un controllo NON testuale a fuoco non deve disattivare la
+    // scorciatoia. keyConsumedByControl esce subito se c'e' ctrlKey, quindi il
+    // type-ahead di un <select> non si mangia Ctrl+A. Senza questi casi la
+    // guardia potrebbe diventare "qualunque elemento a fuoco blocca" e restare
+    // verde.
+    const controlli = [
+        ['<select> (griglia, canale)', { tagName: 'SELECT' }],
+        ['<button>', { tagName: 'BUTTON' }],
+        ['<input type=checkbox>', { tagName: 'INPUT', type: 'checkbox' }],
+        ['il canvas', { tagName: 'CANVAS' }]
+    ];
+    for (const [nome, target] of controlli) {
+        const a0 = L.selectAll, p0 = L.prevented;
+        api.key('a', { ctrlKey: true, target });
+        ok(L.selectAll === a0 + 1, 'con il fuoco su ' + nome + ' Ctrl+A resta della timeline');
+        ok(L.prevented === p0 + 1, 'e viene consumato');
+    }
+}
+
+console.log('[7] l\'uscita a meta\' gesto non lascia il flag acceso per sempre');
 {
     // I1: 'pointerleave' rinviava l'uscita durante un trascinamento (giusto:
     // altrimenti la scorciatoia moriva a meta' gesto) ma poi la DIMENTICAVA. Se
@@ -299,7 +376,7 @@ console.log('[6] l\'uscita a meta\' gesto non lascia il flag acceso per sempre')
     ok(c.hover() === false, 'senza gesto in corso l\'uscita e\' immediata');
 }
 
-console.log('[7] il rig e\' passato a Ctrl+Shift+A, senza italiano hardcoded');
+console.log('[8] il rig e\' passato a Ctrl+Shift+A, senza italiano hardcoded');
 {
     const i = rigSrc.indexOf('tlSetKeyAllBones(true)');
     ok(i > 0, 'il ramo del rig esiste ancora');
@@ -310,7 +387,7 @@ console.log('[7] il rig e\' passato a Ctrl+Shift+A, senza italiano hardcoded');
     ok(/t\(\s*'rig\.allBonesKeyed'\s*\)/.test(rigSrc), 'il toast passa da t()');
 }
 
-console.log('[8] il gizmo globale non risponde piu\' a Ctrl+Shift+A');
+console.log('[9] il gizmo globale non risponde piu\' a Ctrl+Shift+A');
 {
     const i = sceneSrc.indexOf("e.key.toLowerCase() === 'a'");
     ok(i > 0, 'il ramo del gizmo globale esiste');
