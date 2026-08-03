@@ -320,7 +320,12 @@ console.log('[7] creazione: oggetto centrato su XZ, appoggiato a y=0, del colore
     els.primShapeList.children[0].fire('click');   // cubo 16
     els.primCreate.fire('click');
 
-    ok(log.history === 1, 'la cronologia registra un passo (Ctrl+Z riporta indietro)');
+    // pushHistory viene chiamata, ma NON aspettarti che Ctrl+Z faccia sparire
+    // l'oggetto: aggiunte ed eliminazioni non sono annullabili (limite dichiarato
+    // in 13-history.js:6-10). Lo scatto serve a non perdere lo stato precedente e
+    // a far tornare attivo l'oggetto di prima. Che l'annullamento non SVUOTI poi
+    // la primitiva appena creata e' provato da tests/test_undo_object_switch.mjs.
+    ok(log.history === 1, 'la creazione spinge uno scatto di cronologia');
     ok(log.created.length === 1, 'un oggetto creato');
     const d = log.created[0].data;
     ok(d.voxels.length === 16 * 16 * 16, `16^3 = 4096 voxel (trovati ${d.voxels.length})`);
