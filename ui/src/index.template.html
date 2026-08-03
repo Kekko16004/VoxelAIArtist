@@ -3098,6 +3098,38 @@
             </div>
         </details>
 
+    <!-- ===== ANTI-FLASH DEI PANNELLI =====
+         Stesso problema del blocco preventStartupFlash() nell'<head>, stessa
+         cura. Il bundle e' in fondo al <body> e tutto il bootstrap gira dentro
+         window.load, che aspetta i cinque script Three.js dal CDN e i Google
+         Fonts: ripristinare i pannelli la' significa dipingerli APERTI (il
+         default del template) per centinaia di millisecondi e poi vederli
+         richiudersi da soli. Non esiste splash a coprirlo.
+
+         Qui invece siamo SUBITO dopo i quattro <details>: esistono nel DOM, il
+         primo paint non c'e' ancora stato, e chiudere `open` adesso non fa
+         nessun salto. Legge SOLO localStorage: un fetch sarebbe asincrono e
+         reintrodurrebbe il flash che stiamo togliendo.
+
+         Non e' un doppione di initRightPanelPersist(): quella aggancia i
+         listener 'toggle' (e ripristina di nuovo, idempotente via
+         dataset.rpPersist, per il caso in cui questo blocco non sia girato).
+         Chiave allineata a RP_LS_KEY in 34-collapsible.js. -->
+    <script>
+        (function restoreRightPanels() {
+            try {
+                var raw = localStorage.getItem('voxelai.rpSections');
+                if (!raw) return;              // nessun dato: vale il template
+                var closed = JSON.parse(raw);
+                if (!Array.isArray(closed)) return;
+                var panels = document.querySelectorAll('.rp-section[id]');
+                for (var i = 0; i < panels.length; i++) {
+                    panels[i].open = closed.indexOf(panels[i].id) < 0;
+                }
+            } catch (e) { /* preferenza estetica: mai bloccare l'avvio */ }
+        })();
+    </script>
+
     </aside>
 
     </div><!-- /.workspace -->

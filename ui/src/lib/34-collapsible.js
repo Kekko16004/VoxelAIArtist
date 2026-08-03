@@ -91,9 +91,20 @@
             // stabili scritti nel template, quindi non serve arricchire il markup:
             // basta salvare quali id sono CHIUSI e ripristinarli al bootstrap.
             //
-            // Si salva la lista dei chiusi, non quella degli aperti: cosi' una sezione
-            // nuova aggiunta al template in futuro nasce con il default del template
-            // invece di apparire chiusa perche' mancava dalla lista salvata.
+            // Si salva la lista dei CHIUSI, non quella degli aperti. L'elenco e'
+            // un'istantanea (vedi il listener piu' sotto) e in lettura e'
+            // autoritativo, quindi una sezione aggiunta al template in futuro,
+            // assente da un elenco salvato prima che esistesse, nasce APERTA: e'
+            // il default giusto per una novita', mentre salvando gli aperti
+            // nascerebbe chiusa e l'utente non la vedrebbe mai. Dal primo toggle
+            // in poi rientra nell'istantanea come tutte le altre.
+            //
+            // Il ripristino vero e proprio avviene PRIMA, nel blocco sincrono
+            // restoreRightPanels() del template (subito dopo i <details>): qui
+            // siamo dentro window.load, che aspetta i CDN, e dipingere i pannelli
+            // aperti per poi richiuderli si vedeva. Quello qui sotto resta come
+            // rete (idempotente via dataset.rpPersist) e serve comunque ad
+            // agganciare i listener 'toggle', che il blocco inline non fa.
             function initRightPanelPersist() {
                 const RP_LS_KEY = 'voxelai.rpSections';
                 const panels = document.querySelectorAll('.rp-section[id]');
@@ -112,15 +123,22 @@
                     // gia' cambiato, sia da click che da codice. Con 'click' si
                     // leggerebbe lo stato vecchio (il click precede il cambio).
                     panel.addEventListener('toggle', () => {
-                        let cur;
+                        // ISTANTANEA di tutti i pannelli, non una modifica del solo
+                        // pannello toccato. Scrivere a differenza e rileggere come
+                        // autoritativo erano due letture incompatibili dello stesso
+                        // elenco: chiudendo l'Outliner e riaprendolo si otteneva [],
+                        // che al lancio dopo veniva applicato come "nessuno chiuso" e
+                        // riapriva il pannello Vista, che il template spedisce CHIUSO.
+                        // Con l'istantanea, [] significa davvero "tutti aperti".
+                        // Ricava anche gli id obsoleti: un pannello tolto dal template
+                        // non compare piu' nella query, quindi esce dall'elenco invece
+                        // di restarci per sempre.
+                        const cur = [];
+                        document.querySelectorAll('.rp-section[id]').forEach(p => {
+                            if (!p.open) cur.push(p.id);
+                        });
                         try {
-                            const raw = localStorage.getItem(RP_LS_KEY);
-                            cur = new Set(raw ? JSON.parse(raw) : []);
-                        } catch (e) { cur = new Set(); }
-                        if (panel.open) cur.delete(panel.id);
-                        else cur.add(panel.id);
-                        try {
-                            localStorage.setItem(RP_LS_KEY, JSON.stringify([...cur]));
+                            localStorage.setItem(RP_LS_KEY, JSON.stringify(cur));
                         } catch (e) { /* storage non disponibile */ }
                     });
                 });
