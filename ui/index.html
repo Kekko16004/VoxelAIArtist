@@ -4060,21 +4060,7 @@
                     }
                     return (typeof col === 'string' && col) ? col.toUpperCase() : '#CCCCCC';
                 };
-                const MAX_VOXELS = 4000000;
-                const MAX_VOXELS_ABSOLUTE = 8000000;
-                const budgetLimit = (function () {
-                    try {
-                        const g = (data.metadata && data.metadata.grid_size) || null;
-                        if (Array.isArray(g) && g.length === 3) {
-                            const w = parseInt(g[0], 10), h = parseInt(g[1], 10), d = parseInt(g[2], 10);
-                            if (w > 0 && h > 0 && d > 0) {
-                                const half = Math.floor((w * h * d) / 2);
-                                return Math.max(MAX_VOXELS, Math.min(half, MAX_VOXELS_ABSOLUTE));
-                            }
-                        }
-                    } catch (e) {}
-                    return MAX_VOXELS;
-                })();
+                const budgetLimit = voxelBudgetFor((data.metadata && data.metadata.grid_size) || null);
                 const trunc = (v) => Math.trunc(Number(v) || 0);
                 const pyRound = (v) => {
                     const n = Number(v) || 0;
@@ -4179,6 +4165,37 @@
                 }
 
                 return { metadata: data.metadata || {}, voxels: allVoxels };
+            }
+
+            // Tetto di celle adatto alla griglia dichiarata: meta' del volume, con
+            // minimo il default e massimo il tetto assoluto. Gemella ESATTA di
+            // voxel_budget_for() in src/parser.py - CLAUDE.md impone che le due
+            // restino identiche, e queste sono le sole due copie della regola.
+            // L'8M non e' arbitrario: una cella di Map JS costa ~98 byte, quindi 24M
+            // celle = ~2.2 GB e uccidono la tab (riprodotto come OOM di Node).
+            //
+            // POSIZIONE, non estetica: sta DOPO expandOps di proposito. Il test
+            // tests/test_rig_parts_legs.mjs ritaglia questo file da
+            // indexOf('function expandOps') fino al marcatore "// Render Model...",
+            // quindi tutto cio' che sta PRIMA della riga 1 sparisce da quel banco di
+            // prova e expandOps morirebbe con "voxelBudgetFor is not defined".
+            // Qui dentro la fetta, invece, la dichiarazione di funzione e' hoistata e
+            // le due const sono inizializzate molto prima di qualunque chiamata.
+            var MAX_VOXELS = 4000000;
+            var MAX_VOXELS_ABSOLUTE = 8000000;
+            function voxelBudgetFor(gridSize) {
+                try {
+                    if (Array.isArray(gridSize) && gridSize.length === 3) {
+                        const w = parseInt(gridSize[0], 10);
+                        const h = parseInt(gridSize[1], 10);
+                        const d = parseInt(gridSize[2], 10);
+                        if (w > 0 && h > 0 && d > 0) {
+                            const half = Math.floor((w * h * d) / 2);
+                            return Math.max(MAX_VOXELS, Math.min(half, MAX_VOXELS_ABSOLUTE));
+                        }
+                    }
+                } catch (e) { }
+                return MAX_VOXELS;
             }
 
             // Applica una PATCH di ops (un "diff" di modifica) DIRETTAMENTE sopra una
