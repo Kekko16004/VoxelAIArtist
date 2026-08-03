@@ -83,6 +83,39 @@ console.log('[1] ogni id toccato dal modulo esiste nel template');
        'anche le scorciatoie del rig escono su tlModalOpen prima di agire');
 }
 
+// --- 1b. le chiavi i18n esistono DAVVERO su disco --------------------------
+// Il resto del file inietta un DICT completo nell'harness: la sua asserzione
+// "nessuna chiave i18n grezza a schermo" interroga quindi il dizionario del
+// TEST, e non puo' fallire per una chiave mancante nei file veri. Nemmeno
+// run_all.sh copre il caso: confronta le sei lingue contro it.json, cioe' fra
+// loro, quindi cancellare una chiave da TUTTI E SEI i file resta verde.
+// Qui si leggono i file reali. Senza queste righe, il dialogo mostrerebbe
+// 'prim.cube' in produzione e nessun controllo lo direbbe.
+console.log('[1b] le chiavi delle primitive esistono in tutti i dizionari reali');
+{
+    const LINGUE = ['de', 'en', 'es', 'fr', 'it', 'pt'];
+    // Le chiavi si RICAVANO dal codice, non si riscrivono a mano: una forma
+    // aggiunta domani entra in questo controllo da sola.
+    const daCodice = [...new Set([...src.matchAll(/i18nKey:\s*'([^']+)'/g)].map(m => m[1]))];
+    ok(daCodice.length === 5, `cinque chiavi di forma ricavate dal codice (${daCodice.length})`);
+    const richieste = daCodice.concat(['prim.title', 'prim.size', 'prim.height',
+        'prim.keepRatio', 'prim.create', 'prim.cancel', 'prim.info', 'prim.tooBig']);
+
+    for (const lang of LINGUE) {
+        const dict = JSON.parse(fs.readFileSync(path.join(ROOT, 'ui/locales/' + lang + '.json'), 'utf8'));
+        const mancanti = richieste.filter(k => typeof dict[k] !== 'string' || !dict[k].trim());
+        ok(mancanti.length === 0,
+           lang + ': tutte e ' + richieste.length + ' le chiavi presenti' +
+           (mancanti.length ? ' -- MANCANTI: ' + mancanti.join(', ') : ''));
+        // I segnaposto sono parte del contratto: t(key, vars) interpola {n} e {g},
+        // e una traduzione che li perde mostra una frase senza il numero su cui
+        // l'utente decide.
+        ok(dict['prim.info'].includes('{n}') && dict['prim.info'].includes('{g}'),
+           lang + ': prim.info conserva {n} e {g}');
+        ok(dict['prim.tooBig'].includes('{n}'), lang + ': prim.tooBig conserva {n}');
+    }
+}
+
 // --- 2. il DOM finto -------------------------------------------------------
 // Volutamente SEVERO: chiede solo gli id che esistono, e un id sconosciuto
 // torna undefined cosi' che un errore di battitura diventi un TypeError qui e
@@ -162,7 +195,7 @@ function makeHarness(opts) {
     };`;
     const api = new Function('D', 'W', 'L', 'DICT', 'GRID', 'COLOR', harness)(
         doc, win, log,
-        {
+        opts.dict || {
             'prim.cube': 'Cubo', 'prim.pyramid': 'Piramide', 'prim.cylinder': 'Cilindro',
             'prim.sphere': 'Sfera', 'prim.cone': 'Cono',
             'prim.info': '{n} voxel, griglia {g}',
@@ -464,6 +497,29 @@ console.log('[8] chiusura: Esc, clic sullo sfondo, Annulla; Invio crea');
     // Annulla.
     els.primCancel.fire('click');
     ok(els.primOverlay.style.display === 'none', 'Annulla chiude');
+}
+
+console.log('[9] lingue non caricate: ripiego sull\'id, mai una chiave nel progetto salvato');
+// t() (23-i18n.js) ripiega su i18nCache.it e poi sulla CHIAVE NUDA. Con la fetch
+// di ui/locales/ fallita — caso reale in modalita' web — il nome dell'oggetto
+// finiva nel JSON salvato, nello ZIP e nel GLB come "prim.cube", e ricaricare a
+// lingue funzionanti non lo riparava piu': il dato era gia' scritto.
+{
+    // Harness con dizionario VUOTO: la t() finta si comporta come quella vera in
+    // avaria, cioe' restituisce la chiave.
+    const { api, els, log } = makeHarness({ dict: {} });
+    api.open();
+    const nomi = els.primShapeList.children.map(b => b.textContent);
+    ok(nomi.join(',') === 'cube,pyramid,cylinder,sphere,cone',
+       'i bottoni ripiegano sull\'id, non sulla chiave: ' + nomi.join(','));
+    ok(nomi.every(n => !n.startsWith('prim.')), 'nessuna chiave i18n a schermo');
+
+    els.primShapeList.children[0].fire('click');
+    ok(els.primChosenName.textContent === 'cube', 'anche il titolo del passo 2');
+    els.primCreate.fire('click');
+    ok(log.created.length === 1, 'l\'oggetto si crea lo stesso');
+    ok(log.created[0].data.metadata.name === 'cube',
+       'e si chiama "cube", non "prim.cube": nel progetto salvato non entra una chiave');
 }
 
 console.log(`\n${pass} OK, ${fail} FAIL`);

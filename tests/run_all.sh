@@ -36,31 +36,11 @@ run "API end-to-end (Python)" python3 tests/test_api_e2e.py
 #     tutte al contratto, altrimenti "Aggiungi animazione" fallisce sempre.
 run "Animazioni AI: normalizzazione (Python)" python3 tests/test_animate.py
 
-# 3. Parita' expand_ops (Python) <-> expandOps (JS).
-#    CLAUDE.md impone che le due implementazioni restino identiche: questo test
-#    e' la rete di sicurezza che lo verifica op per op.
-run "Parita' ops Python <-> JS" bash -c '
-  node tests/ops_parity_js.mjs >/dev/null || exit 1
-  python3 - <<PY
-import json, os, sys
-ROOT = os.getcwd()
-sys.path.insert(0, os.path.join(ROOT, "src"))
-from parser import expand_ops
-cases = json.load(open(os.path.join(ROOT, "tests/ops_parity_cases.json")))
-js = json.load(open(os.path.join(ROOT, "tests/.js_out.json")))
-bad = []
-for name, data in cases.items():
-    r = expand_ops(json.loads(json.dumps(data)))
-    py = sorted("%s,%s,%s,%s" % (v["x"], v["y"], v["z"], (v.get("color") or "").upper())
-                for v in r.get("voxels", []))
-    if py != js[name]:
-        bad.append(name)
-print("parita: %d/%d casi identici" % (len(cases) - len(bad), len(cases)))
-if bad:
-    print("DIVERGENTI:", bad)
-    sys.exit(1)
-PY
-'
+# 3. Parita' expand_ops (Python) <-> expandOps (JS), e voxel_budget_for <->
+#    voxelBudgetFor. CLAUDE.md impone che entrambe le coppie restino identiche:
+#    questo test e' la rete di sicurezza che lo verifica op per op e griglia per
+#    griglia.
+run "Parita' ops e tetto Python <-> JS" bash tests/parity_check.sh
 
 # 4. Logica UI del pannello pack (DOM finto + fetch finto).
 run "UI modalita' pack (Node)" node tests/test_pack_ui.mjs

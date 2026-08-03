@@ -18642,7 +18642,7 @@ async function voxelizeScene(gltfScene, options) {
                 PRIMITIVE_SHAPES.forEach((s, i) => {
                     const b = document.createElement('button');
                     b.className = 'btn';
-                    b.textContent = t(s.i18nKey);
+                    b.textContent = primLabel(s);
                     b.style.textAlign = 'left';
                     b.addEventListener('click', () => primPickShape(s.id));
                     list.appendChild(b);
@@ -18656,7 +18656,7 @@ async function voxelizeScene(gltfScene, options) {
                 primShapeId = id;
                 primEl('primStepShape').style.display = 'none';
                 primEl('primStepSize').style.display = '';
-                primEl('primChosenName').textContent = t(s.i18nKey);
+                primEl('primChosenName').textContent = primLabel(s);
                 const sizeEl = primEl('primSize'), hEl = primEl('primHeight');
                 sizeEl.value = String(s.defaultSize);
                 hEl.value = String(Math.max(1, Math.round(s.defaultSize * s.ratio)));
@@ -18670,6 +18670,19 @@ async function voxelizeScene(gltfScene, options) {
                 // Il campo principale parte a fuoco E selezionato: chi sa gia' la misura
                 // digita e preme Invio senza toccare il mouse.
                 setTimeout(() => { sizeEl.focus(); sizeEl.select(); }, 0);
+            }
+
+            // Etichetta tradotta, con ripiego se la lingua non e' caricata.
+            // t() (23-i18n.js) ripiega su i18nCache.it e poi sulla CHIAVE NUDA: con la
+            // fetch di ui/locales/ fallita — caso reale in modalita' web — restituisce
+            // 'prim.cube'. A schermo sarebbe transitorio, ma il nome dell'oggetto viene
+            // PERSISTITO nel progetto salvato, nello ZIP e nel GLB: ricaricare con le
+            // lingue a posto non lo ripara piu'. Qui il ripiego e' l'id della forma, che
+            // e' un nome sensato ('cube') invece di un identificatore di traduzione.
+            function primLabel(s) {
+                if (!s) return '';
+                const v = t(s.i18nKey);
+                return (v && v !== s.i18nKey) ? v : s.id;
             }
 
             // Misure correnti, gia' pulite: mai NaN, mai sotto 1, mai sopra 512.
@@ -18750,7 +18763,9 @@ async function voxelizeScene(gltfScene, options) {
                 const color = (typeof activeColorHex === 'string') ? activeColorHex : '#CCCCCC';
                 const voxels = cells.map(c => ({ x: c.x + ox, y: c.y, z: c.z + oz, color: color }));
                 const obj = createObject({
-                    metadata: { name: t(primitiveShape(primShapeId).i18nKey), grid_size: [g, g, g] },
+                    // primLabel, non t(): questo nome viene SALVATO nel progetto, quindi
+                    // una chiave nuda qui sopravvive al guasto che l'ha causata.
+                    metadata: { name: primLabel(primitiveShape(primShapeId)), grid_size: [g, g, g] },
                     voxels: voxels
                 });
                 primClose();
