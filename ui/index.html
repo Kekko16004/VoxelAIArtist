@@ -4181,8 +4181,19 @@
             // prova e expandOps morirebbe con "voxelBudgetFor is not defined".
             // Qui dentro la fetta, invece, la dichiarazione di funzione e' hoistata e
             // le due const sono inizializzate molto prima di qualunque chiamata.
-            var MAX_VOXELS = 4000000;
-            var MAX_VOXELS_ABSOLUTE = 8000000;
+            //
+            // const e NON var, deliberatamente. Con var, un ipotetico chiamante che
+            // girasse a livello top prima di questo modulo (posizione 4 nel manifest)
+            // leggerebbe undefined: il ramo valido tornerebbe Math.max(undefined, ...)
+            // = NaN, budgetOk() sarebbe falso alla PRIMA cella e expandOps
+            // restituirebbe zero voxel senza un errore ne' un avviso. Un modello vuoto
+            // in silenzio e' peggio di un crash. Con const si prende un ReferenceError,
+            // che test_bootstrap.mjs intercetta. Stessa forma di PLUGIN_MAX_VOXELS in
+            // 24-plugins.js. (La deroga di 23-i18n.js non si applica: t() ha una
+            // fallback esplicita che degrada a un valore documentato, qui l'undefined
+            // finisce dentro l'aritmetica.)
+            const MAX_VOXELS = 4000000;
+            const MAX_VOXELS_ABSOLUTE = 8000000;
             function voxelBudgetFor(gridSize) {
                 try {
                     if (Array.isArray(gridSize) && gridSize.length === 3) {
