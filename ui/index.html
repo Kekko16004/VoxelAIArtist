@@ -338,6 +338,13 @@
         }
         .rp-section[open] > summary::before { transform: rotate(45deg); }
         .rp-section > summary:hover { color: var(--text-primary); }
+
+        .rig-toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--accent-primary); color: #fff; padding: 8px 16px;
+            border-radius: var(--radius-md); z-index: 9999; pointer-events: none;
+            transition: opacity .3s; font-size: 12px;
+        }
         .rp-body { padding: 12px; border-top: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 10px; }
 
         /* Resizer del pannello destro (specchio di #sidebarResizer) */
@@ -3611,7 +3618,9 @@
             window.addEventListener('keydown', (e) => {
                 if (isTypingTarget(e)) return;
 
-                if (e.ctrlKey && e.key.toLowerCase() === 'a') {
+                // Shift escluso: Ctrl+Shift+A e' del rig. Senza questo controllo la
+                // scorciatoia del rig sgancerebbe il gizmo globale di nascosto.
+                if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a') {
                     e.preventDefault();
                     if (globalTransformControls.object) {
                         globalTransformControls.detach();
@@ -10538,23 +10547,33 @@
                 setHoveredBone(pickBone(e.clientX, e.clientY));
             }, { passive: true });
 
+            // Toast di conferma. Prima ogni scorciatoia si ricostruiva il proprio div con
+            // 200 caratteri di style inline: una copia per messaggio, e nessuna traducibile.
+            function rigToast(msg) {
+                const el = document.createElement('div');
+                el.className = 'rig-toast';
+                el.textContent = msg;
+                document.body.appendChild(el);
+                setTimeout(() => {
+                    el.style.opacity = '0';
+                    setTimeout(() => el.remove(), 300);
+                }, 1500);
+            }
+
             // --- QOL Shortcuts ---
             window.poseClipboard = null;
             window.addEventListener('keydown', (ev) => {
                 if (!rigPreviewActive) return;
                 if (isTypingTarget(ev)) return;
                 
-                // Ctrl+A: Seleziona tutte le ossa (tramite timeline)
-                if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')) {
+                // Ctrl+SHIFT+A: ambito "inserisci chiave su tutte le ossa".
+                // Ctrl+A liscio e' della timeline (seleziona i keyframe): erano due
+                // funzioni diverse sulla stessa scorciatoia, e vinceva chi capitava.
+                if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && (ev.key === 'a' || ev.key === 'A')) {
                     ev.preventDefault();
                     if (typeof window.tlSetKeyAllBones === 'function') {
                         window.tlSetKeyAllBones(true);
-                        // Feedback visivo rapido
-                        const toast = document.createElement('div');
-                        toast.textContent = "Tutte le ossa selezionate per Keyframe (Timeline)";
-                        toast.style.cssText = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--primary); color:white; padding:8px 16px; border-radius:8px; z-index:9999; pointer-events:none; transition:opacity 0.3s; font-size:12px;";
-                        document.body.appendChild(toast);
-                        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 1500);
+                        rigToast(t('rig.allBonesKeyed'));
                     }
                 }
                 
@@ -10571,11 +10590,7 @@
                     ev.preventDefault();
                     if (rig && rig.pose) {
                         window.poseClipboard = JSON.parse(JSON.stringify(rig.pose));
-                        const toast = document.createElement('div');
-                        toast.textContent = "Posa Copiata!";
-                        toast.style.cssText = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--primary); color:white; padding:8px 16px; border-radius:8px; z-index:9999; pointer-events:none; transition:opacity 0.3s; font-size:12px;";
-                        document.body.appendChild(toast);
-                        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 1000);
+                        rigToast(t('rig.poseCopied'));
                     }
                 }
 
@@ -16800,6 +16815,8 @@ async function voxelizeScene(gltfScene, options) {
             let tlKeyDrag = null;           // {startX, moved, orig:[{bone,t}]}
             let tlDockHeight = 190;
             let tlRowsBuilt = '';           // firma dell'ultimo render (evita rebuild inutili)
+            let tlAreaHover = false;        // puntatore sopra il dock
+            let tlAreaFocus = false;        // focus dentro il dock
 
             const tlDock = document.getElementById('timelineDock');
             const tlClipSel = document.getElementById('tlClip');
@@ -17141,6 +17158,42 @@ async function voxelizeScene(gltfScene, options) {
 
             function tlIsSelectedKey(bone, t) {
                 return tlSelected.some(s => s.bone === bone && Math.abs(s.t - t) < 1e-6);
+            }
+
+            // L'area e' "attiva" col puntatore sopra il dock OPPURE col focus dentro:
+            // dopo aver cliccato una chiave il mouse spesso si sposta, e pretendere che
+            // resti fermo renderebbe la scorciatoia inaffidabile. Un solo booleano per
+            // ciascuna condizione, nessun hit-testing.
+            function tlAreaActive() {
+                return tlVisible && (tlAreaHover || tlAreaFocus);
+            }
+
+            // Ctrl+A: seleziona tutti i keyframe dell'animazione attiva.
+            // Riporta false se non c'era nulla da fare (nessuna clip modificabile, o
+            // clip senza chiavi), cosi' il chiamante sa se ha senso consumare l'evento.
+            //
+            // Toggle deliberato: ripremendo con tutto selezionato la selezione si svuota.
+            // Blender separa A (seleziona) da Alt+A (deseleziona), ma qui Ctrl+A e' la
+            // SOLA scorciatoia di selezione, e senza il toggle non ci sarebbe modo di
+            // deselezionare da tastiera.
+            function tlSelectAllKeys() {
+                // Il menu dei canali si prende i tasti quando e' aperto: va chiuso prima,
+                // altrimenti resta a schermo sopra una selezione che e' cambiata sotto.
+                if (tlChanMenuOpen()) tlCloseChanMenu();
+                const anim = tlActiveAnim();
+                const times = tlKeyTimesByBone(anim);
+                const all = [];
+                Object.keys(times).forEach(bone => {
+                    times[bone].forEach(t0 => all.push({ bone: bone, t: t0 }));
+                });
+                if (!all.length) return false;
+                const allAlready = all.every(k => tlIsSelectedKey(k.bone, k.t))
+                    && tlSelected.length === all.length;
+                tlSelected = allAlready ? [] : all;
+                // La selezione NON e' stato del documento: nessun pushHistory().
+                tlRedraw();
+                tlUpdateToolbar();
+                return true;
             }
 
             // Quali canali contiene la chiave di quell'osso a quel tempo. Serve al
@@ -18026,6 +18079,17 @@ async function voxelizeScene(gltfScene, options) {
                     tlResizeEl.addEventListener('pointercancel', endRz);
                 }
 
+                if (tlDock) {
+                    tlDock.addEventListener('pointerenter', () => { tlAreaHover = true; });
+                    tlDock.addEventListener('pointerleave', () => {
+                        // Durante un trascinamento di chiavi il puntatore esce spesso dal
+                        // dock: azzerare qui spegnerebbe la scorciatoia a meta' gesto.
+                        if (!tlKeyDrag && !tlScrubbing) tlAreaHover = false;
+                    });
+                    tlDock.addEventListener('focusin', () => { tlAreaFocus = true; });
+                    tlDock.addEventListener('focusout', () => { tlAreaFocus = false; });
+                }
+
                 // Scorciatoie: valgono solo con la timeline a schermo e fuori dai campi di
                 // testo. Si registrano in CAPTURE perche' 'Delete' e' gia' preso da
                 // "elimina oggetto": qui va fermato prima che ci arrivi.
@@ -18043,6 +18107,18 @@ async function voxelizeScene(gltfScene, options) {
                     // slider, non il frame corrente.
                     const isRange = !!(el && el.tagName === 'INPUT' && el.type === 'range');
                     if (isTypingTarget(ev) || isRange) return;
+                    // Ctrl+A appartiene alla timeline solo quando si e' DENTRO la sua
+                    // area: fuori resta del gizmo globale (01-scene-setup.js). Shift e Alt
+                    // esclusi: Ctrl+Shift+A e' del rig (15-rig.js).
+                    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey
+                        && (ev.key === 'a' || ev.key === 'A')) {
+                        if (!tlAreaActive() || tlModalOpen()) return;
+                        if (tlSelectAllKeys()) {
+                            ev.preventDefault();
+                            ev.stopImmediatePropagation();
+                        }
+                        return;
+                    }
                     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
                     if (tlModalOpen()) return;               // una modale aperta ha la priorita'
                     if (tlIsTogglePlayKey(ev.key)) {
@@ -18175,6 +18251,46 @@ async function voxelizeScene(gltfScene, options) {
                 });
             }
 
+            // --- Pannello destro: le sezioni ricordano aperto/chiuso -----------------
+            // A destra le sezioni sono gia' dei <details class="rp-section"> con id
+            // stabili scritti nel template, quindi non serve arricchire il markup:
+            // basta salvare quali id sono CHIUSI e ripristinarli al bootstrap.
+            //
+            // Si salva la lista dei chiusi, non quella degli aperti: cosi' una sezione
+            // nuova aggiunta al template in futuro nasce con il default del template
+            // invece di apparire chiusa perche' mancava dalla lista salvata.
+            function initRightPanelPersist() {
+                const RP_LS_KEY = 'voxelai.rpSections';
+                const panels = document.querySelectorAll('.rp-section[id]');
+                if (!panels.length || panels[0].dataset.rpPersist === '1') return;
+                // Carica la lista degli id CHIUSI salvati. Se non c'e' nulla, lo stato
+                // del template e' quello giusto (tre aperti, uno chiuso): non toccare.
+                let closed;
+                try {
+                    const raw = localStorage.getItem(RP_LS_KEY);
+                    closed = raw ? new Set(JSON.parse(raw)) : null;
+                } catch (e) { closed = null; }
+                panels.forEach(panel => {
+                    panel.dataset.rpPersist = '1';
+                    if (closed !== null) panel.open = !closed.has(panel.id);
+                    // 'toggle', non 'click': <details> emette toggle QUANDO `open` e'
+                    // gia' cambiato, sia da click che da codice. Con 'click' si
+                    // leggerebbe lo stato vecchio (il click precede il cambio).
+                    panel.addEventListener('toggle', () => {
+                        let cur;
+                        try {
+                            const raw = localStorage.getItem(RP_LS_KEY);
+                            cur = new Set(raw ? JSON.parse(raw) : []);
+                        } catch (e) { cur = new Set(); }
+                        if (panel.open) cur.delete(panel.id);
+                        else cur.add(panel.id);
+                        try {
+                            localStorage.setItem(RP_LS_KEY, JSON.stringify([...cur]));
+                        } catch (e) { /* storage non disponibile */ }
+                    });
+                });
+            }
+
             // --- Primitive voxel (Shift+A) --------------------------------------------
             // Un file, due meta': qui sopra la MATEMATICA (funzioni pure, nessun DOM e
             // nessun THREE, testate da tests/test_primitives.mjs estraendo il sorgente);
@@ -18228,9 +18344,15 @@ async function voxelizeScene(gltfScene, options) {
                 const r = S / 2, ry = H / 2;
                 const out = [];
                 for (let y = 0; y < H; y++) {
-                    // Frazione di altezza al CENTRO della cella: con (y/H) il livello 0
-                    // avrebbe raggio pieno e l'ultimo raggio zero, sbilanciato in basso.
-                    const t = (y + 0.5) / H;
+                    // Frazione di altezza dal BASSO: t=0 al livello 0 (raggio pieno) e
+                    // t=1 all'ultimo livello (apice). La forma precedente (y + 0.5) / H
+                    // campionava il centro del layer, e con H < S/2 la base nasceva
+                    // ristretta: piramide 16 alta 1 usciva larga 8 invece di 16, 32x4
+                    // usciva 28. Un tetto piatto e' una richiesta normale, quindi la base
+                    // deve valere il lato chiesto a QUALUNQUE altezza. Il max(1, H-1)
+                    // evita la divisione per zero a H=1, dove l'unico livello e' la base.
+                    // Pinnata dal gruppo [8-bis] del test, che copre proprio H < S/2.
+                    const t = y / Math.max(1, H - 1);
                     const rAt = Math.max(PRIM_APEX_MIN, r * (1 - t));
                     const dy = y - cy;
                     for (let x = 0; x < S; x++) {
@@ -18301,7 +18423,13 @@ async function voxelizeScene(gltfScene, options) {
                 const r = S / 2, ry = H / 2;
                 let n = 0;
                 for (let y = 0; y < H; y++) {
-                    const t = (y + 0.5) / H;
+                    // IDENTICA alla formula del generatore qui sopra: se una delle due
+                    // cambia senza l'altra, il conteggio diverge dalla geometria e il
+                    // budget si decide su un numero sbagliato. Il gruppo [8] del test
+                    // confronta i due valori forma per forma.
+                    // (Nessun nome di funzione qui dentro: il gruppo [9] ispeziona questo
+                    //  corpo per garantire che contare non allochi.)
+                    const t = y / Math.max(1, H - 1);
                     const rAt = Math.max(PRIM_APEX_MIN, r * (1 - t));
                     const dy = y - cy;
                     if (id === 'pyramid') {
@@ -18453,6 +18581,10 @@ async function voxelizeScene(gltfScene, options) {
             // i moduli hanno agganciato i loro listener: la funzione arricchisce il
             // markup esistente e non sposta nodi, quindi non puo' rubare handler.
             if (typeof initCollapsibleSections === 'function') initCollapsibleSections(document);
+            // Sezioni del pannello DESTRO: ripristina aperto/chiuso dalla sessione
+            // precedente. Va qui e non prima: i <details class="rp-section"> devono
+            // esistere gia' nel DOM. E' solo DOM, non tocca la scena: nessun render.
+            if (typeof initRightPanelPersist === 'function') initRightPanelPersist();
             animate();
         });
     </script>
