@@ -649,5 +649,18 @@
   "rigTools.poseZero": "The pose is at zero: move some bones before saving it.",
   "rigTools.poseSavePrompt": "Name of the pose to save:",
   "rigTools.poseDefaultName": "Pose {n}",
-  "rigTools.poseSaved": "Pose \"{name}\" saved ({n} bones): you can reapply it to any object with the same bone names."
+  "rigTools.poseSaved": "Pose \"{name}\" saved ({n} bones): you can reapply it to any object with the same bone names.",
+  "prim.title": "Add primitive",
+  "prim.cube": "Cube",
+  "prim.pyramid": "Pyramid",
+  "prim.cylinder": "Cylinder",
+  "prim.sphere": "Sphere",
+  "prim.cone": "Cone",
+  "prim.size": "Size",
+  "prim.height": "Height",
+  "prim.keepRatio": "Keep ratio",
+  "prim.create": "Create",
+  "prim.cancel": "Cancel",
+  "prim.info": "{n} voxels, grid {g}",
+  "prim.tooBig": "Too many voxels ({n}): reduce the size"
 }

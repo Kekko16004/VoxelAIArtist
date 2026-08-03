@@ -169,3 +169,172 @@
                 for (const g of PRIMITIVE_GRIDS) if (g >= need) return g;
                 return PRIMITIVE_GRIDS[PRIMITIVE_GRIDS.length - 1];
             }
+
+            // ===== UI: menu Shift+A e dialogo =====
+            // Da qui in giu' si tocca il DOM: il test estrae SOLO la parte sopra questo
+            // marcatore. Se il marcatore cambia testo, il test si porta dietro il DOM e
+            // fallisce con "document is not defined" — e' voluto che sia rumoroso.
+            let primShapeId = null;
+            let primKeepRatioPref = true;
+
+            function primEl(id) { return document.getElementById(id); }
+
+            function primClose() {
+                const ov = primEl('primOverlay');
+                if (ov) ov.style.display = 'none';
+                primShapeId = null;
+            }
+
+            function primOpen() {
+                const ov = primEl('primOverlay');
+                if (!ov) return;
+                primShapeId = null;
+                primEl('primStepShape').style.display = '';
+                primEl('primStepSize').style.display = 'none';
+                const list = primEl('primShapeList');
+                list.innerHTML = '';
+                PRIMITIVE_SHAPES.forEach((s, i) => {
+                    const b = document.createElement('button');
+                    b.className = 'btn';
+                    b.textContent = t(s.i18nKey);
+                    b.style.textAlign = 'left';
+                    b.addEventListener('click', () => primPickShape(s.id));
+                    list.appendChild(b);
+                    if (i === 0) setTimeout(() => b.focus(), 0);
+                });
+                ov.style.display = 'flex';
+            }
+            function primPickShape(id) {
+                const s = primitiveShape(id);
+                if (!s) return;
+                primShapeId = id;
+                primEl('primStepShape').style.display = 'none';
+                primEl('primStepSize').style.display = '';
+                primEl('primChosenName').textContent = t(s.i18nKey);
+                const sizeEl = primEl('primSize'), hEl = primEl('primHeight');
+                sizeEl.value = String(s.defaultSize);
+                hEl.value = String(Math.max(1, Math.round(s.defaultSize * s.ratio)));
+                // La sfera non ha un'altezza indipendente: un'altezza diversa dal
+                // diametro non e' una sfera, e' un ellissoide (fuori scopo).
+                const keep = primEl('primKeepRatio');
+                keep.checked = s.fixedRatio ? true : primKeepRatioPref;
+                keep.disabled = !!s.fixedRatio;
+                hEl.disabled = !!s.fixedRatio;
+                primRefreshInfo();
+                // Il campo principale parte a fuoco E selezionato: chi sa gia' la misura
+                // digita e preme Invio senza toccare il mouse.
+                setTimeout(() => { sizeEl.focus(); sizeEl.select(); }, 0);
+            }
+
+            // Misure correnti, gia' pulite: mai NaN, mai sotto 1, mai sopra 512.
+            function primReadDims() {
+                const s = primitiveShape(primShapeId);
+                let size = Math.round(Number(primEl('primSize').value));
+                if (!Number.isFinite(size)) size = 1;
+                size = Math.min(512, Math.max(1, size));
+                let h;
+                if (s && s.fixedRatio) {
+                    h = size;
+                } else if (primEl('primKeepRatio').checked) {
+                    h = Math.max(1, Math.round(size * (s ? s.ratio : 1)));
+                } else {
+                    h = Math.round(Number(primEl('primHeight').value));
+                    if (!Number.isFinite(h)) h = 1;
+                }
+                h = Math.min(512, Math.max(1, h));
+                return { size: size, height: h };
+            }
+
+            // Griglia dell'oggetto attivo, come numero singolo: la primitiva non deve
+            // rimpicciolire la griglia che l'utente ha scelto.
+            function primCurrentGrid() {
+                const g = (typeof currentModelData !== 'undefined' && currentModelData.metadata
+                    && currentModelData.metadata.grid_size) || null;
+                return Array.isArray(g) ? Math.max(g[0], g[1], g[2]) : 16;
+            }
+
+            function primRefreshInfo() {
+                if (!primShapeId) return;
+                const d = primReadDims();
+                if (primEl('primKeepRatio').checked || primitiveShape(primShapeId).fixedRatio) {
+                    primEl('primHeight').value = String(d.height);
+                }
+                const g = primitiveGridFor(d.size, d.height, primCurrentGrid());
+                const n = primitiveVoxelCount(primShapeId, d.size, d.height);
+                const budget = voxelBudgetFor([g, g, g]);
+                const info = primEl('primInfo'), btn = primEl('primCreate');
+                if (n > budget) {
+                    // Rifiutare, non troncare: una forma tagliata a meta' e' peggio di un
+                    // messaggio chiaro. Il tetto e' quello di CLAUDE.md, non un numero nuovo.
+                    // t(key, vars) interpola da solo i {segnaposto} (23-i18n.js:49): niente
+                    // .replace() a mano, che salterebbe la lingua di ripiego.
+                    info.textContent = t('prim.tooBig', { n: n });
+                    btn.disabled = true;
+                } else {
+                    info.textContent = t('prim.info', { n: n, g: g });
+                    btn.disabled = false;
+                }
+            }
+            function primCreate() {
+                if (!primShapeId) return;
+                const d = primReadDims();
+                const g = primitiveGridFor(d.size, d.height, primCurrentGrid());
+                // CONTARE PRIMA, costruire dopo: invertire i due passaggi rimette
+                // l'allocazione da 134 milioni di celle proprio davanti al controllo
+                // che deve impedirla. Il bottone e' gia' disabilitato in questo caso,
+                // ma Invio e un doppio clic arrivano lo stesso.
+                const n = primitiveVoxelCount(primShapeId, d.size, d.height);
+                if (!n || n > voxelBudgetFor([g, g, g])) return;
+                const cells = primitiveCells(primShapeId, d.size, d.height);
+                if (!cells.length) return;
+                pushHistory();
+                // Centrata su XZ e appoggiata a y=0, come gli asset del pack
+                // (normalize_asset): una primitiva che nasce in un angolo va spostata
+                // a mano ogni volta.
+                const ox = Math.floor((g - d.size) / 2), oz = Math.floor((g - d.size) / 2);
+                const color = (typeof activeColorHex === 'string') ? activeColorHex : '#CCCCCC';
+                const voxels = cells.map(c => ({ x: c.x + ox, y: c.y, z: c.z + oz, color: color }));
+                const obj = createObject({
+                    metadata: { name: t(primitiveShape(primShapeId).i18nKey), grid_size: [g, g, g] },
+                    voxels: voxels
+                });
+                primClose();
+                // setActiveObject (dentro selectActiveObjectAndRefresh) invalida gia' lo
+                // stato incrementale e fa il buildModel: CLAUDE.md lo impone a chi
+                // sostituisce currentModelData, e passando di qui e' gratis.
+                selectActiveObjectAndRefresh(obj.id);
+            }
+
+            function initPrimitives() {
+                const ov = primEl('primOverlay');
+                if (!ov || ov.dataset.primInit === '1') return;   // idempotente
+                ov.dataset.primInit = '1';
+                primEl('primCancel').addEventListener('click', primClose);
+                primEl('primCreate').addEventListener('click', primCreate);
+                primEl('primSize').addEventListener('input', primRefreshInfo);
+                primEl('primHeight').addEventListener('input', primRefreshInfo);
+                primEl('primKeepRatio').addEventListener('change', () => {
+                    const s = primitiveShape(primShapeId);
+                    if (s && !s.fixedRatio) primKeepRatioPref = primEl('primKeepRatio').checked;
+                    primRefreshInfo();
+                });
+                // Clic sullo sfondo = annulla, come importOverlay.
+                ov.addEventListener('click', e => { if (e.target === ov) primClose(); });
+                ov.addEventListener('keydown', e => {
+                    if (e.key === 'Escape') { e.preventDefault(); primClose(); }
+                    else if (e.key === 'Enter' && primShapeId && !primEl('primCreate').disabled) {
+                        e.preventDefault(); primCreate();
+                    }
+                });
+                window.addEventListener('keydown', e => {
+                    // Shift+A e' libero: l'unico shiftKey a tastiera nel progetto e'
+                    // Ctrl+Shift+Z in 13-history.js. Ctrl/Alt esclusi per non rubare
+                    // Ctrl+Shift+A, che dal Task 5 e' del rig.
+                    if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+                    if (e.key !== 'A' && e.key !== 'a') return;
+                    if (isTypingTarget(e)) return;
+                    if (ov.style.display !== 'none') return;   // gia' aperto
+                    e.preventDefault();
+                    primOpen();
+                });
+            }

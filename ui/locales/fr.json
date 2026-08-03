@@ -649,5 +649,18 @@
   "rigTools.poseZero": "La pose est à zéro : déplace quelques os avant de l'enregistrer.",
   "rigTools.poseSavePrompt": "Nom de la pose à enregistrer :",
   "rigTools.poseDefaultName": "Pose {n}",
-  "rigTools.poseSaved": "Pose \"{name}\" enregistrée ({n} os) : tu peux la réappliquer à tout objet ayant les mêmes noms d'os."
+  "rigTools.poseSaved": "Pose \"{name}\" enregistrée ({n} os) : tu peux la réappliquer à tout objet ayant les mêmes noms d'os.",
+  "prim.title": "Ajouter une primitive",
+  "prim.cube": "Cube",
+  "prim.pyramid": "Pyramide",
+  "prim.cylinder": "Cylindre",
+  "prim.sphere": "Sphère",
+  "prim.cone": "Cône",
+  "prim.size": "Taille",
+  "prim.height": "Hauteur",
+  "prim.keepRatio": "Conserver les proportions",
+  "prim.create": "Créer",
+  "prim.cancel": "Annuler",
+  "prim.info": "{n} voxels, grille {g}",
+  "prim.tooBig": "Trop de voxels ({n}) : réduisez la taille"
 }

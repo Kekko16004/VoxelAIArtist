@@ -649,5 +649,18 @@
   "rigTools.poseZero": "A pose está a zero: move alguns ossos antes de a guardar.",
   "rigTools.poseSavePrompt": "Nome da pose a guardar:",
   "rigTools.poseDefaultName": "Pose {n}",
-  "rigTools.poseSaved": "Pose \"{name}\" guardada ({n} ossos): podes reaplicá-la a qualquer objeto com os mesmos nomes de ossos."
+  "rigTools.poseSaved": "Pose \"{name}\" guardada ({n} ossos): podes reaplicá-la a qualquer objeto com os mesmos nomes de ossos.",
+  "prim.title": "Adicionar primitiva",
+  "prim.cube": "Cubo",
+  "prim.pyramid": "Pirâmide",
+  "prim.cylinder": "Cilindro",
+  "prim.sphere": "Esfera",
+  "prim.cone": "Cone",
+  "prim.size": "Tamanho",
+  "prim.height": "Altura",
+  "prim.keepRatio": "Manter proporção",
+  "prim.create": "Criar",
+  "prim.cancel": "Cancelar",
+  "prim.info": "{n} voxels, grade {g}",
+  "prim.tooBig": "Voxels em excesso ({n}): reduza o tamanho"
 }

@@ -186,6 +186,15 @@ run "Voxelizzazione GLB (Node)" node tests/test_import_glb.mjs
 #         costosa venga RIFIUTATA a monte invece di essere troncata.
 run "Primitive voxel (Node)" node tests/test_primitives.mjs
 
+# 4d-ter-bis. La META' CON IL DOM delle primitive: la scorciatoia Shift+A, i due
+#         passi del dialogo, il rifiuto per budget e il centraggio dell'oggetto
+#         creato. Il test qui sopra si ferma al marcatore "UI" e prova solo la
+#         matematica; il bootstrap con DOM finto fa girare initPrimitives contro
+#         un proxy dove ogni id esiste, quindi prova che il codice non solleva,
+#         NON che decida bene (e non puo' accorgersi di un id sbagliato).
+#         Qui il DOM finto e' severo: un id sconosciuto torna undefined.
+run "Primitive: dialogo e scorciatoia (Node)" node tests/test_primitives_ui.mjs
+
 # 4d-quater. Ctrl+A nella timeline = seleziona tutti i keyframe. La scorciatoia era
 #         rivendicata da TRE punti (timeline, gizmo globale, rig) e la timeline la
 #         scartava a monte con `if (ev.ctrlKey ...) return`, quindi non ci arrivava

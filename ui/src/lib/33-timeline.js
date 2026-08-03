@@ -660,7 +660,7 @@
             // moduli, vedi 26-settings-modal.js e 31-help.js).
             function tlModalOpen() {
                 const ids = ['settingsOverlay', 'helpOverlay', 'importOverlay',
-                    'autosaveHistoryOverlay', 'loaderOverlay'];
+                    'autosaveHistoryOverlay', 'loaderOverlay', 'primOverlay'];
                 return ids.some(id => {
                     const el = document.getElementById(id);
                     return !!(el && el.style && el.style.display === 'flex');

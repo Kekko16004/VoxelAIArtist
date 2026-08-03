@@ -120,5 +120,9 @@
             // precedente. Va qui e non prima: i <details class="rp-section"> devono
             // esistere gia' nel DOM. E' solo DOM, non tocca la scena: nessun render.
             if (typeof initRightPanelPersist === 'function') initRightPanelPersist();
+            // Primitive (Shift+A): aggancia la scorciatoia e i controlli del dialogo.
+            // La guardia typeof e' lo stile di questo file e tiene in piedi il
+            // bootstrap se il modulo sparisce dal manifest.
+            if (typeof initPrimitives === 'function') initPrimitives();
             animate();
         });

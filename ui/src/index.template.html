@@ -3145,6 +3145,41 @@
         </div>
     </div>
 
+    <!-- ===== Modale Primitive (Shift+A) =====
+         Due schermate nello stesso overlay: prima la scelta della forma, poi le
+         misure. Stile inline come importOverlay: in questo progetto non esiste
+         una classe .modal-overlay condivisa, e inventarla qui vorrebbe dire
+         riscrivere anche gli overlay esistenti. z-index 95 = sopra importOverlay
+         (90), sotto il loader. -->
+    <div id="primOverlay" style="display:none; position:fixed; inset:0; z-index:95; align-items:center; justify-content:center; background:var(--overlay-scrim);">
+        <div class="glass" style="min-width:320px; max-width:420px; padding:20px; border-radius:var(--radius-md); display:flex; flex-direction:column; gap:14px;">
+            <div id="primStepShape">
+                <div class="section-title" data-i18n="prim.title">Aggiungi primitiva</div>
+                <div id="primShapeList" style="display:flex; flex-direction:column; gap:6px; margin-top:10px;"></div>
+            </div>
+            <div id="primStepSize" style="display:none;">
+                <div class="section-title"><span id="primChosenName"></span></div>
+                <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px;">
+                    <span data-i18n="prim.size">Dimensione</span>
+                    <input type="number" id="primSize" min="1" max="512" step="1" style="width:90px;">
+                </label>
+                <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px;">
+                    <span data-i18n="prim.height">Altezza</span>
+                    <input type="number" id="primHeight" min="1" max="512" step="1" style="width:90px;">
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                    <input type="checkbox" id="primKeepRatio" checked>
+                    <span data-i18n="prim.keepRatio">Mantieni proporzione</span>
+                </label>
+                <div id="primInfo" style="font-size:12px; color:var(--text-secondary); margin-top:10px;"></div>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+                    <button id="primCancel" class="btn" data-i18n="prim.cancel">Annulla</button>
+                    <button id="primCreate" class="btn btn-primary" data-i18n="prim.create">Crea</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== Modale Aiuto (guide) =====
          Struttura: indice a sinistra + corpo scorrevole a destra. Le sezioni sono
          iniettate da 31-help.js (HELP_SECTIONS) cosi' il testo vive in un solo

@@ -649,5 +649,18 @@
   "rigTools.poseZero": "La posa è a zero: muovi qualche osso prima di salvarla.",
   "rigTools.poseSavePrompt": "Nome della posa da salvare:",
   "rigTools.poseDefaultName": "Posa {n}",
-  "rigTools.poseSaved": "Posa \"{name}\" salvata ({n} ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa."
+  "rigTools.poseSaved": "Posa \"{name}\" salvata ({n} ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.",
+  "prim.title": "Aggiungi primitiva",
+  "prim.cube": "Cubo",
+  "prim.pyramid": "Piramide",
+  "prim.cylinder": "Cilindro",
+  "prim.sphere": "Sfera",
+  "prim.cone": "Cono",
+  "prim.size": "Dimensione",
+  "prim.height": "Altezza",
+  "prim.keepRatio": "Mantieni proporzione",
+  "prim.create": "Crea",
+  "prim.cancel": "Annulla",
+  "prim.info": "{n} voxel, griglia {g}",
+  "prim.tooBig": "Troppi voxel ({n}): riduci la dimensione"
 }
