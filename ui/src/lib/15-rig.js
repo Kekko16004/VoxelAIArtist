@@ -3155,6 +3155,28 @@
                 else onGizmoDragEnd();
             });
             transformControls.addEventListener('objectChange', onGizmoChange);
+            // PRIMO DRAG: il proxy va riallineato PRIMA che TransformControls lo guardi.
+            // In r128 pointerDown fotografa _quaternionStart dal proxy (tc r128 :245) e
+            // solo DOPO mette dragging = true (:254), che e' cio' che emette
+            // 'dragging-changed' -> onGizmoDragStart. Quindi onGizmoDragStart arriva
+            // sempre troppo tardi per correggere un proxy stantio, e onGizmoChange
+            // scrive la posa in ASSOLUTO: il primo movimento del mouse portava la posa
+            // all'orientamento del PROXY invece che a quello dell'osso (posa "che non
+            // c'entra nulla", poi Ctrl+Z, poi tutto bene perche' onGizmoDragEnd
+            // risincronizza). Ascoltando in CAPTURE su window arriviamo prima del
+            // listener di TC, che e' registrato sul canvas: la fotografia trova un
+            // proxy corretto.
+            //
+            // Non serve sapere QUALE percorso lascia il proxy stantio (selezione osso,
+            // scrub della timeline, mixer di una clip...): qui si risincronizza a ogni
+            // pressione, quindi vanno tutti bene.
+            window.addEventListener('pointerdown', () => {
+                // A trascinamento in corso NON si tocca: risincronizzare a meta' gesto
+                // butterebbe via la rotazione appena fatta.
+                if (transformControls.dragging) return;
+                if (!transformControls.enabled || !transformControls.object) return;
+                syncGizmoToBone();
+            }, true);
             transformControls.enabled = false;   // off until the rig tab activates it
             transformControls.visible = false;
             scene.add(transformControls);

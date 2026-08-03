@@ -104,6 +104,14 @@ run "Binding rig e weight paint (Node)" node tests/test_rig_weights.mjs
 #            scheletro, editing delle ossa (il nome e' l'identita', `parent` e' un
 #            INDICE da rimappare), geometria dell'IK a due ossa e libreria di pose.
 run "Strumenti rig: specchio, IK, pose (Node)" node tests/test_rig_tools.mjs
+
+# 4c-quinquies-bis. Primo drag del gizmo: in r128 TransformControls fotografa
+#            _quaternionStart PRIMA di emettere 'dragging-changed', quindi
+#            onGizmoDragStart non fa in tempo a correggere un proxy stantio e
+#            onGizmoChange (che scrive la posa in ASSOLUTO) portava la posa
+#            all'orientamento del proxy: la "posa che non c'entra nulla" al primo
+#            movimento, poi Ctrl+Z e da li' tutto bene.
+run "Primo drag del gizmo (Node)" node tests/test_gizmo_first_drag.mjs
 run "Export GLB: posa dell'editor (Node)" node tests/test_glb_pose_export.mjs
 
 # 4c-decies. Artefatti dell'export RIGGATO, che gli export statici non avevano:
