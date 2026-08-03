@@ -178,6 +178,14 @@ run "Capacita' backend: web vs desktop (Node)" node tests/test_backend_caps.mjs
 #         versione a raggi ne produceva 0% dentro (vista vuota).
 run "Voxelizzazione GLB (Node)" node tests/test_import_glb.mjs
 
+# 4d-ter. Primitive voxel (Shift+A). Le trappole sono tre e tutte gia' viste in
+#         questo progetto: una forma che produce ZERO voxel (a 'box' con i float
+#         e' successo davvero), l'errore di mezzo voxel che rende sbilenca una
+#         sfera di diametro pari, e il guscio esterno mangiato di un voxel da un
+#         test sul raggio troppo severo. Il test controlla anche che la forma piu'
+#         costosa venga RIFIUTATA a monte invece di essere troncata.
+run "Primitive voxel (Node)" node tests/test_primitives.mjs
+
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 

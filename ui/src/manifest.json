@@ -34,5 +34,6 @@
   "lib/32-rig-tools.js",
   "lib/33-timeline.js",
   "lib/34-collapsible.js",
+  "lib/35-primitives.js",
   "lib/18-bootstrap-tail.js"
 ]
