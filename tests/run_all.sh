@@ -194,6 +194,11 @@ run "Primitive voxel (Node)" node tests/test_primitives.mjs
 #         passare al gizmo, e Ctrl+Shift+A resta del rig.
 run "Ctrl+A sui keyframe (Node)" node tests/test_timeline_select_all.mjs
 
+# 4d-quinquies. Persistenza dei pannelli del pannello destro: i quattro <details
+#         class="rp-section"> (Outliner, Proprieta', Palette, Vista) devono
+#         ricordare il loro stato aperto/chiuso tra una sessione e l'altra.
+run "Persistenza pannelli destro (Node)" node tests/test_panel_persist.mjs
+
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 

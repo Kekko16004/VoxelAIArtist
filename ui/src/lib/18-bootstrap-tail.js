@@ -116,5 +116,9 @@
             // i moduli hanno agganciato i loro listener: la funzione arricchisce il
             // markup esistente e non sposta nodi, quindi non puo' rubare handler.
             if (typeof initCollapsibleSections === 'function') initCollapsibleSections(document);
+            // Sezioni del pannello DESTRO: ripristina aperto/chiuso dalla sessione
+            // precedente. Va qui e non prima: i <details class="rp-section"> devono
+            // esistere gia' nel DOM. E' solo DOM, non tocca la scena: nessun render.
+            if (typeof initRightPanelPersist === 'function') initRightPanelPersist();
             animate();
         });
