@@ -577,6 +577,7 @@
   "rig.animCreated": "Animação \"{name}\" criada e em reprodução.",
   "rig.animError": "Erro de animação: {error}",
   "rig.allBonesKeyed": "Todos os ossos ativos para keyframes",
+  "rig.bonePoseReset": "Pose do osso redefinida",
   "rig.poseCopied": "Pose copiada",
   "timeline.summary": "Resumo",
   "timeline.play": "Reproduzir",

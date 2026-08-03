@@ -577,6 +577,7 @@
   "rig.animCreated": "Animation \"{name}\" erstellt und wird abgespielt.",
   "rig.animError": "Animationsfehler: {error}",
   "rig.allBonesKeyed": "Alle Knochen für Keyframes aktiv",
+  "rig.bonePoseReset": "Knochen-Pose zurückgesetzt",
   "rig.poseCopied": "Pose kopiert",
   "timeline.summary": "Übersicht",
   "timeline.play": "Abspielen",

@@ -48,6 +48,7 @@
             let tlDockHeight = 190;
             let tlRowsBuilt = '';           // firma dell'ultimo render (evita rebuild inutili)
             let tlAreaHover = false;        // puntatore sopra il dock
+            let tlHoverLeavePending = false;// uscita avvenuta a meta' gesto, da applicare alla fine
             let tlAreaFocus = false;        // focus dentro il dock
 
             const tlDock = document.getElementById('timelineDock');
@@ -1107,6 +1108,12 @@
                 if (tlKeyDrag && tlKeyDrag.moved) tlCommit();
                 tlScrubbing = false;
                 tlKeyDrag = null;
+                // Il gesto e' finito: se nel frattempo il puntatore era uscito dal
+                // dock, l'uscita rinviata da 'pointerleave' si applica adesso.
+                if (tlHoverLeavePending) {
+                    tlHoverLeavePending = false;
+                    tlAreaHover = false;
+                }
             }
 
             function tlOnRowsPointerDown(ev) {
@@ -1312,11 +1319,20 @@
                 }
 
                 if (tlDock) {
-                    tlDock.addEventListener('pointerenter', () => { tlAreaHover = true; });
+                    tlDock.addEventListener('pointerenter', () => {
+                        tlAreaHover = true;
+                        tlHoverLeavePending = false;
+                    });
                     tlDock.addEventListener('pointerleave', () => {
                         // Durante un trascinamento di chiavi il puntatore esce spesso dal
                         // dock: azzerare qui spegnerebbe la scorciatoia a meta' gesto.
-                        if (!tlKeyDrag && !tlScrubbing) tlAreaHover = false;
+                        // Ma l'uscita non va DIMENTICATA: se il gesto finisce col mouse
+                        // ancora fuori, 'pointerleave' non si ripete piu' (si e' gia'
+                        // usciti) e senza questo promemoria tlAreaHover restava true per
+                        // sempre. La timeline rubava Ctrl+A al gizmo da tutto lo schermo,
+                        // fino al successivo giro dentro e fuori dal dock.
+                        if (tlKeyDrag || tlScrubbing) tlHoverLeavePending = true;
+                        else tlAreaHover = false;
                     });
                     tlDock.addEventListener('focusin', () => { tlAreaFocus = true; });
                     tlDock.addEventListener('focusout', () => { tlAreaFocus = false; });

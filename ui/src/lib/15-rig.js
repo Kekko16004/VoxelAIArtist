@@ -3487,11 +3487,14 @@
                         if (typeof tlSyncPoseSliders === 'function') tlSyncPoseSliders();
                         if (typeof syncGizmoToBone === 'function') syncGizmoToBone();
                         if (typeof requestRender === 'function') requestRender();
-                        const toast = document.createElement('div');
-                        toast.textContent = "Posa Osso resettata!";
-                        toast.style.cssText = "position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--primary); color:white; padding:8px 16px; border-radius:8px; z-index:9999; pointer-events:none; transition:opacity 0.3s; font-size:12px;";
-                        document.body.appendChild(toast);
-                        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 1000);
+                        // Ultima copia scritta a mano del toast: usava
+                        // background:var(--primary), una variabile che in questo
+                        // progetto non esiste (i token sono --accent-*), quindi lo
+                        // sfondo era trasparente e il testo bianco si leggeva a
+                        // fatica sopra la viewport. E il messaggio era italiano
+                        // hardcoded. rigToast + la classe .rig-toast risolvono
+                        // entrambe le cose.
+                        rigToast(t('rig.bonePoseReset'));
                     }
                 }
             });

@@ -577,6 +577,7 @@
   "rig.animCreated": "Animation \"{name}\" créée et en lecture.",
   "rig.animError": "Erreur d'animation : {error}",
   "rig.allBonesKeyed": "Tous les os actifs pour les keyframes",
+  "rig.bonePoseReset": "Pose de l'os réinitialisée",
   "rig.poseCopied": "Pose copiée",
   "timeline.summary": "Résumé",
   "timeline.play": "Lire",

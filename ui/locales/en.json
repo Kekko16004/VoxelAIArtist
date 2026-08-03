@@ -577,6 +577,7 @@
   "rig.animCreated": "Animation \"{name}\" created and playing.",
   "rig.animError": "Animation error: {error}",
   "rig.allBonesKeyed": "All bones set for keyframing",
+  "rig.bonePoseReset": "Bone pose reset",
   "rig.poseCopied": "Pose copied",
   "timeline.summary": "Summary",
   "timeline.play": "Play",
