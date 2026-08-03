@@ -98,6 +98,8 @@ function makeHarness(opts) {
 
     const log = { history: 0, created: [], selected: [], timeouts: 0 };
     const doc = {
+        _lis: {},
+        addEventListener(ev, fn) { (this._lis[ev] ||= []).push(fn); },
         getElementById: id => els[id],
         createElement: () => makeEl('nuovo')
     };
@@ -149,7 +151,7 @@ function makeHarness(opts) {
         opts.grid || [32, 32, 32],
         opts.color || '#123456');
     api.init();
-    return { api, els, log, win };
+    return { api, els, log, win, doc };
 }
 
 // --- 3. la scorciatoia -----------------------------------------------------
@@ -349,30 +351,48 @@ console.log('[7] creazione: oggetto centrato su XZ, appoggiato a y=0, del colore
 
 console.log('[8] chiusura: Esc, clic sullo sfondo, Annulla; Invio crea');
 {
-    const { api, els, log } = makeHarness();
+    const { api, els, log, doc } = makeHarness();
+    // I tasti si sparano a livello di DOCUMENTO, non sull'overlay: e' dove
+    // arrivano davvero. Un keydown dentro il pannello risale fin qui, ma dopo un
+    // clic sull'imbottitura del pannello il fuoco torna al <body> e l'overlay non
+    // riceve piu' niente — un handler agganciato all'elemento smetterebbe di
+    // funzionare proprio li'. E' il modo in cui chiudono tutte le altre modali
+    // del progetto (26-settings-modal.js:33, 31-help.js:279).
+    const docKey = k => {
+        const ev = { key: k, __p: 0, preventDefault() { this.__p++; } };
+        (doc._lis.keydown || []).forEach(fn => fn(ev));
+        return ev;
+    };
+    ok((doc._lis.keydown || []).length === 1, 'un handler di tastiera sul documento');
+
     api.open();
     els.primShapeList.children[0].fire('click');
 
     // Esc chiude e AZZERA la forma scelta: riaprendo si riparte dalla lista.
-    let ev = { key: 'Escape', __p: 0, preventDefault() { this.__p++; } };
-    els.primOverlay.fire('keydown', ev);
+    let ev = docKey('Escape');
     ok(els.primOverlay.style.display === 'none', 'Esc chiude');
     ok(ev.__p === 1, 'e consuma il tasto');
     api.create();
     ok(log.created.length === 0, 'dopo la chiusura non c\'e\' piu\' una forma da creare');
 
+    // A dialogo CHIUSO i tasti non sono nostri: Esc annulla l'estrusione
+    // (13-history.js:196) e Invio serve altrove. Consumarli qui li ruberebbe.
+    ev = docKey('Escape');
+    ok(ev.__p === 0, 'a dialogo chiuso Esc passa oltre (l\'estrusione lo usa)');
+    ev = docKey('Enter');
+    ok(ev.__p === 0 && log.created.length === 0, 'e Invio non crea nulla');
+
     // Invio crea, ma solo se il bottone e' attivo.
     api.open();
     els.primShapeList.children[0].fire('click');
-    ev = { key: 'Enter', __p: 0, preventDefault() { this.__p++; } };
-    els.primOverlay.fire('keydown', ev);
+    ev = docKey('Enter');
     ok(log.created.length === 1, 'Invio crea la primitiva');
     ok(ev.__p === 1, 'consumando il tasto');
 
     api.open();
     els.primShapeList.children[0].fire('click');
     els.primCreate.disabled = true;
-    els.primOverlay.fire('keydown', { key: 'Enter', preventDefault() {} });
+    docKey('Enter');
     ok(log.created.length === 1, 'con Crea disabilitato Invio non crea nulla');
 
     // Clic sullo sfondo chiude; un clic DENTRO il pannello no.

@@ -320,7 +320,16 @@
                 });
                 // Clic sullo sfondo = annulla, come importOverlay.
                 ov.addEventListener('click', e => { if (e.target === ov) primClose(); });
-                ov.addEventListener('keydown', e => {
+                // Esc/Invio sul DOCUMENTO, non sull'overlay: un handler agganciato
+                // all'elemento riceve i tasti solo mentre il fuoco e' dentro il
+                // pannello, e basta un clic sull'imbottitura per rimandarlo al
+                // <body> — da li' in poi il dialogo non si chiuderebbe piu' con Esc.
+                // E' anche come chiudono tutte le altre modali del progetto
+                // (26-settings-modal.js:33, 31-help.js:279). La guardia sul display
+                // e' obbligatoria: a dialogo chiuso Esc appartiene all'estrusione
+                // (13-history.js:196) e non va consumato.
+                document.addEventListener('keydown', e => {
+                    if (ov.style.display !== 'flex') return;
                     if (e.key === 'Escape') { e.preventDefault(); primClose(); }
                     else if (e.key === 'Enter' && primShapeId && !primEl('primCreate').disabled) {
                         e.preventDefault(); primCreate();
