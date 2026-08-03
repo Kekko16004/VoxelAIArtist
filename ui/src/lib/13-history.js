@@ -8,6 +8,10 @@
             // non attivi, e non ripristina aggiunte/eliminazioni di oggetti (solo attributi
             // di quelli tuttora esistenti). Le operazioni Nuovo/Duplica/Elimina/Unisci non
             // sono quindi annullabili con Ctrl+Z (per scelta: evitare snapshot pesanti).
+            // Corollario da NON dimenticare: uno scatto vale per l'oggetto che era attivo
+            // quando è stato preso. Chi lo ripristina deve prima tornare su quell'oggetto,
+            // altrimenti ne svuota un altro — vedi applySnapshot e
+            // tests/test_undo_object_switch.mjs.
             function captureSnapshot() {
                 return {
                     voxels: JSON.parse(JSON.stringify(currentModelData.voxels || [])),
@@ -52,14 +56,20 @@
                 }
             }
 
-            function restoreSnapshot(snap) {
-                restoreSceneMeta(snap);
-                // Undo/redo rimpiazza l'intero array dei voxel: gli indici del renderer
-                // incrementale non valgono piu'. (Il buildModel() che segue lo
-                // rigenerera' comunque, ma invalidare qui evita ogni finestra di stato
-                // incoerente se in futuro qualcuno cambiasse quell'ordine.)
-                if (typeof invalidateIncremental === 'function') invalidateIncremental();
-                currentModelData.voxels = snap.voxels;
+            // I voxel di uno scatto appartengono all'oggetto che era attivo QUANDO lo
+            // scatto e' stato preso. Scriverli mentre e' attivo un altro oggetto lo
+            // sovrascrive in silenzio: e' il difetto che ha svuotato le primitive appena
+            // create (Shift+A poi Ctrl+Z) e regalato alla Casa i 50 voxel dell'Albero
+            // eliminato. Se quell'oggetto non esiste piu' (eliminato dopo lo scatto) i
+            // voxel non hanno piu' una casa: si lasciano cadere, non si appoggiano al
+            // primo che capita. Coperto da tests/test_undo_object_switch.mjs.
+            function snapshotTargetIsActive(snap) {
+                return snap.activeObjectId == null || snap.activeObjectId === activeObjectId;
+            }
+
+            // Seconda meta' del ripristino: SOLO il rig. Gira dopo buildModel, che
+            // azzera anteprima e osso selezionato — vedi la nota su applySnapshot.
+            function restoreRigFromSnapshot(snap) {
                 if (snap.rig) {
                     // normalizeRig() ricostruisce l'oggetto COMPLETO (pesi dipinti +
                     // animazioni AI incluse): prima qui si copiavano solo bones/pose e
@@ -100,14 +110,35 @@
                 }
             }
 
+            // undo/redo in tre tempi, e due cose vanno lasciate dove sono.
+            // (1) La GUARDIA e' cio' che impedisce il danno: senza, i voxel dello scatto
+            //     atterrano sull'oggetto attivo in quel momento e lo svuotano. La
+            //     scrittura va DOPO restoreSceneMeta, che riporta attivo l'oggetto dello
+            //     scatto: spostarla prima non sporca nulla (ci pensa la guardia) ma la
+            //     rende un buco nell'acqua ogni volta che l'oggetto e' cambiato, e
+            //     l'annullamento non ripristina piu' niente.
+            // (2) buildModel() sta in mezzo, non in fondo: chiama clearRigPreview() e
+            //     azzera selectedBoneIndex (05-build-model.js:7-19), mentre il ripristino
+            //     del rig ricostruisce l'anteprima con applyRig() e riseleziona l'osso.
+            //     Metterlo dopo spegnerebbe il rig a ogni Ctrl+Z.
+            // Entrambe fissate da tests/test_undo_object_switch.mjs (gruppi [3] e [5]).
+            function applySnapshot(snap) {
+                restoreSceneMeta(snap);
+                // Undo/redo rimpiazza l'intero array dei voxel: gli indici del renderer
+                // incrementale non valgono piu'. (Il buildModel() che segue lo
+                // rigenerera' comunque, ma invalidare qui evita ogni finestra di stato
+                // incoerente se in futuro qualcuno cambiasse quell'ordine.)
+                if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                if (snapshotTargetIsActive(snap)) currentModelData.voxels = snap.voxels;
+                buildModel(false);
+                restoreRigFromSnapshot(snap);
+            }
+
             function undo() {
                 if (!undoStack.length) return;
                 redoStack.push(JSON.stringify(captureSnapshot()));
 
-                const prev = JSON.parse(undoStack.pop());
-                currentModelData.voxels = prev.voxels;
-                buildModel(false);
-                restoreSnapshot(prev);
+                applySnapshot(JSON.parse(undoStack.pop()));
                 updateHistoryButtons();
             }
 
@@ -115,10 +146,7 @@
                 if (!redoStack.length) return;
                 undoStack.push(JSON.stringify(captureSnapshot()));
 
-                const next = JSON.parse(redoStack.pop());
-                currentModelData.voxels = next.voxels;
-                buildModel(false);
-                restoreSnapshot(next);
+                applySnapshot(JSON.parse(redoStack.pop()));
                 updateHistoryButtons();
             }
 

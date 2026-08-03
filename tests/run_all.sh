@@ -195,6 +195,15 @@ run "Primitive voxel (Node)" node tests/test_primitives.mjs
 #         Qui il DOM finto e' severo: un id sconosciuto torna undefined.
 run "Primitive: dialogo e scorciatoia (Node)" node tests/test_primitives_ui.mjs
 
+# 4d-ter-ter. Ctrl+Z quando l'oggetto attivo e' cambiato dopo lo scatto. Uno scatto
+#         porta i voxel del SOLO oggetto attivo, quindi ripristinarli mentre e'
+#         attivo un altro oggetto lo svuota in silenzio: misurato su Shift+A (la
+#         primitiva nuova scendeva a 2 voxel) e su Elimina (l'oggetto superstite
+#         ereditava i 50 voxel di quello eliminato). Il test fissa anche l'ORDINE
+#         buildModel -> ripristino del rig: invertirlo spegne il rig a ogni Ctrl+Z,
+#         ed e' la fix "ovvia" e sbagliata.
+run "Undo con cambio oggetto (Node)" node tests/test_undo_object_switch.mjs
+
 # 4d-quater. Ctrl+A nella timeline = seleziona tutti i keyframe. La scorciatoia era
 #         rivendicata da TRE punti (timeline, gizmo globale, rig) e la timeline la
 #         scartava a monte con `if (ev.ctrlKey ...) return`, quindi non ci arrivava
