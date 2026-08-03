@@ -338,6 +338,13 @@
         }
         .rp-section[open] > summary::before { transform: rotate(45deg); }
         .rp-section > summary:hover { color: var(--text-primary); }
+
+        .rig-toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--accent-primary); color: #fff; padding: 8px 16px;
+            border-radius: var(--radius-md); z-index: 9999; pointer-events: none;
+            transition: opacity .3s; font-size: 12px;
+        }
         .rp-body { padding: 12px; border-top: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 10px; }
 
         /* Resizer del pannello destro (specchio di #sidebarResizer) */

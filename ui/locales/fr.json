@@ -576,6 +576,8 @@
   "rig.aiNoValidBones": "Aucun os valide dans les pistes générées.",
   "rig.animCreated": "Animation \"{name}\" créée et en lecture.",
   "rig.animError": "Erreur d'animation : {error}",
+  "rig.allBonesKeyed": "Tous les os actifs pour les keyframes",
+  "rig.poseCopied": "Pose copiée",
   "timeline.summary": "Résumé",
   "timeline.play": "Lire",
   "timeline.pause": "Pause",

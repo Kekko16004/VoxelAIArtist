@@ -576,6 +576,8 @@
   "rig.aiNoValidBones": "Ningún hueso válido en las pistas generadas.",
   "rig.animCreated": "Animación \"{name}\" creada y en reproducción.",
   "rig.animError": "Error de animación: {error}",
+  "rig.allBonesKeyed": "Todos los huesos activos para keyframes",
+  "rig.poseCopied": "Pose copiada",
   "timeline.summary": "Resumen",
   "timeline.play": "Reproducir",
   "timeline.pause": "Pausa",
