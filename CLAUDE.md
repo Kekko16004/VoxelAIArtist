@@ -292,9 +292,12 @@ Everything is inline in one HTML file. Major systems:
   `t()` e' chiamabile prima di `bootI18n` e in quel caso ritorna la chiave nuda:
   non e' un bug da aggirare con un fallback italiano hardcoded.
   `tests/test_i18n_hardcoded.mjs` e' la guardia. Se fallisce, la stringa va
-  estratta, non aggiunta all'allow-list. La sua `BASELINE` (misurata alla nascita
-  della guardia: `template: 74`, `js: 269`) va solo **abbassata**, mai alzata: a zero
-  il meccanismo si rimuove.
+  estratta, non aggiunta all'allow-list — che infatti e' VUOTA di proposito.
+  La sua `BASELINE` (misurata alla nascita della guardia: `template: 74`,
+  `js: 295`) va solo **abbassata**, mai alzata: a zero il meccanismo si rimuove.
+  La guardia copre `ui/src/lib/*.js`, `ui/src/utils/*.js` e i `<script>` inline
+  del template, cioe' tutte le sorgenti che finiscono nel bundle: spostare una
+  stringa non e' un modo per farla sparire dal conteggio.
 - Editing op semantics requires a **paired edit** in `src/parser.py` (`expand_ops`) and `ui/index.html` (`expandOps`).
 - `token.txt` and any `cookies.json` hold session credentials — never commit or echo their contents.
 - The Three.js version is pinned to r128 via CDN; APIs differ in newer versions, so don't assume modern Three.js when editing viewer code.
