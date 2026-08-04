@@ -5,16 +5,38 @@
 
             // T1 Fase B: cattura voxel dell'ATTIVO + rig + struttura scena (nomi, transform,
             // visibilità, quale è attivo). LIMITE noto: NON cattura i voxel degli oggetti
-            // non attivi, e non ripristina aggiunte/eliminazioni di oggetti (solo attributi
-            // di quelli tuttora esistenti). Le operazioni Nuovo/Duplica/Elimina/Unisci non
-            // sono quindi annullabili con Ctrl+Z (per scelta: evitare snapshot pesanti).
+            // non attivi, quindi una pennellata annullata torna indietro solo sull'oggetto
+            // su cui è stata data.
             // Corollario da NON dimenticare: uno scatto vale per l'oggetto che era attivo
             // quando è stato preso. Chi lo ripristina deve prima tornare su quell'oggetto,
             // altrimenti ne svuota un altro — vedi applySnapshot e
             // tests/test_undo_object_switch.mjs.
-            function captureSnapshot() {
+            //
+            // La ROSA degli oggetti (`sceneMeta`, in ordine di scena) invece è completa, e
+            // da lì viene l'annullamento di Nuovo/Duplica/Primitiva/Elimina/Unisci:
+            //  - un oggetto che esiste ORA ma non è nella rosa è nato dopo lo scatto -> via;
+            //  - un oggetto della rosa che non esiste più torna, ma solo se lo scatto ne
+            //    porta il contenuto in `payloads`.
+            // I payload costano, quindi NON sono in ogni scatto: li allega chi sta per far
+            // sparire qualcosa (objDelete, objMerge, Ctrl+X) e undo/redo, che calcolano da
+            // sé chi sparirà applicando lo scatto opposto. Uno scatto di pennellata resta
+            // leggero come prima.
+            function snapshotObjectPayload(o) {
+                return {
+                    id: o.id, name: o.name, visible: o.visible,
+                    transform: JSON.parse(JSON.stringify(o.transform || makeDefaultTransform())),
+                    data: JSON.parse(JSON.stringify(o.data || { metadata: {}, voxels: [] })),
+                    rig: o.rig ? JSON.parse(JSON.stringify(o.rig)) : null
+                };
+            }
+
+            function captureSnapshot(carry) {
+                // pushHistory è agganciato direttamente come listener (15-rig.js:2560),
+                // quindi qui può arrivare un Event al posto della lista: filtrarlo.
+                const portati = Array.isArray(carry) ? carry.filter(Boolean) : [];
                 return {
                     voxels: JSON.parse(JSON.stringify(currentModelData.voxels || [])),
+                    payloads: portati.map(snapshotObjectPayload),
                     // Copia PROFONDA e completa del rig: prima mancavano `customAnims` (un
                     // Ctrl+Z dopo aver generato un'animazione AI la cancellava) e `weights`
                     // (annullava le correzioni del weight paint senza poterle ripristinare).
@@ -37,22 +59,63 @@
                 };
             }
 
-            function pushHistory() {
-                undoStack.push(JSON.stringify(captureSnapshot()));
+            function pushHistory(carry) {
+                undoStack.push(JSON.stringify(captureSnapshot(carry)));
                 if (undoStack.length > MAX_HISTORY) undoStack.shift();
                 redoStack.length = 0;
                 updateHistoryButtons();
             }
 
+            // Gli oggetti che spariranno applicando `target`: sono quelli il cui contenuto
+            // va allegato allo scatto INVERSO, altrimenti il movimento opposto non ha più i
+            // loro voxel per farli tornare.
+            function objectsMissingFrom(target) {
+                if (!target || !Array.isArray(target.sceneMeta)) return [];
+                const ids = new Set(target.sceneMeta.map(m => m.id));
+                return sceneObjects.filter(o => !ids.has(o.id));
+            }
+
             function restoreSceneMeta(snap) {
                 if (Array.isArray(snap.sceneMeta)) {
-                    snap.sceneMeta.forEach(m => {
+                    const rosa = snap.sceneMeta;
+                    const idsRosa = new Set(rosa.map(m => m.id));
+                    // 1. Via chi è nato DOPO lo scatto (Nuovo / Duplica / Shift+A / Unisci).
+                    if (sceneObjects.some(o => !idsRosa.has(o.id))) {
+                        sceneObjects = sceneObjects.filter(o => idsRosa.has(o.id));
+                        if (typeof selectedObjectIds !== 'undefined') {
+                            selectedObjectIds = selectedObjectIds.filter(id => idsRosa.has(id));
+                        }
+                    }
+                    // 2. Torna chi era stato eliminato, se lo scatto ne porta il contenuto.
+                    //    createObject accetta un id esplicito e tiene nextObjectId davanti,
+                    //    così l'oggetto risorge con la propria identità e non con una nuova.
+                    (Array.isArray(snap.payloads) ? snap.payloads : []).forEach(p => {
+                        if (!p || sceneObjects.some(o => o.id === p.id)) return;
+                        const obj = createObject(JSON.parse(JSON.stringify(p.data)), {
+                            id: p.id, visible: p.visible,
+                            transform: JSON.parse(JSON.stringify(p.transform || makeDefaultTransform()))
+                        });
+                        if (p.name) obj.name = p.name;
+                        if (p.rig) obj.rig = JSON.parse(JSON.stringify(p.rig));
+                    });
+                    // 3. createObject accoda in fondo: rimette l'ordine di scena dello scatto.
+                    const posto = new Map(rosa.map((m, k) => [m.id, k]));
+                    sceneObjects.sort((a, b) =>
+                        (posto.has(a.id) ? posto.get(a.id) : Infinity)
+                        - (posto.has(b.id) ? posto.get(b.id) : Infinity));
+                    // 4. Attributi (nome, visibilità, transform) di tutti quelli in rosa.
+                    rosa.forEach(m => {
                         const obj = sceneObjects.find(o => o.id === m.id);
                         if (obj) { obj.name = m.name; obj.visible = m.visible; obj.transform = m.transform; }
                     });
                 }
                 if (snap.activeObjectId != null && sceneObjects.some(o => o.id === snap.activeObjectId)) {
                     setActiveObject(snap.activeObjectId);
+                } else if (!sceneObjects.some(o => o.id === activeObjectId) && sceneObjects.length) {
+                    // L'attivo è stato appena tolto di scena e lo scatto non ne indica un
+                    // altro: senza questa riga currentModelData resterebbe puntato su un
+                    // oggetto che non c'è più e il buildModel disegnerebbe un fantasma.
+                    setActiveObject(sceneObjects[0].id);
                 }
             }
 
@@ -134,19 +197,25 @@
                 restoreRigFromSnapshot(snap);
             }
 
+            // Lo scatto opposto si prende PRIMA di applicare, e deve portarsi dietro il
+            // contenuto degli oggetti che l'applicazione sta per far sparire: è ciò che
+            // rende reversibile anche il ritorno. Senza, Ctrl+Z toglie la primitiva appena
+            // creata e Ctrl+Y non ha più i suoi voxel per rimetterla.
             function undo() {
                 if (!undoStack.length) return;
-                redoStack.push(JSON.stringify(captureSnapshot()));
+                const snap = JSON.parse(undoStack.pop());
+                redoStack.push(JSON.stringify(captureSnapshot(objectsMissingFrom(snap))));
 
-                applySnapshot(JSON.parse(undoStack.pop()));
+                applySnapshot(snap);
                 updateHistoryButtons();
             }
 
             function redo() {
                 if (!redoStack.length) return;
-                undoStack.push(JSON.stringify(captureSnapshot()));
+                const snap = JSON.parse(redoStack.pop());
+                undoStack.push(JSON.stringify(captureSnapshot(objectsMissingFrom(snap))));
 
-                applySnapshot(JSON.parse(redoStack.pop()));
+                applySnapshot(snap);
                 updateHistoryButtons();
             }
 
@@ -173,6 +242,23 @@
                         // Togli il focus dal controllo cosi' etichette/gizmo riflettono lo
                         // stato ripristinato (e la prossima scorciatoia non trova ostacoli).
                         if (t && typeof t.blur === 'function' && !isTextField) t.blur();
+                    }
+                    // Ctrl+X = taglia l'OGGETTO attivo (la X di Blender), senza chiedere
+                    // conferma: è un PASSO di cronologia come gli altri, quindi Ctrl+Z lo
+                    // riporta indietro e una conferma sarebbe solo attrito. Sta qui dentro
+                    // e non più in basso perché questo blocco esce su OGNI combinazione con
+                    // Ctrl: un ramo dopo il `return` non verrebbe mai raggiunto.
+                    if ((e.key === 'x' || e.key === 'X') && !e.shiftKey && !e.altKey) {
+                        if (isTextField) return;               // lascia il taglio nativo
+                        // Con una modale aperta la tastiera è sua, e sopra la timeline la X
+                        // è già "elimina i keyframe selezionati": in nessuno dei due casi
+                        // l'utente si aspetta di perdere un oggetto della scena.
+                        if (typeof tlModalOpen === 'function' && tlModalOpen()) return;
+                        if (typeof tlAreaActive === 'function' && tlAreaActive()) return;
+                        if (typeof objDelete !== 'function') return;
+                        e.preventDefault();
+                        objDelete({ conferma: false });
+                        if (t && typeof t.blur === 'function') t.blur();
                     }
                     return;
                 }

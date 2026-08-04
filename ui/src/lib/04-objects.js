@@ -498,11 +498,16 @@
             }
 
             // ===== T1 Fase B: operazioni oggetto =====
+            // Tutte spingono uno scatto di cronologia: aggiungere un oggetto è annullabile
+            // perché lo scatto porta la rosa degli oggetti di prima (restoreSceneMeta toglie
+            // chi è nato dopo), togliere un oggetto lo è perché lo scatto si porta dietro il
+            // suo contenuto (il secondo argomento di pushHistory). Vedi 13-history.js.
             function objNew() {
                 const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
                 if (hasContent) {
                     if (!confirm('Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)')) return;
                 }
+                if (typeof pushHistory === 'function') pushHistory();
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
                 const obj = createObject({ metadata: { name: 'Oggetto ' + nextObjectId, grid_size: gSize.slice() }, voxels: [] });
                 selectActiveObjectAndRefresh(obj.id);
@@ -511,6 +516,7 @@
             function objDuplicate() {
                 const active = getActiveObject();
                 if (!active) return;
+                if (typeof pushHistory === 'function') pushHistory();
                 const clone = JSON.parse(JSON.stringify(active.data));
                 clone.metadata = clone.metadata || {};
                 clone.metadata.name = (active.name || 'Oggetto') + ' (copia)';
@@ -531,26 +537,42 @@
                 const name = prompt('Nuovo nome per l\'oggetto:', active.name);
                 if (name === null) return;
                 const trimmed = name.trim();
-                if (trimmed) { active.name = trimmed; buildModel(false); }
+                // Il nome sta nella rosa degli scatti (sceneMeta), quindi basta lo scatto
+                // perché anche la rinomina si annulli con Ctrl+Z come le altre operazioni.
+                if (trimmed) {
+                    if (typeof pushHistory === 'function') pushHistory();
+                    active.name = trimmed;
+                    buildModel(false);
+                }
             }
 
-            function objDelete() {
+            // objDelete(opts) — `opts.conferma === false` salta la richiesta di conferma:
+            // è la via di Ctrl+X, che è già un passo annullabile. Attenzione: la funzione è
+            // agganciata ANCHE come listener del pulsante (11-symmetry-tools.js:111), quindi
+            // qui `opts` può essere un MouseEvent — il confronto esplicito con `false` è ciò
+            // che impedisce a un evento qualunque di spegnere la conferma.
+            // Torna true se qualcosa è stato davvero eliminato.
+            function objDelete(opts) {
+                const conferma = !(opts && opts.conferma === false);
                 const active = getActiveObject();
-                if (!active) return;
+                if (!active) return false;
                 if (activePartName) {
-                    if (!confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return;
+                    if (conferma && !confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return false;
                     if (typeof pushHistory === 'function') pushHistory();
                     active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                     activePartName = null;
                     if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
                     buildModel(false);
                     renderObjectsList();
-                    return;
+                    return true;
                 }
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"?')) return;
-                if (typeof pushHistory === 'function') pushHistory();
+                if (conferma && !confirm('Eliminare l\'oggetto "' + active.name + '"?')) return false;
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
-                if (idx === -1) return;
+                if (idx === -1) return false;
+                // Lo scatto si porta dietro il contenuto dell'oggetto che sta per sparire:
+                // è l'unico modo per farlo tornare con Ctrl+Z. Va preso PRIMA dello splice,
+                // e dopo il controllo qui sopra, o resterebbe uno scatto senza operazione.
+                if (typeof pushHistory === 'function') pushHistory([active]);
                 sceneObjects.splice(idx, 1);
                 selectedObjectIds = selectedObjectIds.filter(id => id !== active.id);
                 if (!sceneObjects.length) {
@@ -565,6 +587,7 @@
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 rebuildVoxelMap();
                 buildModel(false);
+                return true;
             }
 
             // Unisce gli oggetti spuntati (o attivo + un altro) in uno solo, portando i
@@ -587,6 +610,9 @@
                 if (toMerge.length < 2) { alert('Selezione non valida per l\'unione.'); return; }
 
                 const map = new Map(); // "x,y,z" -> color (ultimo vince)
+                // L'unione FA SPARIRE gli originali: lo scatto se li porta dietro tutti,
+                // altrimenti Ctrl+Z toglierebbe l'unione senza restituire i pezzi.
+                if (typeof pushHistory === 'function') pushHistory(toMerge);
                 toMerge.forEach(o => {
                     const tmp = { data: JSON.parse(JSON.stringify(o.data)), transform: o.transform };
                     bakeTransform(tmp);

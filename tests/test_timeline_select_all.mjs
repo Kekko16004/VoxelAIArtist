@@ -5,8 +5,10 @@
  *  1. Ctrl+A era scartato a monte (`if (ev.ctrlKey ...) return`, 33-timeline.js),
  *     quindi non arrivava mai: il ramo nuovo deve stare PRIMA di quel filtro.
  *  2. Ctrl+A e' rivendicato da altri due punti (gizmo globale in 01-scene-setup.js,
- *     rig in 15-rig.js). Fuori dall'area timeline l'evento NON va consumato,
- *     altrimenti si spegne il gizmo; dentro, va consumato del tutto.
+ *     rig in 15-rig.js). Dentro l'area timeline prende TUTTE le chiavi della clip;
+ *     fuori (la viewport, col personaggio in posa) prende tutte quelle del SOLO
+ *     frame corrente. In entrambi i casi l'evento si consuma solo se qualcosa e'
+ *     stato davvero selezionato: se non c'e' nulla, torna al gizmo globale.
  *  3. Ctrl+Shift+A e' del rig: la timeline non deve rubarlo.
  *
  * Le funzioni pure sulla selezione si estraggono dai sorgenti; il resto e' un
@@ -158,7 +160,8 @@ function makeScope() {
         tlVisible: true, chanOpen: false, modal: false,
         anim: null, drag: false, scrub: false
     };
-    const log = { prevented: 0, stopped: 0, selectAll: 0, selectAllRet: true, commits: 0 };
+    const log = { prevented: 0, stopped: 0, selectAll: 0, selectAllRet: true,
+                  selectCol: 0, selectColRet: true, commits: 0 };
 
     const src = `
     let tlAreaHover = false, tlAreaFocus = false, tlHoverLeavePending = false;
@@ -175,6 +178,7 @@ function makeScope() {
     function tlActiveAnim() { return S.anim; }
     ${tlSrc.slice(iAA, endOf(tlSrc, iAA))}
     function tlSelectAllKeys() { L.selectAll++; return L.selectAllRet; }
+    function tlSelectKeysAtCurrentFrame() { L.selectCol++; return L.selectColRet; }
     function tlCommit() { L.commits++; }
     function tlIsTogglePlayKey() { return false; }
     function tlIsActivatable() { return false; }
@@ -212,34 +216,40 @@ function makeScope() {
     return { api: new Function('S', 'L', src)(stato, log), S: stato, L: log };
 }
 
-console.log('[5] Ctrl+A: la timeline lo prende SOLO dentro la sua area');
+console.log('[5] Ctrl+A: dentro l\'area tutta la clip, fuori la colonna del frame');
 {
     const { api, S, L } = makeScope();
     const CTRL_A = ['a', { ctrlKey: true }];
 
-    // Fuori dall'area: l'evento deve passare al gizmo globale INTATTO.
-    const p0 = L.prevented, s0 = L.stopped, a0 = L.selectAll;
+    // FUORI dall'area = la viewport, col personaggio in posa a schermo. Non e'
+    // piu' un no-op: prende le chiavi del solo frame corrente. La timeline a
+    // schermo (tlVisible, gia' preteso in cima all'handler) e' il segnale "sono
+    // nel rigging", che e' esattamente la condizione chiesta.
+    const p0 = L.prevented, s0 = L.stopped, a0 = L.selectAll, c0 = L.selectCol;
     api.key(...CTRL_A);
-    ok(L.selectAll === a0, 'fuori dall\'area non seleziona nulla');
-    ok(L.prevented === p0 && L.stopped === s0,
-       'e non consuma l\'evento: il gizmo globale lo riceve ancora');
+    ok(L.selectCol === c0 + 1, 'fuori dall\'area seleziona la colonna del frame corrente');
+    ok(L.selectAll === a0, 'e NON tutta la clip: sono due meta\' distinte');
+    ok(L.prevented === p0 + 1 && L.stopped === s0 + 1,
+       'e consuma l\'evento, altrimenti il gizmo si sgancerebbe di nascosto');
 
-    // Dentro l'area: seleziona e consuma.
+    // Dentro l'area: tutta la clip, come prima.
     api.enter();
     api.key(...CTRL_A);
-    ok(L.selectAll === a0 + 1, 'dentro l\'area seleziona');
-    ok(L.prevented === p0 + 1 && L.stopped === s0 + 1, 'e consuma l\'evento');
+    ok(L.selectAll === a0 + 1, 'dentro l\'area seleziona tutta la clip');
+    ok(L.selectCol === c0 + 1, 'e li\' la colonna non c\'entra');
+    ok(L.prevented === p0 + 2 && L.stopped === s0 + 2, 'e consuma l\'evento');
 
     // Il filtro che scartava Ctrl a monte: se il ramo tornasse dopo di quello,
     // questa asserzione cadrebbe. E' la stessa cosa che il vecchio confronto
     // di indici voleva dire, ma misurata sull'effetto.
     ok(L.selectAll === a0 + 1, 'il ramo e\' raggiungibile: ctrlKey non lo scarta a monte');
 
-    // Ctrl+Shift+A e' del rig, Ctrl+Alt+A di nessuno.
-    const a1 = L.selectAll, p1 = L.prevented;
+    // Ctrl+Shift+A e' del rig, Ctrl+Alt+A di nessuno. Ne' la meta' "clip" ne'
+    // la meta' "colonna" devono scattare.
+    const a1 = L.selectAll, c1 = L.selectCol, p1 = L.prevented;
     api.key('a', { ctrlKey: true, shiftKey: true });
     api.key('a', { ctrlKey: true, altKey: true });
-    ok(L.selectAll === a1, 'Ctrl+Shift+A e Ctrl+Alt+A non li tocca');
+    ok(L.selectAll === a1 && L.selectCol === c1, 'Ctrl+Shift+A e Ctrl+Alt+A non li tocca');
     ok(L.prevented === p1, 'e non li consuma: restano del rig');
 
     // Maiuscola (BlocMaiusc attivo) e Cmd su Mac.
@@ -248,27 +258,42 @@ console.log('[5] Ctrl+A: la timeline lo prende SOLO dentro la sua area');
     api.key('a', { metaKey: true });
     ok(L.selectAll === a1 + 2, 'e con Cmd su Mac');
 
-    // Una modale aperta, o la timeline nascosta, hanno la priorita'.
-    const a2 = L.selectAll;
+    // Una modale aperta, o la timeline nascosta, hanno la priorita' su ENTRAMBE
+    // le meta': la guardia sta prima della biforcazione.
+    const a2 = L.selectAll, c2 = L.selectCol;
     S.modal = true;  api.key(...CTRL_A);
     S.modal = false; S.tlVisible = false; api.key(...CTRL_A);
     S.tlVisible = true;
-    ok(L.selectAll === a2, 'con una modale aperta o la timeline nascosta non fa nulla');
+    ok(L.selectAll === a2 && L.selectCol === c2,
+       'con una modale aperta o la timeline nascosta non fa nulla');
 
     // Se non c'era niente da selezionare (preset in sola lettura), l'evento
     // NON va consumato: sarebbe una scorciatoia che inghiotte il tasto e non fa
-    // niente, e il gizmo non scatterebbe piu'.
+    // niente, e il gizmo non scatterebbe piu'. Vale per tutte e due le meta'.
     L.selectAllRet = false;
     const p3 = L.prevented;
-    api.key(...CTRL_A);
-    ok(L.prevented === p3, 'se non c\'e\' nulla da selezionare lascia passare l\'evento');
+    api.key(...CTRL_A);                       // dentro l'area (api.enter() sopra)
+    ok(L.prevented === p3, 'clip vuota: lascia passare l\'evento');
     L.selectAllRet = true;
+
+    {
+        // Stessa cosa per la colonna: un frame senza chiavi sotto il playhead
+        // e' il caso normale (le chiavi stanno solo su alcuni frame), e li'
+        // Ctrl+A deve restare del gizmo globale invece di non fare nulla.
+        const { api: v, L: Lv } = makeScope();     // area NON attiva: viewport
+        Lv.selectColRet = false;
+        v.key('a', { ctrlKey: true });
+        ok(Lv.selectCol === 1, 'nella vista prova comunque a prendere la colonna');
+        ok(Lv.prevented === 0 && Lv.stopped === 0,
+           'ma su un frame senza chiavi lascia passare l\'evento al gizmo');
+    }
 
     // Focus dentro il dock invece del puntatore sopra: stessa cosa.
     const { api: api2, L: L2 } = makeScope();
     api2.setFocus(true);
     api2.key('a', { ctrlKey: true });
-    ok(L2.selectAll === 1, 'basta il focus dentro il dock, senza puntatore sopra');
+    ok(L2.selectAll === 1 && L2.selectCol === 0,
+       'basta il focus dentro il dock, senza puntatore sopra');
 }
 
 console.log('[6] chi sta SCRIVENDO tiene Ctrl+A: la timeline non lo inghiotte');
@@ -292,11 +317,24 @@ console.log('[6] chi sta SCRIVENDO tiene Ctrl+A: la timeline non lo inghiotte');
         ['<input> senza type (default text)', { tagName: 'INPUT' }]
     ];
     for (const [nome, target] of campi) {
-        const a0 = L.selectAll, p0 = L.prevented, s0 = L.stopped;
+        const a0 = L.selectAll, p0 = L.prevented, s0 = L.stopped, c0 = L.selectCol;
         api.key('a', { ctrlKey: true, target });
-        ok(L.selectAll === a0, 'con il fuoco in ' + nome + ' non seleziona i keyframe');
+        ok(L.selectAll === a0 && L.selectCol === c0,
+           'con il fuoco in ' + nome + ' non seleziona i keyframe');
         ok(L.prevented === p0 && L.stopped === s0,
            'e non consuma l\'evento: il campo riceve il suo "seleziona tutto"');
+    }
+
+    // Stesso caso ma col puntatore FUORI dal dock, dove ora c'e' la meta'
+    // "colonna": la guardia sta prima della biforcazione, quindi deve fermare
+    // anche quella. Senza questo caso si potrebbe scrivere nel prompt AI e
+    // vedersi selezionare le chiavi del frame corrente.
+    {
+        const { api: v, L: Lv } = makeScope();     // niente enter(): viewport
+        v.key('a', { ctrlKey: true, target: { tagName: 'TEXTAREA' } });
+        ok(Lv.selectCol === 0 && Lv.selectAll === 0,
+           'con il fuoco nel prompt AI non prende nemmeno la colonna');
+        ok(Lv.prevented === 0, 'e lascia passare l\'evento');
     }
 
     // Lo slider e' escluso da TUTTA la guardia del keydown, Ctrl+A compreso
@@ -354,9 +392,10 @@ console.log('[7] l\'uscita a meta\' gesto non lascia il flag acceso per sempre')
     api.endGesture();
     ok(api.hover() === false, 'a gesto finito FUORI dal dock l\'area si spegne');
     ok(api.pending() === false, 'e il promemoria si consuma');
-    const a1 = L.selectAll;
+    const a1 = L.selectAll, cc1 = L.selectCol;
     api.key('a', { ctrlKey: true });
-    ok(L.selectAll === a1, 'Ctrl+A torna al gizmo globale');
+    ok(L.selectAll === a1 && L.selectCol === cc1 + 1,
+       'e Ctrl+A passa alla meta\' "colonna": non e\' piu\' tutta la clip');
 
     // Il caso opposto: gesto finito DENTRO il dock, l'area deve restare attiva.
     const { api: b, S: Sb, L: Lb } = makeScope();

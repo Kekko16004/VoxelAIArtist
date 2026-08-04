@@ -429,6 +429,33 @@
                 return true;
             }
 
+            // Ctrl+A premuto FUORI dal dock (tipicamente nella viewport, col personaggio
+            // in posa): seleziona tutte le chiavi del SOLO frame dove sta il playhead —
+            // la "colonna" sotto l'indicatore. E' la meta' complementare di
+            // tlSelectAllKeys: nella timeline si prende tutto, nella vista si prende
+            // tutto ma di quell'istante.
+            //
+            // Il confronto passa per tlTimeOfFrame e non per tlFrame: le chiavi vivono
+            // sulla griglia dei frame (tlSnapTime), quindi il tempo del frame corrente
+            // le becca esatte. Il playhead puo' essere frazionario durante il play, da
+            // qui il Math.round.
+            //
+            // Stesso toggle di tlSelectAllKeys: ripremendo con la colonna gia' tutta
+            // selezionata la selezione si svuota, altrimenti da tastiera non ci sarebbe
+            // modo di deselezionare.
+            function tlSelectKeysAtCurrentFrame() {
+                if (tlChanMenuOpen()) tlCloseChanMenu();
+                const col = tlKeysAtTime(tlActiveAnim(), tlTimeOfFrame(Math.round(tlFrame)));
+                if (!col.length) return false;
+                const giaTutte = col.every(k => tlIsSelectedKey(k.bone, k.t))
+                    && tlSelected.length === col.length;
+                tlSelected = giaTutte ? [] : col;
+                // La selezione NON e' stato del documento: nessun pushHistory().
+                tlRedraw();
+                tlUpdateToolbar();
+                return true;
+            }
+
             // Quali canali contiene la chiave di quell'osso a quel tempo. Serve al
             // tooltip del rombo: senza, una chiave di sola Location e una completa
             // sono indistinguibili a schermo.
@@ -1411,13 +1438,23 @@
                     // slider, non il frame corrente.
                     const isRange = !!(el && el.tagName === 'INPUT' && el.type === 'range');
                     if (isTypingTarget(ev) || isRange) return;
-                    // Ctrl+A appartiene alla timeline solo quando si e' DENTRO la sua
-                    // area: fuori resta del gizmo globale (01-scene-setup.js). Shift e Alt
-                    // esclusi: Ctrl+Shift+A e' del rig (15-rig.js).
+                    // Ctrl+A e' diviso in due meta', per dove si trova il puntatore.
+                    // DENTRO il dock: tutte le chiavi della clip (tlSelectAllKeys).
+                    // FUORI (la viewport, col personaggio a schermo): tutte le chiavi
+                    // del SOLO frame corrente — la colonna sotto il playhead. La
+                    // timeline a schermo (tlVisible) e' gia' il segnale "sono nel
+                    // rigging": tlVisible lo accende timelineSync() solo con un rig e
+                    // l'anteprima attiva.
+                    // Se non c'e' nulla da selezionare nessuna delle due consuma
+                    // l'evento, e Ctrl+A torna al gizmo globale (01-scene-setup.js).
+                    // Shift e Alt esclusi: Ctrl+Shift+A e' del rig (15-rig.js).
                     if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey
                         && (ev.key === 'a' || ev.key === 'A')) {
-                        if (!tlAreaActive() || tlModalOpen()) return;
-                        if (tlSelectAllKeys()) {
+                        if (tlModalOpen()) return;
+                        const preso = tlAreaActive()
+                            ? tlSelectAllKeys()
+                            : tlSelectKeysAtCurrentFrame();
+                        if (preso) {
                             ev.preventDefault();
                             ev.stopImmediatePropagation();
                         }

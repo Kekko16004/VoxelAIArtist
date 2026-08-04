@@ -4949,11 +4949,16 @@
             }
 
             // ===== T1 Fase B: operazioni oggetto =====
+            // Tutte spingono uno scatto di cronologia: aggiungere un oggetto è annullabile
+            // perché lo scatto porta la rosa degli oggetti di prima (restoreSceneMeta toglie
+            // chi è nato dopo), togliere un oggetto lo è perché lo scatto si porta dietro il
+            // suo contenuto (il secondo argomento di pushHistory). Vedi 13-history.js.
             function objNew() {
                 const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
                 if (hasContent) {
                     if (!confirm('Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)')) return;
                 }
+                if (typeof pushHistory === 'function') pushHistory();
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
                 const obj = createObject({ metadata: { name: 'Oggetto ' + nextObjectId, grid_size: gSize.slice() }, voxels: [] });
                 selectActiveObjectAndRefresh(obj.id);
@@ -4962,6 +4967,7 @@
             function objDuplicate() {
                 const active = getActiveObject();
                 if (!active) return;
+                if (typeof pushHistory === 'function') pushHistory();
                 const clone = JSON.parse(JSON.stringify(active.data));
                 clone.metadata = clone.metadata || {};
                 clone.metadata.name = (active.name || 'Oggetto') + ' (copia)';
@@ -4982,26 +4988,42 @@
                 const name = prompt('Nuovo nome per l\'oggetto:', active.name);
                 if (name === null) return;
                 const trimmed = name.trim();
-                if (trimmed) { active.name = trimmed; buildModel(false); }
+                // Il nome sta nella rosa degli scatti (sceneMeta), quindi basta lo scatto
+                // perché anche la rinomina si annulli con Ctrl+Z come le altre operazioni.
+                if (trimmed) {
+                    if (typeof pushHistory === 'function') pushHistory();
+                    active.name = trimmed;
+                    buildModel(false);
+                }
             }
 
-            function objDelete() {
+            // objDelete(opts) — `opts.conferma === false` salta la richiesta di conferma:
+            // è la via di Ctrl+X, che è già un passo annullabile. Attenzione: la funzione è
+            // agganciata ANCHE come listener del pulsante (11-symmetry-tools.js:111), quindi
+            // qui `opts` può essere un MouseEvent — il confronto esplicito con `false` è ciò
+            // che impedisce a un evento qualunque di spegnere la conferma.
+            // Torna true se qualcosa è stato davvero eliminato.
+            function objDelete(opts) {
+                const conferma = !(opts && opts.conferma === false);
                 const active = getActiveObject();
-                if (!active) return;
+                if (!active) return false;
                 if (activePartName) {
-                    if (!confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return;
+                    if (conferma && !confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return false;
                     if (typeof pushHistory === 'function') pushHistory();
                     active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                     activePartName = null;
                     if (typeof rebuildVoxelMap === 'function') rebuildVoxelMap();
                     buildModel(false);
                     renderObjectsList();
-                    return;
+                    return true;
                 }
-                if (!confirm('Eliminare l\'oggetto "' + active.name + '"?')) return;
-                if (typeof pushHistory === 'function') pushHistory();
+                if (conferma && !confirm('Eliminare l\'oggetto "' + active.name + '"?')) return false;
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
-                if (idx === -1) return;
+                if (idx === -1) return false;
+                // Lo scatto si porta dietro il contenuto dell'oggetto che sta per sparire:
+                // è l'unico modo per farlo tornare con Ctrl+Z. Va preso PRIMA dello splice,
+                // e dopo il controllo qui sopra, o resterebbe uno scatto senza operazione.
+                if (typeof pushHistory === 'function') pushHistory([active]);
                 sceneObjects.splice(idx, 1);
                 selectedObjectIds = selectedObjectIds.filter(id => id !== active.id);
                 if (!sceneObjects.length) {
@@ -5016,6 +5038,7 @@
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
                 rebuildVoxelMap();
                 buildModel(false);
+                return true;
             }
 
             // Unisce gli oggetti spuntati (o attivo + un altro) in uno solo, portando i
@@ -5038,6 +5061,9 @@
                 if (toMerge.length < 2) { alert('Selezione non valida per l\'unione.'); return; }
 
                 const map = new Map(); // "x,y,z" -> color (ultimo vince)
+                // L'unione FA SPARIRE gli originali: lo scatto se li porta dietro tutti,
+                // altrimenti Ctrl+Z toglierebbe l'unione senza restituire i pezzi.
+                if (typeof pushHistory === 'function') pushHistory(toMerge);
                 toMerge.forEach(o => {
                     const tmp = { data: JSON.parse(JSON.stringify(o.data)), transform: o.transform };
                     bakeTransform(tmp);
@@ -6503,16 +6529,38 @@
 
             // T1 Fase B: cattura voxel dell'ATTIVO + rig + struttura scena (nomi, transform,
             // visibilità, quale è attivo). LIMITE noto: NON cattura i voxel degli oggetti
-            // non attivi, e non ripristina aggiunte/eliminazioni di oggetti (solo attributi
-            // di quelli tuttora esistenti). Le operazioni Nuovo/Duplica/Elimina/Unisci non
-            // sono quindi annullabili con Ctrl+Z (per scelta: evitare snapshot pesanti).
+            // non attivi, quindi una pennellata annullata torna indietro solo sull'oggetto
+            // su cui è stata data.
             // Corollario da NON dimenticare: uno scatto vale per l'oggetto che era attivo
             // quando è stato preso. Chi lo ripristina deve prima tornare su quell'oggetto,
             // altrimenti ne svuota un altro — vedi applySnapshot e
             // tests/test_undo_object_switch.mjs.
-            function captureSnapshot() {
+            //
+            // La ROSA degli oggetti (`sceneMeta`, in ordine di scena) invece è completa, e
+            // da lì viene l'annullamento di Nuovo/Duplica/Primitiva/Elimina/Unisci:
+            //  - un oggetto che esiste ORA ma non è nella rosa è nato dopo lo scatto -> via;
+            //  - un oggetto della rosa che non esiste più torna, ma solo se lo scatto ne
+            //    porta il contenuto in `payloads`.
+            // I payload costano, quindi NON sono in ogni scatto: li allega chi sta per far
+            // sparire qualcosa (objDelete, objMerge, Ctrl+X) e undo/redo, che calcolano da
+            // sé chi sparirà applicando lo scatto opposto. Uno scatto di pennellata resta
+            // leggero come prima.
+            function snapshotObjectPayload(o) {
+                return {
+                    id: o.id, name: o.name, visible: o.visible,
+                    transform: JSON.parse(JSON.stringify(o.transform || makeDefaultTransform())),
+                    data: JSON.parse(JSON.stringify(o.data || { metadata: {}, voxels: [] })),
+                    rig: o.rig ? JSON.parse(JSON.stringify(o.rig)) : null
+                };
+            }
+
+            function captureSnapshot(carry) {
+                // pushHistory è agganciato direttamente come listener (15-rig.js:2560),
+                // quindi qui può arrivare un Event al posto della lista: filtrarlo.
+                const portati = Array.isArray(carry) ? carry.filter(Boolean) : [];
                 return {
                     voxels: JSON.parse(JSON.stringify(currentModelData.voxels || [])),
+                    payloads: portati.map(snapshotObjectPayload),
                     // Copia PROFONDA e completa del rig: prima mancavano `customAnims` (un
                     // Ctrl+Z dopo aver generato un'animazione AI la cancellava) e `weights`
                     // (annullava le correzioni del weight paint senza poterle ripristinare).
@@ -6535,22 +6583,63 @@
                 };
             }
 
-            function pushHistory() {
-                undoStack.push(JSON.stringify(captureSnapshot()));
+            function pushHistory(carry) {
+                undoStack.push(JSON.stringify(captureSnapshot(carry)));
                 if (undoStack.length > MAX_HISTORY) undoStack.shift();
                 redoStack.length = 0;
                 updateHistoryButtons();
             }
 
+            // Gli oggetti che spariranno applicando `target`: sono quelli il cui contenuto
+            // va allegato allo scatto INVERSO, altrimenti il movimento opposto non ha più i
+            // loro voxel per farli tornare.
+            function objectsMissingFrom(target) {
+                if (!target || !Array.isArray(target.sceneMeta)) return [];
+                const ids = new Set(target.sceneMeta.map(m => m.id));
+                return sceneObjects.filter(o => !ids.has(o.id));
+            }
+
             function restoreSceneMeta(snap) {
                 if (Array.isArray(snap.sceneMeta)) {
-                    snap.sceneMeta.forEach(m => {
+                    const rosa = snap.sceneMeta;
+                    const idsRosa = new Set(rosa.map(m => m.id));
+                    // 1. Via chi è nato DOPO lo scatto (Nuovo / Duplica / Shift+A / Unisci).
+                    if (sceneObjects.some(o => !idsRosa.has(o.id))) {
+                        sceneObjects = sceneObjects.filter(o => idsRosa.has(o.id));
+                        if (typeof selectedObjectIds !== 'undefined') {
+                            selectedObjectIds = selectedObjectIds.filter(id => idsRosa.has(id));
+                        }
+                    }
+                    // 2. Torna chi era stato eliminato, se lo scatto ne porta il contenuto.
+                    //    createObject accetta un id esplicito e tiene nextObjectId davanti,
+                    //    così l'oggetto risorge con la propria identità e non con una nuova.
+                    (Array.isArray(snap.payloads) ? snap.payloads : []).forEach(p => {
+                        if (!p || sceneObjects.some(o => o.id === p.id)) return;
+                        const obj = createObject(JSON.parse(JSON.stringify(p.data)), {
+                            id: p.id, visible: p.visible,
+                            transform: JSON.parse(JSON.stringify(p.transform || makeDefaultTransform()))
+                        });
+                        if (p.name) obj.name = p.name;
+                        if (p.rig) obj.rig = JSON.parse(JSON.stringify(p.rig));
+                    });
+                    // 3. createObject accoda in fondo: rimette l'ordine di scena dello scatto.
+                    const posto = new Map(rosa.map((m, k) => [m.id, k]));
+                    sceneObjects.sort((a, b) =>
+                        (posto.has(a.id) ? posto.get(a.id) : Infinity)
+                        - (posto.has(b.id) ? posto.get(b.id) : Infinity));
+                    // 4. Attributi (nome, visibilità, transform) di tutti quelli in rosa.
+                    rosa.forEach(m => {
                         const obj = sceneObjects.find(o => o.id === m.id);
                         if (obj) { obj.name = m.name; obj.visible = m.visible; obj.transform = m.transform; }
                     });
                 }
                 if (snap.activeObjectId != null && sceneObjects.some(o => o.id === snap.activeObjectId)) {
                     setActiveObject(snap.activeObjectId);
+                } else if (!sceneObjects.some(o => o.id === activeObjectId) && sceneObjects.length) {
+                    // L'attivo è stato appena tolto di scena e lo scatto non ne indica un
+                    // altro: senza questa riga currentModelData resterebbe puntato su un
+                    // oggetto che non c'è più e il buildModel disegnerebbe un fantasma.
+                    setActiveObject(sceneObjects[0].id);
                 }
             }
 
@@ -6632,19 +6721,25 @@
                 restoreRigFromSnapshot(snap);
             }
 
+            // Lo scatto opposto si prende PRIMA di applicare, e deve portarsi dietro il
+            // contenuto degli oggetti che l'applicazione sta per far sparire: è ciò che
+            // rende reversibile anche il ritorno. Senza, Ctrl+Z toglie la primitiva appena
+            // creata e Ctrl+Y non ha più i suoi voxel per rimetterla.
             function undo() {
                 if (!undoStack.length) return;
-                redoStack.push(JSON.stringify(captureSnapshot()));
+                const snap = JSON.parse(undoStack.pop());
+                redoStack.push(JSON.stringify(captureSnapshot(objectsMissingFrom(snap))));
 
-                applySnapshot(JSON.parse(undoStack.pop()));
+                applySnapshot(snap);
                 updateHistoryButtons();
             }
 
             function redo() {
                 if (!redoStack.length) return;
-                undoStack.push(JSON.stringify(captureSnapshot()));
+                const snap = JSON.parse(redoStack.pop());
+                undoStack.push(JSON.stringify(captureSnapshot(objectsMissingFrom(snap))));
 
-                applySnapshot(JSON.parse(redoStack.pop()));
+                applySnapshot(snap);
                 updateHistoryButtons();
             }
 
@@ -6671,6 +6766,23 @@
                         // Togli il focus dal controllo cosi' etichette/gizmo riflettono lo
                         // stato ripristinato (e la prossima scorciatoia non trova ostacoli).
                         if (t && typeof t.blur === 'function' && !isTextField) t.blur();
+                    }
+                    // Ctrl+X = taglia l'OGGETTO attivo (la X di Blender), senza chiedere
+                    // conferma: è un PASSO di cronologia come gli altri, quindi Ctrl+Z lo
+                    // riporta indietro e una conferma sarebbe solo attrito. Sta qui dentro
+                    // e non più in basso perché questo blocco esce su OGNI combinazione con
+                    // Ctrl: un ramo dopo il `return` non verrebbe mai raggiunto.
+                    if ((e.key === 'x' || e.key === 'X') && !e.shiftKey && !e.altKey) {
+                        if (isTextField) return;               // lascia il taglio nativo
+                        // Con una modale aperta la tastiera è sua, e sopra la timeline la X
+                        // è già "elimina i keyframe selezionati": in nessuno dei due casi
+                        // l'utente si aspetta di perdere un oggetto della scena.
+                        if (typeof tlModalOpen === 'function' && tlModalOpen()) return;
+                        if (typeof tlAreaActive === 'function' && tlAreaActive()) return;
+                        if (typeof objDelete !== 'function') return;
+                        e.preventDefault();
+                        objDelete({ conferma: false });
+                        if (t && typeof t.blur === 'function') t.blur();
                     }
                     return;
                 }
@@ -17320,6 +17432,33 @@ async function voxelizeScene(gltfScene, options) {
                 return true;
             }
 
+            // Ctrl+A premuto FUORI dal dock (tipicamente nella viewport, col personaggio
+            // in posa): seleziona tutte le chiavi del SOLO frame dove sta il playhead —
+            // la "colonna" sotto l'indicatore. E' la meta' complementare di
+            // tlSelectAllKeys: nella timeline si prende tutto, nella vista si prende
+            // tutto ma di quell'istante.
+            //
+            // Il confronto passa per tlTimeOfFrame e non per tlFrame: le chiavi vivono
+            // sulla griglia dei frame (tlSnapTime), quindi il tempo del frame corrente
+            // le becca esatte. Il playhead puo' essere frazionario durante il play, da
+            // qui il Math.round.
+            //
+            // Stesso toggle di tlSelectAllKeys: ripremendo con la colonna gia' tutta
+            // selezionata la selezione si svuota, altrimenti da tastiera non ci sarebbe
+            // modo di deselezionare.
+            function tlSelectKeysAtCurrentFrame() {
+                if (tlChanMenuOpen()) tlCloseChanMenu();
+                const col = tlKeysAtTime(tlActiveAnim(), tlTimeOfFrame(Math.round(tlFrame)));
+                if (!col.length) return false;
+                const giaTutte = col.every(k => tlIsSelectedKey(k.bone, k.t))
+                    && tlSelected.length === col.length;
+                tlSelected = giaTutte ? [] : col;
+                // La selezione NON e' stato del documento: nessun pushHistory().
+                tlRedraw();
+                tlUpdateToolbar();
+                return true;
+            }
+
             // Quali canali contiene la chiave di quell'osso a quel tempo. Serve al
             // tooltip del rombo: senza, una chiave di sola Location e una completa
             // sono indistinguibili a schermo.
@@ -18302,13 +18441,23 @@ async function voxelizeScene(gltfScene, options) {
                     // slider, non il frame corrente.
                     const isRange = !!(el && el.tagName === 'INPUT' && el.type === 'range');
                     if (isTypingTarget(ev) || isRange) return;
-                    // Ctrl+A appartiene alla timeline solo quando si e' DENTRO la sua
-                    // area: fuori resta del gizmo globale (01-scene-setup.js). Shift e Alt
-                    // esclusi: Ctrl+Shift+A e' del rig (15-rig.js).
+                    // Ctrl+A e' diviso in due meta', per dove si trova il puntatore.
+                    // DENTRO il dock: tutte le chiavi della clip (tlSelectAllKeys).
+                    // FUORI (la viewport, col personaggio a schermo): tutte le chiavi
+                    // del SOLO frame corrente — la colonna sotto il playhead. La
+                    // timeline a schermo (tlVisible) e' gia' il segnale "sono nel
+                    // rigging": tlVisible lo accende timelineSync() solo con un rig e
+                    // l'anteprima attiva.
+                    // Se non c'e' nulla da selezionare nessuna delle due consuma
+                    // l'evento, e Ctrl+A torna al gizmo globale (01-scene-setup.js).
+                    // Shift e Alt esclusi: Ctrl+Shift+A e' del rig (15-rig.js).
                     if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey
                         && (ev.key === 'a' || ev.key === 'A')) {
-                        if (!tlAreaActive() || tlModalOpen()) return;
-                        if (tlSelectAllKeys()) {
+                        if (tlModalOpen()) return;
+                        const preso = tlAreaActive()
+                            ? tlSelectAllKeys()
+                            : tlSelectKeysAtCurrentFrame();
+                        if (preso) {
                             ev.preventDefault();
                             ev.stopImmediatePropagation();
                         }

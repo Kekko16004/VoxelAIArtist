@@ -184,6 +184,18 @@ run "Primitive: dialogo e scorciatoia (Node)" node tests/test_primitives_ui.mjs
 #         ed e' la fix "ovvia" e sbagliata.
 run "Undo con cambio oggetto (Node)" node tests/test_undo_object_switch.mjs
 
+# 4d-ter-quater. Ctrl+X = taglia l'oggetto attivo (la X di Blender). Il blocco
+#         `if (e.ctrlKey || e.metaKey)` di 13-history.js esce con un `return`
+#         incondizionato, quindi una gestione scritta piu' in basso nello stesso
+#         handler non verrebbe MAI eseguita e il tasto sembrerebbe morto. Il test
+#         esegue il vero blocco e la vera objDelete, e tiene ferme le guardie:
+#         niente taglio in un campo di testo, sotto una modale o sopra la
+#         timeline (dove la X elimina gia' i keyframe). Verifica anche che il
+#         confronto `opts.conferma === false` resti ESPLICITO: objDelete e'
+#         agganciata anche come listener del pulsante, quindi un controllo di
+#         verita' farebbe sparire l'oggetto senza chiedere nulla.
+run "Ctrl+X taglia l'oggetto (Node)" node tests/test_object_cut.mjs
+
 # 4d-quater. Ctrl+A nella timeline = seleziona tutti i keyframe. La scorciatoia era
 #         rivendicata da TRE punti (timeline, gizmo globale, rig) e la timeline la
 #         scartava a monte con `if (ev.ctrlKey ...) return`, quindi non ci arrivava
@@ -200,6 +212,16 @@ run "Ctrl+A sui keyframe (Node)" node tests/test_timeline_select_all.mjs
 #         azzera la selezione e fa scrubbing. Il test ESEGUE il vero handler su un
 #         DOM finto e guarda le posizioni delle chiavi, non il testo del sorgente.
 run "Trascinamento dal Summary (Node)" node tests/test_timeline_summary_drag.mjs
+
+# 4d-quater-ter. L'altra meta' di Ctrl+A: premuto nella VISTA (col personaggio in
+#         posa, non sopra la timeline) deve selezionare tutte le chiavi ma del SOLO
+#         frame dove sta il playhead - la colonna sotto l'indicatore. Le trappole
+#         sono la conversione frame->secondi (al frame 0 i due valori coincidono
+#         per caso, quindi un confronto sbagliato sembra funzionare), il playhead
+#         frazionario durante la riproduzione, e il frame senza chiavi: li' deve
+#         riportare false, altrimenti consuma il tasto senza fare nulla e spegne
+#         anche il gizmo globale.
+run "Ctrl+A nella vista: colonna del frame (Node)" node tests/test_timeline_select_frame.mjs
 
 # 4d-quinquies. Persistenza dei pannelli del pannello destro: i quattro <details
 #         class="rp-section"> (Outliner, Proprieta', Palette, Vista) devono
