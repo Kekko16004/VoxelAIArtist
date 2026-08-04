@@ -47,10 +47,11 @@ function check(name, cond, detail) {
 //
 // Distinguere `/` divisione da `/` inizio-di-regex non si puo' fare senza
 // parsare: la regola pratica e' guardare l'ultimo token significativo. Dopo un
-// valore (identificatore, numero, `)`, `]`, `}`) la barra e' una divisione;
-// in ogni altra posizione e' un letterale regex. Eccezione: una PAROLA CHIAVE
-// finisce per lettera ma non e' un valore, quindi `return /["]/` apre una
-// regex. Oggi nel repo non ce n'e' nessuna, ma costa una riga tenerne conto.
+// VALORE (identificatore, numero, `)`, `]`, `}`, o una stringa appena chiusa)
+// la barra e' una divisione; in ogni altra posizione e' un letterale regex.
+// Eccezione: una PAROLA CHIAVE finisce per lettera ma non e' un valore, quindi
+// `return /["]/` apre una regex. Oggi nel repo non ce n'e' nessuna, ma costa
+// una riga tenerne conto -- e va tenuta viva attraverso gli spazi, vedi sotto.
 const KEYWORDS = new Set(['return', 'typeof', 'case', 'in', 'of', 'new', 'delete',
   'void', 'instanceof', 'do', 'else', 'yield', 'await', 'throw']);
 function tokenize(src) {
@@ -59,9 +60,10 @@ function tokenize(src) {
   let quote = null;        // delimitatore di stringa aperto
   let depth = 0;           // profondita' dei commenti di blocco (0 o 1)
   let prev = '';           // ultimo carattere significativo visto
-  let word = '';           // parola in corso, per riconoscere le keyword
+  let word = '';           // ultima parola vista, per riconoscere le keyword
+  let dotted = false;      // ...ed era preceduta da un punto? (obj.in NON e' `in`)
   const startsRegex = () => {
-    if (word && KEYWORDS.has(word)) return true;
+    if (word && !dotted && KEYWORDS.has(word)) return true;
     return !/[A-Za-z0-9_$)\]}]/.test(prev);
   };
   while (i < src.length) {
@@ -69,11 +71,17 @@ function tokenize(src) {
     if (quote) {
       out += c;
       if (c === '\\') { out += (n === undefined ? '' : n); i += 2; continue; }
-      if (c === quote) quote = null;
+      // Stringa CHIUSA: e' un valore, quindi la barra che segue e' una
+      // divisione. Senza aggiornare prev qui restava il delimitatore di
+      // APERTURA, e `"ab" / 2` veniva letto come un letterale regex che si
+      // mangiava il resto della riga -- in silenzio, perche' il file finiva
+      // comunque in stato pulito e la rete della desincronizzazione non
+      // scattava.
+      if (c === quote) { quote = null; prev = 'x'; word = ''; dotted = false; }
       i++;
       continue;
     }
-    if (c === '"' || c === "'" || c === '`') { quote = c; out += c; prev = c; word = ''; i++; continue; }
+    if (c === '"' || c === "'" || c === '`') { quote = c; out += c; prev = c; word = ''; dotted = false; i++; continue; }
     if (c === '/' && n === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
     if (c === '/' && n === '*') {
       depth = 1; i += 2;
@@ -97,11 +105,22 @@ function tokenize(src) {
       }
       prev = 'x';   // una regex e' un valore: la barra successiva e' divisione
       word = '';
+      dotted = false;
       continue;
     }
     out += c;
-    if (/[A-Za-z0-9_$]/.test(c)) word += c;
-    else word = '';
+    // `word` NON va azzerata sugli spazi, o l'eccezione delle keyword sarebbe
+    // morta: in `return /re/` fra la parola e la barra c'e' uno spazio, quindi
+    // al momento del controllo word sarebbe gia' vuota e prev sarebbe 'n' --
+    // cioe' "divisione", che e' esattamente il caso da evitare. Solo un
+    // carattere non-spazio e non-identificatore chiude la parola.
+    if (/[A-Za-z0-9_$]/.test(c)) {
+      if (!word) dotted = (prev === '.');
+      word += c;
+    } else if (!/\s/.test(c)) {
+      word = '';
+      dotted = false;
+    }
     if (!/\s/.test(c)) prev = c;
     i++;
   }
@@ -229,13 +248,36 @@ check('un letterale regex con virgoletta non apre una stringa',
 check('la stringa dopo un letterale regex e\' ancora visibile',
   reProbe.out.includes('seleziona un colore'), 'la stringa dopo la regex e\' andata perduta');
 // La barra ESCAPATA dentro una regex: /\// non finisce alla seconda barra.
-const escProbe = tokenize(`const p = str.replace(/\\//g, "-");\nconst msg = "seleziona il colore";`);
+// La stringa bersaglio sta sulla STESSA riga di proposito: il difetto era che
+// `\` seguito da `//` veniva preso per un commento di RIGA, quindi una sonda
+// che mettesse il bersaglio sulla riga dopo passerebbe anche col difetto
+// presente, e non proverebbe niente.
+const escProbe = tokenize(`const p = str.replace(/\\//g, "-"); const msg = "seleziona il colore";`);
 check('la barra escapata in una regex non tronca la riga',
   escProbe.out.includes('seleziona il colore'), 'la stringa dopo /\\// e\' andata perduta');
 // La divisione NON deve essere letta come regex, o si mangerebbe il codice.
 const divProbe = tokenize(`const r = (a) / (b); const t = "non toccare questo";`);
 check('una divisione non viene letta come letterale regex',
   divProbe.out.includes('non toccare questo'), 'la divisione ha inghiottito il resto');
+// L'eccezione delle keyword deve sopravvivere allo SPAZIO: `return /re/` si
+// scrive cosi', non attaccato. Azzerando la parola sugli spazi il controllo
+// vedeva word='' e prev='n' e decideva "divisione", cioe' l'eccezione era
+// morta e la forma normale restava scoperta.
+const kwProbe = tokenize(`return /["]/g.test(s); const m = "seleziona un colore";`);
+check('una keyword seguita da spazio apre comunque un letterale regex',
+  kwProbe.quote === null && kwProbe.out.includes('seleziona un colore'),
+  `dopo "return /[\"]/" il tokenizer ha ${kwProbe.quote} aperto o ha perso la stringa`);
+// Una PROPRIETA' che si chiama come una keyword non e' una keyword.
+check('obj.in non viene scambiata per la keyword in',
+  tokenize('const r = obj.in / 2; const t = "non toccare questo";').out.includes('non toccare questo'),
+  'obj.in e\' stata trattata come keyword e la divisione e\' diventata una regex');
+// Una stringa CHIUSA e' un valore: la barra dopo e' una divisione. Se prev
+// restasse il delimitatore di apertura, `"ab" / 2` aprirebbe una regex che si
+// mangia il resto -- e il file finirebbe pulito, quindi in SILENZIO.
+const strDivProbe = tokenize(`const _r = "ab" / 2; const _a = "seleziona un colore";`);
+check('una barra dopo una stringa chiusa e\' una divisione, non una regex',
+  strDivProbe.out.includes('seleziona un colore'),
+  'la barra dopo "ab" ha inghiottito la stringa successiva');
 // Il rilevatore di desincronizzazione deve avere i denti: se non segnalasse
 // nulla mai, il controllo qui sopra sarebbe decorativo.
 check('una stringa non chiusa viene segnalata',
