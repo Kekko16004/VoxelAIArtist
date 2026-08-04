@@ -19060,17 +19060,41 @@ async function voxelizeScene(gltfScene, options) {
             // (l'id di una voce di metadata.materials). Il colore di un voxel texturizzato
             // e' la tinta media della sua texture: cosi' ogni percorso che pretende un hex
             // (.vox, .schem, le swatch, l'OBJ senza texture) continua a funzionare senza
-            // sapere che i materiali esistono, e un id ORFANO degrada da solo a tinta
-            // unita. E' il "materiale neutro" richiesto, ottenuto senza un ramo dedicato.
+            // sapere che i materiali esistono, e un id ORFANO ricade sul colore del voxel.
+            // E' il "materiale neutro" richiesto, ottenuto senza un ramo dedicato.
             //
             // TOKEN. Dentro voxelMap si usa una stringa sola: '#RRGGBB' per un colore,
             // '@m1' per un materiale. Serve a tenere invariati i confronti sparsi per
             // l'editor che trattano quel valore come stringa opaca.
+            //
+            // ORFANI: `decodeToken(tok, fallbackColor)` vuole il colore del voxel come
+            // secondo argomento, e su un id che non esiste ricade su QUELLO, non su un
+            // grigio fisso. Il token collassa il voxel a '@m1' e butta via il suo hex,
+            // quindi e' il chiamante il solo a poterlo ancora fornire. L'id NON viene
+            // azzerato: syncVoxelsFromMap (03-voxel-map.js) ricostruisce
+            // currentModelData.voxels DAI valori della voxelMap, quindi azzerarlo
+            // trasformerebbe un problema d'ordine transitorio (materiali caricati dopo i
+            // voxel) in una perdita di dati definitiva su disco. Tenendolo, tokenOf e
+            // decodeToken restano inverse anche sugli orfani, e appena le definizioni
+            // arrivano il voxel si ricollega da se'.
+            //
+            // ID ESPLICITO: `addMaterial({id: 'm1', ...})` conserva l'id se e' libero
+            // (serve al giro di ricarica del progetto: cambiarlo renderebbe orfani tutti
+            // i voxel che lo citano). Se e' GIA' preso viene rimappato, e allora sta al
+            // chiamante confrontare `mat.id !== def.id` e rimappare i suoi voxel: non
+            // farlo li lega in silenzio al materiale preesistente, che e' peggio di un
+            // orfano perche' non si vede.
 
             const MATERIAL_LIB_KEY = 'voxelai-material-library';
             const MATERIAL_LIB_MAX = 40;
             const MATERIAL_TEXTURE_MAX = 128;
             const MATERIAL_FALLBACK_COLOR = '#CCCCCC';
+            // Un hex VERO, non "una stringa che inizia con #". Questo modulo e' il
+            // punto di conversione unico di cui si fidano le swatch, .vox, .schem, l'MTL
+            // e THREE.Color: '#', '#zz' o '#12345678' passati per buoni diventerebbero
+            // un colore nero o un'eccezione lontana da qui. L'output di un LLM e'
+            // esattamente il posto da cui aspettarsi un hex malformato.
+            const MATERIAL_HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 
             let activeMaterialId = null;
 
@@ -19100,7 +19124,13 @@ async function voxelizeScene(gltfScene, options) {
             }
 
             function normalizeMaterial(def, id) {
+                // null e '' vanno trattati come ASSENTI, non come zero: Number(null) e'
+                // 0 e isFinite lo accetta, quindi senza questa riga un roughness
+                // mancante in un JSON (dove l'assenza si scrive `null`) diventerebbe 0,
+                // cioe' una superficie a specchio dove il contratto promette 0.6. Si
+                // vedeva solo su roughness perche' e' l'unico default diverso da zero.
                 const clamp01 = (v, dflt) => {
+                    if (v === null || v === undefined || v === '') return dflt;
                     const n = Number(v);
                     if (!isFinite(n)) return dflt;
                     return Math.min(1, Math.max(0, n));
@@ -19113,7 +19143,7 @@ async function voxelizeScene(gltfScene, options) {
                         w: Number(def.texture.w) || 0,
                         h: Number(def.texture.h) || 0
                     } : null,
-                    color: (def && typeof def.color === 'string' && def.color[0] === '#')
+                    color: (def && typeof def.color === 'string' && MATERIAL_HEX_RE.test(def.color))
                         ? def.color.toUpperCase() : MATERIAL_FALLBACK_COLOR,
                     roughness: clamp01(def && def.roughness, 0.6),
                     metalness: clamp01(def && def.metalness, 0),
@@ -19153,17 +19183,22 @@ async function voxelizeScene(gltfScene, options) {
                 return (v.color || MATERIAL_FALLBACK_COLOR).toUpperCase();
             }
 
-            // Ritorna SEMPRE un colore valido. Un token materiale il cui id non esiste
-            // piu' (file importato senza le sue definizioni) diventa tinta unita neutra.
-            function decodeToken(tok) {
+            // Ritorna SEMPRE un hex valido. `fallbackColor` e' il colore proprio del
+            // voxel: su un token materiale il cui id non esiste piu' (file importato
+            // senza le sue definizioni) si ricade su quello e il modello resta se
+            // stesso a tinte piatte, invece di diventare grigio uniforme. L'id resta
+            // nel risultato: vedi il commento in testa al modulo.
+            function decodeToken(tok, fallbackColor) {
+                const dflt = (typeof fallbackColor === 'string' && MATERIAL_HEX_RE.test(fallbackColor))
+                    ? fallbackColor.toUpperCase() : MATERIAL_FALLBACK_COLOR;
                 if (isMaterialToken(tok)) {
                     const id = tok.slice(1);
                     const mat = materialById(id);
-                    if (!mat) return { color: MATERIAL_FALLBACK_COLOR, material: null };
+                    if (!mat) return { color: dflt, material: id };
                     return { color: mat.color, material: id };
                 }
-                const c = (typeof tok === 'string' && tok.charAt(0) === '#')
-                    ? tok.toUpperCase() : MATERIAL_FALLBACK_COLOR;
+                const c = (typeof tok === 'string' && MATERIAL_HEX_RE.test(tok))
+                    ? tok.toUpperCase() : dflt;
                 return { color: c, material: null };
             }
 
