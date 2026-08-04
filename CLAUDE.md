@@ -280,6 +280,21 @@ Everything is inline in one HTML file. Major systems:
   A `ReferenceError: <symbol> is not defined` from them means engine code is **missing
   from the sources**, not that the test is stale. Do not dismiss it as pre-existing
   because it also fails at HEAD — HEAD can be broken too.
+- **Nessun testo per l'utente e' hardcoded — mai, in nessun punto del frontend.**
+  Nel template si annota con `data-i18n` / `data-i18n-title` / `data-i18n-placeholder`;
+  nel JS si passa da `t('chiave')`. La regola copre anche **guide, hint, conferme,
+  messaggi d'errore e testi costruiti a runtime**: nei template literal si usano i
+  segnaposto `{nome}` di `t()`, non la concatenazione.
+  La lingua sorgente e' `ui/locales/it.json` — i suoi valori SONO i testi italiani
+  reali, ed e' da li' che `ui/annotate-i18n.mjs` annota il template per valore. Una
+  stringa nuova si aggiunge prima in `it.json`, poi nelle altre 5 lingue (il test
+  "Chiavi i18n complete" pretende parita' esatta).
+  `t()` e' chiamabile prima di `bootI18n` e in quel caso ritorna la chiave nuda:
+  non e' un bug da aggirare con un fallback italiano hardcoded.
+  `tests/test_i18n_hardcoded.mjs` e' la guardia. Se fallisce, la stringa va
+  estratta, non aggiunta all'allow-list. La sua `BASELINE` (misurata alla nascita
+  della guardia: `template: 74`, `js: 269`) va solo **abbassata**, mai alzata: a zero
+  il meccanismo si rimuove.
 - Editing op semantics requires a **paired edit** in `src/parser.py` (`expand_ops`) and `ui/index.html` (`expandOps`).
 - `token.txt` and any `cookies.json` hold session credentials — never commit or echo their contents.
 - The Three.js version is pinned to r128 via CDN; APIs differ in newer versions, so don't assume modern Three.js when editing viewer code.

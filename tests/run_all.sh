@@ -260,6 +260,14 @@ PY
 #     `node --check` non vedeva nulla perche' la sintassi era valida.
 run "Bootstrap del bundle (DOM finto)" node tests/test_bootstrap.mjs
 
+# 5c. Nessun testo per l'utente hardcoded nel frontend. Il test 6 qui sotto
+#     controlla che le lingue siano allineate FRA LORO, ma non si accorge di una
+#     stringa italiana che non e' mai diventata una chiave: quella non manca da
+#     nessun file, semplicemente non esiste. Questa guardia copre l'altro lato,
+#     con una BASELINE che lo sweep abbassa fino a zero: e' verde finche' il
+#     debito non cresce, rossa appena qualcuno ne aggiunge.
+run "Guardia i18n (niente testi hardcoded)" node tests/test_i18n_hardcoded.mjs
+
 # 6. Ogni lingua ha esattamente le chiavi della lingua di riferimento (it).
 #    Prima qui c'era un numero fisso (65) che non ha mai corrisposto alla
 #    realta' (le lingue hanno sempre avuto 53 chiavi pack/genMode): il
