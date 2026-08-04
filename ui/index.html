@@ -15971,7 +15971,19 @@ async function voxelizeScene(gltfScene, options) {
                 if (search) search.addEventListener('input', () => renderHelp(search.value));
 
                 document.addEventListener('keydown', (e) => {
-                    if (e.key === 'F1') { e.preventDefault(); if (isOpen()) close(); else open(); return; }
+                    if (e.key === 'F1') {
+                        e.preventDefault();
+                        if (isOpen()) { close(); return; }
+                        // Non aprire l'Aiuto SOTTO un'altra modale. helpOverlay ha
+                        // z-index 70, mentre primOverlay ne ha 95 e importOverlay 90:
+                        // F1 a dialogo aperto costruiva l'Aiuto invisibile dietro, e
+                        // quello ricompariva dal nulla appena si chiudeva il dialogo.
+                        // La chiusura resta sempre permessa (il ramo qui sopra), cosi'
+                        // F1 non puo' intrappolare l'Aiuto gia' aperto.
+                        if (typeof tlModalOpen === 'function' && tlModalOpen()) return;
+                        open();
+                        return;
+                    }
                     if (e.key === 'Escape' && isOpen()) close();
                 });
             })();

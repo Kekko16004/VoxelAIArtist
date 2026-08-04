@@ -197,6 +197,13 @@ run "Ctrl+A sui keyframe (Node)" node tests/test_timeline_select_all.mjs
 #         ricordare il loro stato aperto/chiuso tra una sessione e l'altra.
 run "Persistenza pannelli destro (Node)" node tests/test_panel_persist.mjs
 
+# 4d-sexies. F1 dell'Aiuto. helpOverlay ha z-index 70, primOverlay 95 e
+#         importOverlay 90: senza guardia F1 costruiva l'Aiuto INVISIBILE dietro
+#         al dialogo aperto, e quello ricompariva dal nulla appena il dialogo si
+#         chiudeva. Il test tiene ferme entrambe le direzioni: non si apre sotto
+#         un'altra modale, e la guardia non intrappola l'Aiuto gia' aperto.
+run "F1 dell'Aiuto e le altre modali (Node)" node tests/test_help_modal_f1.mjs
+
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 
