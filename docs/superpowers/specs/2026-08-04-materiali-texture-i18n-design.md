@@ -118,6 +118,49 @@ Due invarianti che rendono il formato indistruttibile:
    tinta unita" richiesto per i file importati senza texture: nessun ramo di codice
    dedicato, solo l'assenza di una voce.
 
+### Il round-trip attraverso il formato compatto (buco trovato in fase di piano)
+
+Il salvataggio non scrive i voxel piatti: `buildObjectPayload()`
+(`07-save-payload.js`) li comprime in `palette` + `ops`, dove ogni op è
+`["set", key, x,y,z, …]` e `palette[key]` è un **hex**. Le ops non hanno alcun
+posto in cui mettere un materiale, quindi il formato del voxel qui sopra da solo
+non basta: un salva/ricarica perderebbe ogni materiale.
+
+Due strade. La prima — far sì che `palette[key]` possa valere `"@m1"` — è da
+scartare: `expand_ops` (Python) e `expandOps` (JS) risolverebbero `@m1` come
+colore ignoto ricadendo su `#CCCCCC`, e sistemarli significherebbe una **modifica
+accoppiata** al pezzo di codice più delicato del repository, quello sorvegliato da
+`tests/ops_parity_cases.json`. Il rischio non è proporzionato al guadagno.
+
+La strada scelta lascia le ops **esattamente come sono** e mette la
+materializzazione in un elenco a parte dentro `metadata`:
+
+```json
+"metadata": {
+  "materials": [ … ],
+  "material_map": [ ["m1", 0,0,0, 1,0,0, 2,0,0], ["m2", 5,3,1] ]
+}
+```
+
+Stessa forma delle ops `set` (id + triplette), quindi compatta e leggibile.
+`applyMaterialMap(data)` la riversa sui voxel **dopo** l'espansione, in tutti i
+percorsi d'ingresso. Conseguenze, tutte desiderabili:
+
+- `expand_ops`/`expandOps` non si toccano: nessuna modifica accoppiata, la parità
+  ops resta valida senza nemmeno dover rilanciare quel test per un cambio di
+  semantica (che non c'è).
+- Il generatore AI non sa dei materiali e continua a non saperne: produce ops di
+  soli colori, che restano valide al 100%.
+- Un file senza `material_map` (o con id orfani) dà voxel di solo colore — di
+  nuovo il "materiale neutro a tinta unita", gratis.
+- `palette` continua a contenere solo hex, quindi `.vox`, `.schem` e il resto non
+  vedono nulla di nuovo.
+
+`buildObjectPayload` guadagna quindi un solo compito in più: mentre raggruppa per
+colore, accumulare le triplette dei voxel che hanno `material` ed emettere
+`material_map`. Il raggruppamento per colore resta quello di oggi, perché il
+`color` c'è sempre (invariante 1).
+
 ### Token interno (perché non è una contraddizione col campo separato)
 
 `voxelMap` è una `Map<"x,y,z", string>` e mezza dozzina di confronti dipende dal valore
@@ -226,21 +269,22 @@ riggato. `GLTFExporter` in modalità binaria incorpora l'immagine. Le 6 invarian
 dell'export** (invariante 6): la texture non la sostituisce, e lasciarlo darebbe di nuovo
 `baseColorFactor * COLOR_0`.
 
-**Progetto e ZIP del pack.** `metadata.materials` viaggia nel payload, quindi `.voxai`,
+**Progetto e ZIP del pack.** `metadata.materials` e `metadata.material_map`
+viaggiano nel payload compatto (vedi il round-trip qui sopra), quindi `.voxai`,
 JSON e autosave hanno il round-trip gratis. L'export ZIP del pack include i PNG.
 
 ### Import
 
-- JSON/`.voxai` con `metadata.materials` → ripristino completo.
-- JSON con `material` ma senza `metadata.materials` → tinta unita dal `color`
-  (l'invariante 2 in azione).
+- JSON/`.voxai` con `metadata.materials` + `material_map` → ripristino completo.
+- JSON con `material` sui voxel piatti ma senza `metadata.materials` → tinta unita
+  dal `color` (l'invariante 2 in azione).
 - `.vox` / `.schem` / GLB → nessun materiale, comportamento invariato.
 
 ## Test
 
 | File | Cosa tiene fermo |
 |---|---|
-| `tests/test_materials.mjs` (nuovo) | round-trip del formato; fallback su `material` orfano; `tokenOf`/`decodeToken` come inverse; mutua esclusione colore↔materiale; raggruppamento del renderer per token; UV `0..w`/`0..h` del greedy mesh; il greedy mesh **non** unisce token diversi; tinta media |
+| `tests/test_materials.mjs` (nuovo) | round-trip del formato **attraverso `palette`+`ops`+`material_map`**; fallback su `material` orfano; `tokenOf`/`decodeToken` come inverse; mutua esclusione colore↔materiale; raggruppamento del renderer per token; UV `0..w`/`0..h` del greedy mesh; il greedy mesh **non** unisce token diversi; tinta media |
 | `tests/test_i18n_hardcoded.mjs` (nuovo) | la baseline non sale; lo strip dei commenti non scambia `//` dentro una stringa per un commento |
 | `tests/test_incremental.mjs` (esteso) | equivalenza incrementale↔rebuild **con materiali**; la firma della palette reagisce al cambio di materiale |
 | `run_all.sh` (esteso) | i due test nuovi entrano nella suite |
