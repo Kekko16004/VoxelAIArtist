@@ -223,6 +223,16 @@ run "Trascinamento dal Summary (Node)" node tests/test_timeline_summary_drag.mjs
 #         anche il gizmo globale.
 run "Ctrl+A nella vista: colonna del frame (Node)" node tests/test_timeline_select_frame.mjs
 
+# 4d-septies. Materiali con texture: store nel progetto, id riusabili e i token
+#         '#RRGGBB' / '@m1' che viaggiano nella voxelMap. Le trappole coperte
+#         sono tre: l'id deve riempire i buchi (primo intero LIBERO) o dopo
+#         qualche cancellazione i numeri crescono all'infinito; un token
+#         materiale ORFANO (file importato senza le sue definizioni) deve
+#         degradare da solo a tinta unita neutra invece di rompere il render;
+#         e la tinta media di una texture deve SALTARE i pixel trasparenti,
+#         altrimenti ogni texture con bordo trasparente diventa scura.
+run "Materiali (store, token, tinta media)" node tests/test_materials.mjs
+
 # 4d-quinquies. Persistenza dei pannelli del pannello destro: i quattro <details
 #         class="rp-section"> (Outliner, Proprieta', Palette, Vista) devono
 #         ricordare il loro stato aperto/chiuso tra una sessione e l'altra.
