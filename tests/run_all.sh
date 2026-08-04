@@ -192,6 +192,15 @@ run "Undo con cambio oggetto (Node)" node tests/test_undo_object_switch.mjs
 #         passare al gizmo, e Ctrl+Shift+A resta del rig.
 run "Ctrl+A sui keyframe (Node)" node tests/test_timeline_select_all.mjs
 
+# 4d-quater-bis. Afferrare la riga Summary per SPOSTARE i keyframe. Ctrl+A li
+#         evidenziava ma non si muovevano: i diamanti del Summary hanno
+#         dataset.bone VUOTO (tlAppendRow: `boneName || ''`) e la guardia del ramo
+#         di trascinamento pretendeva `&& el.dataset.bone`, cosi' il Summary - la
+#         riga che si afferra per prima - cadeva nel ramo "clic nel vuoto", che
+#         azzera la selezione e fa scrubbing. Il test ESEGUE il vero handler su un
+#         DOM finto e guarda le posizioni delle chiavi, non il testo del sorgente.
+run "Trascinamento dal Summary (Node)" node tests/test_timeline_summary_drag.mjs
+
 # 4d-quinquies. Persistenza dei pannelli del pannello destro: i quattro <details
 #         class="rp-section"> (Outliner, Proprieta', Palette, Vista) devono
 #         ricordare il loro stato aperto/chiuso tra una sessione e l'altra.

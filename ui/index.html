@@ -17400,6 +17400,15 @@ async function voxelizeScene(gltfScene, options) {
                     const k = document.createElement('div');
                     k.className = 'tl-key' + (isSummary ? ' tl-key-sum' : '');
                     if (!isSummary && tlIsSelectedKey(boneName, t)) k.classList.add('tl-key-sel');
+                    // Il diamante del Summary si accende quando TUTTE le chiavi di
+                    // quell'istante sono selezionate: e' quello che rappresenta, e senza
+                    // questo il blocco si muoveva senza mostrare cosa era preso.
+                    if (isSummary && !readOnly) {
+                        const qui = tlKeysAtTime(animForTip, t);
+                        if (qui.length && qui.every(c => tlIsSelectedKey(c.bone, c.t))) {
+                            k.classList.add('tl-key-sel');
+                        }
+                    }
                     if (readOnly) k.classList.add('tl-key-ro');
                     k.style.left = tlXOfFrame(tlFrameOfTime(t)) + 'px';
                     k.dataset.t = String(t);
@@ -18007,8 +18016,55 @@ async function voxelizeScene(gltfScene, options) {
                 }
             }
 
+            // Tutte le chiavi che cadono a quel tempo, su qualunque osso. E' cio' che
+            // un diamante della riga Summary rappresenta: il riepilogo di quell'istante.
+            function tlKeysAtTime(anim, t0) {
+                const times = tlKeyTimesByBone(anim);
+                const out = [];
+                Object.keys(times).forEach(bone => {
+                    times[bone].forEach(t => {
+                        if (Math.abs(t - t0) < 1e-6) out.push({ bone: bone, t: t });
+                    });
+                });
+                return out;
+            }
+
             function tlOnRowsPointerDown(ev) {
                 const el = ev.target;
+                // Diamante del Summary: non ha un osso proprio (dataset.bone e' vuoto,
+                // vedi tlAppendRow), ma rappresenta TUTTE le chiavi di quell'istante.
+                // Prima cadeva nel ramo "clic nel vuoto" qui sotto, che azzera la
+                // selezione e fa scrubbing: chi afferrava il Summary per spostare il
+                // blocco - la riga piu' ovvia da afferrare - perdeva la selezione
+                // appena fatta con Ctrl+A e non spostava niente.
+                if (el && el.classList && el.classList.contains('tl-key-sum')
+                    && !el.classList.contains('tl-key-ro')) {
+                    ev.preventDefault();
+                    const t0 = Number(el.dataset.t);
+                    const qui = tlKeysAtTime(tlActiveAnim(), t0);
+                    if (!qui.length) { tlSelected = []; tlBeginScrub(ev); tlRedraw(); return; }
+                    const additive = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+                    const tutteGiaSelezionate = qui.every(k => tlIsSelectedKey(k.bone, k.t));
+                    if (additive) {
+                        if (tutteGiaSelezionate) {
+                            tlSelected = tlSelected.filter(s => Math.abs(s.t - t0) >= 1e-6);
+                        } else {
+                            qui.forEach(k => { if (!tlIsSelectedKey(k.bone, k.t)) tlSelected.push(k); });
+                        }
+                    } else if (!tutteGiaSelezionate) {
+                        // Selezione gia' piena (tipico dopo Ctrl+A): si conserva, cosi'
+                        // il trascinamento muove tutto il blocco e non solo la colonna.
+                        tlSelected = qui;
+                    }
+                    tlKeyDrag = {
+                        startFrame: tlFrameOfX(tlLocalX(ev)),
+                        lastDelta: 0, moved: false,
+                        orig: tlSelected.map(s => ({ bone: s.bone, t: s.t, cur: s.t }))
+                    };
+                    tlSetFrame(Math.round(tlFrameOfTime(t0)));
+                    tlRedraw();
+                    return;
+                }
                 if (el && el.classList && el.classList.contains('tl-key') && !el.classList.contains('tl-key-ro')
                     && el.dataset.bone) {
                     ev.preventDefault();
