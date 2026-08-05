@@ -225,6 +225,11 @@
             // sulla GPU a ogni tratto) invece di riusarla.
             let _materialCache = new Map();
 
+            // QUANDO va chiamata (il contratto, altrimenti si vede una texture
+            // vecchia): dopo aver modificato o eliminato un materiale, e a ogni
+            // cambio di oggetto/progetto. La chiave contiene il token, non
+            // l'identita' dell'oggetto: due oggetti diversi che usano '@m1' con
+            // definizioni diverse si spartirebbero la prima istanza costruita.
             function clearMaterialCache() {
                 _materialCache.forEach(m => {
                     if (m.map && m.map.dispose) m.map.dispose();
@@ -236,17 +241,29 @@
             // `opts.color` e' il colore PROPRIO del voxel, usato solo quando il token
             // e' un materiale che non esiste (piu'). Serve perche' decodeToken senza
             // secondo argomento degrada al grigio neutro: un .voxai aperto senza le
-            // sue definizioni uscirebbe tutto grigio invece che a tinte piatte. Entra
-            // anche nella chiave di cache, o due orfani di colore diverso si
-            // spartirebbero lo stesso materiale (il primo vincerebbe per sempre).
+            // sue definizioni uscirebbe tutto grigio invece che a tinte piatte.
+            //
+            // La CHIAVE di cache si costruisce sul colore RISOLTO (dec.color), non su
+            // opts.color grezzo. Tre ragioni, tutte misurate:
+            //   - opts.color e' arbitrario e non validato, quindi puo' contenere il
+            //     separatore: threeMaterialFor('#AABBCC', {color: '#AABBCC|w'})
+            //     produceva la stessa chiave della variante wireframe e restituiva un
+            //     materiale WIREFRAME a chi ne chiedeva uno pieno;
+            //   - su un materiale che esiste il fallback e' irrilevante per l'aspetto,
+            //     quindi tenerlo nella chiave moltiplicava le istanze (una per tinta
+            //     dei voxel) di un materiale visivamente identico;
+            //   - dec.color e' gia' hex maiuscolo validato, quindi '#aabbcc' e
+            //     '#AABBCC' non spaccano piu' la cache in due.
+            // Sull'ORFANO dec.color vale il fallback, quindi resta la distinzione che
+            // serve davvero: due orfani di colore diverso NON si spartiscono un
+            // materiale (il primo vincerebbe per sempre).
             function threeMaterialFor(token, opts) {
                 const wire = !!(opts && opts.wireframe);
-                const fallback = (opts && opts.color) || '';
-                const key = token + '|' + fallback + (wire ? '|w' : '');
+                const dec = decodeToken(token, (opts && opts.color) || '');
+                const key = token + '|' + dec.color + (wire ? '|w' : '');
                 const hit = _materialCache.get(key);
                 if (hit) return hit;
 
-                const dec = decodeToken(token, fallback);
                 // materialById, non `dec.material` : su un orfano l'id resta valorizzato
                 // (e' voluto, vedi decodeToken) ma la definizione non c'e'.
                 const def = materialById(dec.material);
@@ -274,6 +291,11 @@
                     // Col map, `color` moltiplica la texture: bianco = texture pura.
                     mat.color = new THREE.Color(0xffffff);
                 }
+                // `shared`: questo materiale e' CACHATO e vive in piu' mesh. Chi
+                // distrugge un mesh (disposeMesh) deve saltarlo, altrimenti il primo
+                // colore ripulito porta con se' la texture di tutti gli altri.
+                // Liberarli e' compito di clearMaterialCache, l'unico proprietario.
+                mat.userData.shared = true;
                 _materialCache.set(key, mat);
                 return mat;
             }
