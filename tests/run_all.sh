@@ -265,6 +265,15 @@ run "Persistenza pannelli destro (Node)" node tests/test_panel_persist.mjs
 #         un'altra modale, e la guardia non intrappola l'Aiuto gia' aperto.
 run "F1 dell'Aiuto e le altre modali (Node)" node tests/test_help_modal_f1.mjs
 
+# 4d-sexies-bis. La guida si costruisce DAL DIZIONARIO. Il testo italiano non vive
+#         piu' in 31-help.js (erano 85 stringhe duplicate come "fallback", mai lette
+#         perche' le chiavi esistono in tutte e 6 le lingue: una copia che nessuno
+#         legge puo' solo divergere, e divergeva gia'). Tolto il fallback, la
+#         regressione tipica e' una guida che si apre VUOTA o che mostra le chiavi
+#         nude: il test pretende che i 13 titoli compaiano davvero nel corpo reso e
+#         che cambiando lingua il testo cambi.
+run "Guida i18n: testo dal dizionario (Node)" node tests/test_help_i18n.mjs
+
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 
