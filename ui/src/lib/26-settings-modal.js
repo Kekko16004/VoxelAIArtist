@@ -254,42 +254,13 @@
                 // Capacita' del backend: vedi hasLocalBackend()/hasNativeDialogs() in
                 // 19-prefs.js. Qui serve solo sapere se c'e' un backend da interrogare.
 
-                // Testi italiani di riserva: i dizionari i18n si caricano in async, e
-                // questo blocco puo' dover mostrare uno stato PRIMA che arrivino (o se
-                // il fetch dei locali fallisce). Stessi valori di it.json.
-                const FALLBACK_IT = {
-                    'settings.sessionOn': 'Sessione configurata',
-                    'settings.sessionOff': 'Sessione non configurata',
-                    'settings.sessionUnknown': 'Stato della sessione non disponibile',
-                    'settings.sessionOffline': 'Backend non raggiungibile: la sessione si gestisce con l\'app avviata.',
-                    'settings.sessionCount': '{count} cookie salvati',
-                    'settings.sessionSavedAt': 'salvati il {date}',
-                    'settings.sessionSavedUnknown': 'data di salvataggio non disponibile',
-                    'settings.sessionOffHint': 'Serve una sessione Gemini per generare con l\'AI.',
-                    'settings.sessionMasked': 'valore attivo {mask}',
-                    'settings.sessionPathLabel': 'Cartella impostazioni: {path}',
-                    'settings.sessionSaving': 'Salvataggio in corso...',
-                    'settings.sessionSaveOk': 'Sessione salvata.',
-                    'settings.sessionSaveError': 'Salvataggio non riuscito: {error}',
-                    'settings.sessionSaveNet': 'Impossibile contattare il backend: sessione non salvata.',
-                    'settings.sessionEmpty': 'Inserisci almeno un cookie prima di salvare.',
-                    'settings.sessionBadFile': 'File non valido: serve un cookies.json (oggetto o lista di cookie).',
-                    'settings.sessionDeleteConfirm': 'Rimuovere i cookie salvati? La generazione con l\'AI non funzionera\' piu\' finche\' non ne inserisci di nuovi.',
-                    'settings.sessionDeleteOk': 'Cookie rimossi.',
-                    'settings.sessionDeleteError': 'Rimozione non riuscita: {error}',
-                    'settings.sessionFolderError': 'Impossibile aprire la cartella delle impostazioni.'
-                };
-
+                // Ogni testo passa da t(). Nessun ripiego italiano hardcoded qui: i
+                // dizionari si caricano in async e finche' non ci sono t() rende la
+                // CHIAVE nuda, che e' il comportamento documentato (vedi 23-i18n.js).
+                // Duplicare it.json in questo file lo faceva anche divergere in
+                // silenzio quando una traduzione veniva corretta da una parte sola.
                 function tr(key, vars) {
-                    let s = (typeof t === 'function') ? t(key, vars) : key;
-                    if (s === key && FALLBACK_IT[key]) {
-                        s = FALLBACK_IT[key];
-                        if (vars && typeof interpolate === 'function') s = interpolate(s, vars);
-                        else if (vars) {
-                            Object.keys(vars).forEach(k => { s = s.split('{' + k + '}').join(String(vars[k])); });
-                        }
-                    }
-                    return s;
+                    return (typeof t === 'function') ? t(key, vars) : key;
                 }
 
                 // Mostra solo che il cookie c'e': gli ultimi 4 caratteri, nient'altro.

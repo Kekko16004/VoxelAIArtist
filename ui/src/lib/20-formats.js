@@ -178,10 +178,10 @@
             function decodeVox(arrayBuffer) {
                 const dv = new DataView(arrayBuffer);
                 const bytes = new Uint8Array(arrayBuffer);
-                if (bytes.length < 8) throw new Error('.vox troppo corto');
+                if (bytes.length < 8) throw new Error(t('formats.voxTooShort'));
                 const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-                if (magic !== 'VOX ') throw new Error('Magic .vox non valido (atteso "VOX ")');
-                // version = dv.getInt32(4, true) — non serve validarla.
+                if (magic !== 'VOX ') throw new Error(t('formats.voxBadMagic'));
+                // version = dv.getInt32(4, true) -- non serve validarla.
 
                 // Il primo chunk (a offset 8) e' MAIN; ne scandiamo i children.
                 // Struttura chunk: id[4] + i32 lenContent + i32 lenChildren + content + children.
@@ -229,7 +229,7 @@
                 // Parte dal primo chunk (MAIN) subito dopo l'header di 8 byte.
                 walk(8, bytes.length);
 
-                if (!models.length) throw new Error('.vox senza modelli (nessun XYZI)');
+                if (!models.length) throw new Error(t('formats.voxNoModels'));
                 const m = models[0]; // importiamo il PRIMO modello. LIMITE: multi-modello non fuso.
 
                 // Palette: RGBA se presente, altrimenti fallback default. colorIndex n -> palette[n-1].
@@ -447,7 +447,7 @@
                     const ab = await new Response(ds.readable).arrayBuffer();
                     return new Uint8Array(ab);
                 }
-                throw new Error('File .schem gzip ma non ho modo di decomprimerlo (manca pako/DecompressionStream).');
+                throw new Error(t('formats.schemNoGunzip'));
             }
 
             // --- Decoder NBT minimale (BIG-endian) per l'import .schem ------------
@@ -471,11 +471,11 @@
                         case 10: { const obj = {}; while (true) { const t = bytes[o++]; if (t === 0) break; const nm = name(); obj[nm] = payload(t); } return obj; } // Compound
                         case 11: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(i32()); return arr; } // IntArray
                         case 12: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) { const hi = i32(), lo = i32(); arr.push(hi * 4294967296 + (lo >>> 0)); } return arr; } // LongArray
-                        default: throw new Error('Tag NBT non supportato: ' + type);
+                        default: throw new Error(t('formats.nbtUnsupportedTag', { tag: type }));
                     }
                 }
                 const rootType = bytes[o++];
-                if (rootType !== 10) throw new Error('NBT root non e\' un compound');
+                if (rootType !== 10) throw new Error(t('formats.nbtRootNotCompound'));
                 name(); // nome root (di solito "Schematic")
                 return payload(10);
             }
@@ -496,7 +496,7 @@
                 MC_BLOCK_COLORS.forEach(b => { blockColor[b[0]] = fmtHexRGB(b[1], b[2], b[3]); });
 
                 const blockData = s.BlockData;
-                if (!blockData) throw new Error('.schem senza BlockData');
+                if (!blockData) throw new Error(t('formats.schemNoBlockData'));
                 const off = { o: 0 };
                 const voxels = [];
                 for (let y = 0; y < H; y++) {
@@ -536,7 +536,7 @@
                         const data = encodeVox(getFormatExportVoxels());
                         downloadBinary(data, getFormatExportName() + '.vox', 'application/octet-stream');
                     } catch (e) {
-                        alert('Errore export .vox: ' + e.message);
+                        alert(t('formats.voxExportError', { error: e.message }));
                     }
                 });
 
@@ -547,11 +547,10 @@
                         const res = await gzipBytes(nbt);
                         downloadBinary(res.data, getFormatExportName() + '.schem', 'application/octet-stream');
                         if (!res.gzipped) {
-                            alert('.schem esportato SENZA compressione gzip (gzip non disponibile qui). ' +
-                                'La maggior parte dei tool WorldEdit/Litematica legge comunque NBT non compresso, ma alcuni potrebbero rifiutarlo.');
+                            alert(t('formats.schemNoGzip'));
                         }
                     } catch (e) {
-                        alert('Errore export .schem: ' + e.message);
+                        alert(t('formats.schemExportError', { error: e.message }));
                     }
                 });
             })();
@@ -561,5 +560,5 @@
                 const nameLc = (file.name || '').toLowerCase();
                 if (nameLc.endsWith('.vox')) return Promise.resolve(decodeVox(arrayBuffer));
                 if (nameLc.endsWith('.schem') || nameLc.endsWith('.schematic')) return decodeSchem(arrayBuffer);
-                return Promise.reject(new Error('Formato binario non riconosciuto: ' + file.name));
+                return Promise.reject(new Error(t('project.unknownBinary', { ext: file.name })));
             }

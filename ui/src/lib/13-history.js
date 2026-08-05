@@ -284,12 +284,15 @@
                         } else {
                             let lockedAxis = 'y';
                             if (dragConstraintMode === 'auto') {
-                                lockedAxis = 'auto (Normale)';
+                                lockedAxis = t('hud.dragAxisAuto');
                             } else {
                                 lockedAxis = dragConstraintMode.toUpperCase();
                             }
                             if (dragConstraintHUD) {
-                                dragConstraintHUD.innerHTML = `<span>🔧 <b>Asse Drag impostato:</b> ${lockedAxis}</span>`;
+                                // La chiave inglese (U+1F527) e' scritta come
+                                // escape perche' le sorgenti restano ASCII: accenti e
+                                // simboli stanno in ui/locales/*.json, non qui.
+                                dragConstraintHUD.innerHTML = `<span>🔧 <b>${t('hud.dragAxisSet')}</b> ${lockedAxis}</span>`;
                                 dragConstraintHUD.style.display = 'block';
                                 if (window.hudTimeout) clearTimeout(window.hudTimeout);
                                 window.hudTimeout = setTimeout(() => {

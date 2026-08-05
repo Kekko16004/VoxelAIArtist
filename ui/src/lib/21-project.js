@@ -19,7 +19,7 @@
             // --- stato progetto -------------------------------------------------
             let currentProjectPath = null;   // path del .voxai correntemente aperto/salvato
             let projectDirty = false;        // true dopo una modifica non ancora salvata
-            const AUTOSAVE_SESSION_ID = 'unsaved-' + Date.now(); // id stabile finché non si salva
+            const AUTOSAVE_SESSION_ID = 'unsaved-' + Date.now(); // id stabile finche' non si salva
 
             function projectApi(route) {
                 return (window.__API_BASE__ ? window.__API_BASE__ : '') + route;
@@ -39,7 +39,7 @@
             }
 
             // projectId per l'autosave: derivato dal nome file corrente (sanificato) o
-            // id di sessione stabile finché il progetto non è mai stato salvato.
+            // id di sessione stabile finche' il progetto non e' mai stato salvato.
             function deriveProjectId() {
                 if (currentProjectPath) {
                     const base = String(currentProjectPath).split(/[\\/]/).pop() || 'progetto';
@@ -55,12 +55,12 @@
                 return bytes.buffer;
             }
 
-            // Carica (SOSTITUISCE la scena) un oggetto-dati progetto già deserializzato.
+            // Carica (SOSTITUISCE la scena) un oggetto-dati progetto gia' deserializzato.
             // Accetta scena multi-oggetto ({objects:[...]}) o modello singolo (flat/compact).
             function loadProjectData(data) {
-                if (!data || typeof data !== 'object') { alert('Dati progetto non validi.'); return false; }
+                if (!data || typeof data !== 'object') { alert(t('project.invalidData')); return false; }
                 if (!Array.isArray(data.objects) && !Array.isArray(data.ops) && !Array.isArray(data.voxels)) {
-                    alert('Formato progetto non valido: manca "objects", "ops" o "voxels".');
+                    alert(t('project.invalidFormat'));
                     return false;
                 }
                 if (!data.metadata) data.metadata = {};
@@ -82,7 +82,7 @@
                 const now = new Date();
                 const hh = String(now.getHours()).padStart(2, '0');
                 const mm = String(now.getMinutes()).padStart(2, '0');
-                setAutosaveStatus('Salvato automaticamente ' + hh + ':' + mm);
+                setAutosaveStatus(t('project.autosavedAt', { time: hh + ':' + mm }));
             }
 
             // --- aggiornamento progetti recenti (best-effort) -------------------
@@ -133,7 +133,7 @@
                     }
                     const j = await res.json();
                     if (j && j.cancelled) return;      // dialog annullato: nessun cambiamento
-                    if (j && j.error) { alert('Errore salvataggio progetto: ' + j.error); return; }
+                    if (j && j.error) { alert(t('project.saveError', { error: j.error })); return; }
                     if (j && j.path) {
                         currentProjectPath = j.path;
                         markProjectSaved();
@@ -162,14 +162,14 @@
                 }
                 try {
                     const res = await fetch(projectApi('/api/project/open'));
-                    if (!res || !res.ok) { alert('Apertura progetto non disponibile.'); return; }
+                    if (!res || !res.ok) { alert(t('project.openUnavailable')); return; }
                     const j = await res.json();
                     if (!j || j.cancelled) return;
-                    if (j.error) { alert('Errore apertura progetto: ' + j.error); return; }
+                    if (j.error) { alert(t('project.openError', { error: j.error })); return; }
 
                     if (j.encoding === 'json') {
                         const content = j.content;
-                        // Un .voxai ha wrapper {format:"voxai",...,data}; un .json/.voxelai è la scena diretta.
+                        // Un .voxai ha wrapper {format:"voxai",...,data}; un .json/.voxelai e' la scena diretta.
                         let data = content;
                         if (content && content.format === 'voxai' && content.data) data = content.data;
                         if (loadProjectData(data)) {
@@ -182,12 +182,12 @@
                         const buf = base64ToArrayBuffer(j.content);
                         const ext = (j.ext || '').toLowerCase();
                         const done = (parsed) => {
-                            if (!parsed || !Array.isArray(parsed.voxels)) { alert('Il file non contiene voxel validi.'); return; }
+                            if (!parsed || !Array.isArray(parsed.voxels)) { alert(t('alert.fileNoValidVoxels')); return; }
                             if (!parsed.metadata) parsed.metadata = {};
                             if (!parsed.metadata.name && j.path) parsed.metadata.name = String(j.path).split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
                             loadSceneFromParsed(parsed);
                             buildModel();
-                            currentProjectPath = null; // binario importato: non è un .voxai nativo
+                            currentProjectPath = null; // binario importato: non e' un .voxai nativo
                             if (j.path) pushRecent(j.path, String(j.path).split(/[\\/]/).pop());
                         };
                         if (ext === '.vox' || ext === 'vox') {
@@ -196,13 +196,13 @@
                             const parsed = await decodeSchem(buf);
                             done(parsed);
                         } else {
-                            alert('Formato binario non riconosciuto: ' + ext);
+                            alert(t('project.unknownBinary', { ext: ext }));
                         }
                     } else {
-                        alert('Risposta apertura progetto non riconosciuta.');
+                        alert(t('project.openBadResponse'));
                     }
                 } catch (e) {
-                    alert('Errore apertura progetto: ' + e.message);
+                    alert(t('project.openError', { error: e.message }));
                 }
             }
 
@@ -269,7 +269,7 @@
             }
 
             // Aggancio NON invasivo al dirty flag: avvolge pushHistory() (chiamata a ogni
-            // modifica registrata nello storico) così ogni edit marca il progetto "dirty".
+            // modifica registrata nello storico) cosi' ogni edit marca il progetto "dirty".
             (function hookDirtyTracking() {
                 if (typeof pushHistory === 'function') {
                     const _origPushHistory = pushHistory;
@@ -284,7 +284,7 @@
             setInterval(runAutosave, AUTOSAVE_INTERVAL_MS);
 
             /* =========================================================================
-             * 3. VERSIONING / RIPRISTINO — pannello "Cronologia salvataggi"
+             * 3. VERSIONING / RIPRISTINO -- pannello "Cronologia salvataggi"
              * =======================================================================*/
             function fmtBytes(n) {
                 n = Number(n) || 0;
@@ -300,17 +300,20 @@
             async function refreshAutosaveList() {
                 const listEl = document.getElementById('autosaveList');
                 if (!listEl) return;
+                // Il messaggio e' l'unica parte tradotta: il markup resta qui, cosi'
+                // una lingua non puo' portarsi dietro stile o tag.
+                const notice = (msg) => '<div style="opacity:0.7; font-size:12px; padding:8px;">' + msg + '</div>';
                 if (!hasLocalBackend()) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">La cronologia salvataggi richiede l\'app avviata (python main.py): aperta come file locale non c\'è il backend che la conserva.</div>';
+                    listEl.innerHTML = notice(t('autosave.needsApp'));
                     return;
                 }
-                listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Caricamento…</div>';
+                listEl.innerHTML = notice(t('common.loading'));
                 try {
                     const res = await fetch(projectApi('/api/autosave/list'));
-                    if (!res || !res.ok) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Impossibile caricare la cronologia.</div>'; return; }
+                    if (!res || !res.ok) { listEl.innerHTML = notice(t('autosave.loadFailed')); return; }
                     const j = await res.json();
                     const items = (j && Array.isArray(j.autosaves)) ? j.autosaves : [];
-                    if (!items.length) { listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Nessun salvataggio automatico presente.</div>'; return; }
+                    if (!items.length) { listEl.innerHTML = notice(t('autosave.empty')); return; }
                     listEl.innerHTML = '';
                     items.forEach(it => {
                         const row = document.createElement('div');
@@ -318,10 +321,10 @@
                         const info = document.createElement('div');
                         info.style.cssText = 'font-size:12px; line-height:1.4; overflow:hidden;';
                         info.innerHTML = '<div style="font-weight:600;">' + fmtSavedAt(it.savedAt) + '</div>' +
-                            '<div style="opacity:0.7;">' + (it.projectId || '') + ' · ' + fmtBytes(it.size) + '</div>';
+                            '<div style="opacity:0.7;">' + (it.projectId || '') + ' &middot; ' + fmtBytes(it.size) + '</div>';
                         const btn = document.createElement('button');
                         btn.className = 'btn btn-secondary';
-                        btn.textContent = 'Ripristina';
+                        btn.textContent = t('common.restore');
                         btn.style.cssText = 'font-size:11px; padding:6px 10px; flex-shrink:0;';
                         btn.addEventListener('click', () => restoreAutosave(it.name));
                         row.appendChild(info);
@@ -329,16 +332,16 @@
                         listEl.appendChild(row);
                     });
                 } catch (e) {
-                    listEl.innerHTML = '<div style="opacity:0.7; font-size:12px; padding:8px;">Errore nel caricamento della cronologia.</div>';
+                    listEl.innerHTML = notice(t('autosave.loadError'));
                 }
             }
 
             async function restoreAutosave(name) {
                 if (!name) return;
-                if (!confirm('Ripristinare questo salvataggio automatico? La scena corrente verrà sostituita.')) return;
+                if (!confirm(t('autosave.confirmRestore'))) return;
                 try {
                     const res = await fetch(projectApi('/api/autosave/get?name=' + encodeURIComponent(name)));
-                    if (!res || !res.ok) { alert('Impossibile caricare il salvataggio selezionato.'); return; }
+                    if (!res || !res.ok) { alert(t('autosave.restoreLoadFailed')); return; }
                     const j = await res.json();
                     const wrapper = j && j.content;
                     const data = (wrapper && wrapper.format === 'voxai' && wrapper.data) ? wrapper.data : wrapper;
@@ -347,14 +350,14 @@
                         closeAutosaveHistory();
                     }
                 } catch (e) {
-                    alert('Errore nel ripristino: ' + e.message);
+                    alert(t('autosave.restoreError', { error: e.message }));
                 }
             }
 
             async function openAutosaveFolder() {
-                if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
+                if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                 try { await fetch(projectApi('/api/autosave/open-folder')); }
-                catch (e) { alert('Impossibile aprire la cartella: ' + e.message); }
+                catch (e) { alert(t('autosave.folderError', { error: e.message })); }
             }
 
             function openAutosaveHistory() {

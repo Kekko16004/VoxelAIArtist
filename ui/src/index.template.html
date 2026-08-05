@@ -1955,14 +1955,14 @@
         <div class="menu" id="menuFile">
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.file">File</button>
             <div class="menu-dropdown" id="menuFileDropdown">
-                <button class="menu-item" id="saveProjectBtn" title="Salva il progetto nativo (.voxai) — intera scena">
+                <button class="menu-item" id="saveProjectBtn" title="Salva il progetto nativo (.voxai) — intera scena" data-i18n-title="file.saveProjectTitle">
                     <span class="mi-icon">💾</span><span data-i18n="file.saveProject">Salva progetto (.voxai)</span></button>
-                <button class="menu-item" id="saveProjectAsBtn" title="Salva il progetto con un nuovo nome (.voxai)">
+                <button class="menu-item" id="saveProjectAsBtn" title="Salva il progetto con un nuovo nome (.voxai)" data-i18n-title="file.saveProjectAsTitle">
                     <span class="mi-icon"></span><span data-i18n="file.saveProjectAs">Salva con nome…</span></button>
-                <button class="menu-item" id="openProjectBtn" title="Apri un progetto (.voxai / .json / .vox / .schem)">
+                <button class="menu-item" id="openProjectBtn" title="Apri un progetto (.voxai / .json / .vox / .schem)" data-i18n-title="file.openProjectTitle">
                     <span class="mi-icon">📂</span><span data-i18n="file.openProject">Apri progetto…</span></button>
                 <div class="menu-sep"></div>
-                <button class="menu-item" id="autosaveHistoryBtn" title="Mostra la cronologia dei salvataggi automatici">
+                <button class="menu-item" id="autosaveHistoryBtn" title="Mostra la cronologia dei salvataggi automatici" data-i18n-title="file.autosaveHistoryTitle">
                     <span class="mi-icon">🕒</span><span data-i18n="file.autosaveHistory">Cronologia salvataggi</span></button>
                 <div id="autosaveStatus" class="menu-row" style="min-height:12px; opacity:0.7;"></div>
             </div>
@@ -1973,10 +1973,10 @@
             <button class="menu-trigger" type="button" data-menu-toggle data-i18n="topbar.import">Importa</button>
             <div class="menu-dropdown" id="menuImportDropdown">
                 <div class="menu-label" data-i18n="import.label">Importa file</div>
-                <button class="menu-item" id="importFileBtn" title="Importa .voxai / .json / .vox / .schem">
+                <button class="menu-item" id="importFileBtn" title="Importa .voxai / .json / .vox / .schem" data-i18n-title="import.fileTitle">
                     <span class="mi-icon">📥</span><span data-i18n="import.file">Da file…</span>
                     <span class="mi-hint">.vox .schem .voxai .json</span></button>
-                <button class="menu-item" id="importPasteBtn" title="Incolla un modello JSON">
+                <button class="menu-item" id="importPasteBtn" title="Incolla un modello JSON" data-i18n-title="import.pasteTitle">
                     <span class="mi-icon">📋</span><span data-i18n="import.paste">Incolla JSON…</span></button>
             </div>
         </div>
@@ -2000,9 +2000,9 @@
                     <span data-i18n="export.cullInternal">Rimuovi i cubi interni (solo guscio visibile)</span></label>
                 <div class="menu-sep"></div>
                 <div class="menu-label" data-i18n="export.labelVoxel">Voxel / Minecraft</div>
-                <button class="menu-item" id="exportVoxBtn" title="Esporta in formato MagicaVoxel (.vox)">
+                <button class="menu-item" id="exportVoxBtn" title="Esporta in formato MagicaVoxel (.vox)" data-i18n-title="export.voxTitle">
                     <span class="mi-icon">🧊</span><span data-i18n="export.vox">Esporta .vox (MagicaVoxel)</span></button>
-                <button class="menu-item" id="exportSchemBtn" title="Esporta in formato Minecraft Sponge Schematic (.schem) per WorldEdit/Litematica">
+                <button class="menu-item" id="exportSchemBtn" title="Esporta in formato Minecraft Sponge Schematic (.schem) per WorldEdit/Litematica" data-i18n-title="export.schemTitle">
                     <span class="mi-icon">⛏</span><span data-i18n="export.schem">Esporta .schem (Minecraft)</span></button>
                 <div class="menu-sep"></div>
                 <div class="menu-label" data-i18n="export.labelData">Dati</div>
@@ -2086,7 +2086,7 @@
                         <div style="display: none; align-items: center; gap: 8px;">
                             <!-- Pulsante immagine temporaneamente disabilitato -->
                             <button class="btn btn-secondary" id="uploadImageBtn" style="padding: 6px 12px; font-size: 11px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;" title="Aggiungi un'immagine di riferimento" data-i18n-title="generate.uploadImage">
-                                📷 Riferimento Foto
+                                <span aria-hidden="true">&#128247;</span> <span data-i18n="generate.photoReference">Riferimento Foto</span>
                             </button>
                             <input type="file" id="imageInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
                             <div id="imagePreviewContainer" style="display: none; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--hover-bg); border: 1px solid var(--glass-border); overflow: hidden; flex-grow: 1;">
@@ -2219,10 +2219,10 @@
                             <label data-i18n="glb.resolution">Risoluzione</label>
                             <select id="glbGridSize" class="field-strong"
                                 style="padding:5px; font-size:11px; width:130px;">
-                                <option value="32">32 (veloce)</option>
-                                <option value="64" selected>64 (consigliata)</option>
-                                <option value="96">96 (dettagliata)</option>
-                                <option value="128">128 (lenta)</option>
+                                <option value="32" data-i18n="glb.res32">32 (veloce)</option>
+                                <option value="64" selected data-i18n="glb.res64">64 (consigliata)</option>
+                                <option value="96" data-i18n="glb.res96">96 (dettagliata)</option>
+                                <option value="128" data-i18n="glb.res128">128 (lenta)</option>
                             </select>
                         </div>
                         <div class="control-row">
@@ -2284,14 +2284,14 @@
                     <div id="newProjectContainer" class="glass"
                         style="display: none; flex-direction: column; gap: 8px; padding: 12px;">
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label
+                            <label data-i18n="newProject.name"
                                 style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Nome
                                 Modello</label>
                             <input type="text" id="newProjectName" class="field-strong" value="Nuovo_Modello"
                                 style="width: 100%; padding: 6px; font-size: 11px;">
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label
+                            <label data-i18n="newProject.gridSize"
                                 style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Dimensione
                                 Griglia</label>
                             <select id="newProjectGrid" class="field-strong"
@@ -2571,15 +2571,15 @@
                                 <button class="seg-btn" data-axis="z" title="Piano XY (Profondità Z fissa)" data-i18n-title="dragPlane.zTitle">Z</button>
                             </div>
                         </div>
-                        <p id="editHint"
+                        <p id="editHint" data-i18n="hint.editDefault"
                             style="font-size:11px; color:var(--text-secondary); line-height:1.5; margin-top:2px;">
                             Modalità Vista: trascina per orbitare. Scegli uno strumento per modificare il modello.
                         </p>
                         <div class="btn-group" style="margin-top:4px; grid-template-columns:1fr 1fr;">
                             <button class="btn btn-secondary" id="undoBtn" disabled
-                                style="padding:8px; font-size:12px;">↶ Annulla</button>
+                                style="padding:8px; font-size:12px;"><span aria-hidden="true">&#8630;</span> <span data-i18n="tools.undo">Annulla</span></button>
                             <button class="btn btn-secondary" id="redoBtn" disabled
-                                style="padding:8px; font-size:12px;">↷ Ripeti</button>
+                                style="padding:8px; font-size:12px;"><span aria-hidden="true">&#8631;</span> <span data-i18n="tools.redo">Ripeti</span></button>
                         </div>
                     </div>
                 </div>
@@ -2657,7 +2657,7 @@
             <!-- ===== TAB: RIG ===== -->
             <div class="tab-panel" data-panel="rig">
                 <div>
-                    <div class="section-title">Scheletro & Rigging</div>
+                    <div class="section-title" data-i18n="rig.sectionTitle">Scheletro &amp; Rigging</div>
                     <div class="controls-group glass" style="padding: 16px;">
                         <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:8px;">
                             <label data-i18n="rig.skeletonType">Tipo di scheletro</label>
@@ -2674,11 +2674,13 @@
                         </button>
                         <button class="btn btn-secondary" id="showRigBtn"
                             style="width:100%; font-size:12px; padding:9px; margin-top:6px; display:none;"
-                            title="Rientra nell'anteprima del rig salvato su questo oggetto, senza rigenerarlo">
-                            👁 Mostra rig
+                            title="Rientra nell'anteprima del rig salvato su questo oggetto, senza rigenerarlo"
+                            data-i18n-title="rig.showRigTitle">
+                            <span aria-hidden="true">&#128065;</span> <span data-i18n="rig.showRig">Mostra rig</span>
                         </button>
                         <div class="control-row" style="margin-top:6px;">
-                            <label title="Ruota le ossa dello scheletro rispetto ai voxel senza spostare la mesh">Ruota Scheletro</label>
+                            <label title="Ruota le ossa dello scheletro rispetto ai voxel senza spostare la mesh"
+                                data-i18n-title="rig.rotateSkeletonTitle" data-i18n="rig.rotateSkeleton">Ruota Scheletro</label>
                             <div style="display:flex; gap:4px;">
                                 <button class="btn btn-secondary" id="rotateRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>
                                 <button class="btn btn-secondary" id="rotateRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>
@@ -2692,14 +2694,14 @@
                             </label>
                         </div>
                         <div class="control-row">
-                            <label title="Colora ogni voxel in base all'osso che lo controlla" data-i18n-title="rig.weightColorsTitle">Colora pesi per
+                            <label title="Colora ogni voxel in base all'osso che lo controlla" data-i18n-title="rig.weightColorsTitle" data-i18n="rig.weightColors">Colora pesi per
                                 osso</label>
                             <label class="switch">
                                 <input type="checkbox" id="toggleWeightColors">
                                 <span class="slider"></span>
                             </label>
                         </div>
-                        <p id="rigHint" class="hint-text" style="margin-top:2px;">
+                        <p id="rigHint" class="hint-text" style="margin-top:2px;" data-i18n="rig.hintNoRig">
                             Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un
                             solo osso, così i cubi non si deformano).
                         </p>
@@ -2713,37 +2715,43 @@
                         <div id="boneList" class="bone-list"></div>
                         <div style="display:flex; gap:6px; margin-top:10px;">
                             <button class="btn btn-secondary" id="boneAddBtn" style="flex:1; padding:7px; font-size:11px;"
-                                title="Aggiunge un osso figlio all'osso selezionato, partendo dallo scheletro automatico">+ Osso</button>
+                                title="Aggiunge un osso figlio all'osso selezionato, partendo dallo scheletro automatico"
+                                data-i18n-title="rig.boneAddTitle" data-i18n="rig.boneAdd">+ Osso</button>
                             <button class="btn btn-secondary" id="boneRenameBtn" style="flex:1; padding:7px; font-size:11px;"
-                                title="Rinomina l'osso selezionato (anche con doppio clic nella lista)">Rinomina</button>
+                                title="Rinomina l'osso selezionato (anche con doppio clic nella lista)"
+                                data-i18n-title="rig.boneRenameTitle" data-i18n="rig.boneRename">Rinomina</button>
                             <button class="btn btn-secondary" id="boneDelBtn" style="flex:1; padding:7px; font-size:11px;"
-                                title="Elimina l'osso selezionato: i figli passano al genitore" data-i18n="timeline.deleteKey">Elimina</button>
+                                title="Elimina l'osso selezionato: i figli passano al genitore"
+                                data-i18n-title="rig.boneDeleteTitle" data-i18n="rig.boneDelete">Elimina</button>
                         </div>
-                        <p class="hint-text" style="margin-top:8px;">
+                        <p class="hint-text" style="margin-top:8px;" data-i18n="rig.boneListHint">
                             Doppio clic su un osso per rinominarlo. Rinominare aggiorna posa, pesi dipinti e
                             animazioni AI; eliminando un osso i suoi voxel tornano all'osso più vicino.
                         </p>
                     </div>
 
-                    <div class="section-title" style="margin-top:16px;">Simmetria X</div>
+                    <div class="section-title" style="margin-top:16px;" data-i18n="rig.symTitle">Simmetria X</div>
                     <div class="controls-group glass" style="padding:16px;">
                         <div class="control-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
-                            <label>Direzione</label>
+                            <label data-i18n="rig.symDirection">Direzione</label>
                             <div class="segmented" id="mirrorDir">
-                                <button class="seg-btn active" data-dir="LtoR" title="Copia il lato sinistro (_L) su quello destro (_R)">L → R</button>
-                                <button class="seg-btn" data-dir="RtoL" title="Copia il lato destro (_R) su quello sinistro (_L)">R → L</button>
-                                <button class="seg-btn" data-dir="both" title="Scambia i due lati fra loro (e allinea le ossa centrali)">Scambia</button>
+                                <button class="seg-btn active" data-dir="LtoR" title="Copia il lato sinistro (_L) su quello destro (_R)" data-i18n-title="rig.symLtoRTitle">L → R</button>
+                                <button class="seg-btn" data-dir="RtoL" title="Copia il lato destro (_R) su quello sinistro (_L)" data-i18n-title="rig.symRtoLTitle">R → L</button>
+                                <button class="seg-btn" data-dir="both" title="Scambia i due lati fra loro (e allinea le ossa centrali)" data-i18n-title="rig.symSwapTitle" data-i18n="rig.symSwap">Scambia</button>
                             </div>
                         </div>
                         <div style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
                             <button class="btn btn-secondary" id="mirrorPoseBtn" style="width:100%; padding:8px; font-size:12px;"
-                                title="Specchia la posa delle ossa _L/_R: rotazione Y e Z invertite">⇄ Specchia posa</button>
+                                title="Specchia la posa delle ossa _L/_R: rotazione Y e Z invertite"
+                                data-i18n-title="rig.mirrorPoseTitle"><span aria-hidden="true">&#8644;</span> <span data-i18n="rig.mirrorPose">Specchia posa</span></button>
                             <button class="btn btn-secondary" id="mirrorWeightsBtn" style="width:100%; padding:8px; font-size:12px;"
-                                title="Copia le correzioni dei pesi sul voxel simmetrico dell'altro lato">⇄ Specchia pesi dipinti</button>
+                                title="Copia le correzioni dei pesi sul voxel simmetrico dell'altro lato"
+                                data-i18n-title="rig.mirrorWeightsTitle"><span aria-hidden="true">&#8644;</span> <span data-i18n="rig.mirrorWeights">Specchia pesi dipinti</span></button>
                             <button class="btn btn-secondary" id="symSkeletonBtn" style="width:100%; padding:8px; font-size:12px;"
-                                title="Rende lo scheletro simmetrico dopo le correzioni con G: le articolazioni L/R combaciano al voxel">⇄ Simmetrizza scheletro</button>
+                                title="Rende lo scheletro simmetrico dopo le correzioni con G: le articolazioni L/R combaciano al voxel"
+                                data-i18n-title="rig.symSkeletonTitle"><span aria-hidden="true">&#8644;</span> <span data-i18n="rig.symSkeleton">Simmetrizza scheletro</span></button>
                         </div>
-                        <p class="hint-text" style="margin-top:8px;">
+                        <p class="hint-text" style="margin-top:8px;" data-i18n="rig.symHint">
                             Lo specchio è sull'asse X, rispetto al centro del modello. Su un personaggio simmetrico
                             posi e dipingi un solo lato: l'altro si ricava da qui.
                         </p>
@@ -2813,7 +2821,7 @@
                                 </div>
                             </div>
                             <div class="pose-axis" style="margin-top:8px;">
-                                <label><span data-i18n="rig.wp.radius">Raggio pennello</span> <span id="wpRadiusVal">2 voxel</span></label>
+                                <label><span data-i18n="rig.wp.radius">Raggio pennello</span> <span id="wpRadiusVal" data-i18n="rig.wp.radiusDefault">2 voxel</span></label>
                                 <input type="range" id="wpRadius" min="0" max="8" step="1" value="2">
                             </div>
                             <div class="pose-axis" style="margin-top:4px;">
@@ -2855,7 +2863,7 @@
                             <p class="hint-text" id="wpStats" style="margin-top:6px;" data-i18n="rig.wp.statsNone">Nessuna correzione manuale</p>
                             <button class="btn btn-secondary" id="wpResetBtn"
                                 style="width:100%; padding:7px; font-size:11px; margin-top:6px;"
-                                data-i18n-title="rig.wp.resetTitle"
+                                data-i18n-title="rig.wp.resetTitle" data-i18n="rig.wp.reset"
                                 title="Butta tutte le correzioni manuali e torna ai pesi automatici">Azzera correzioni</button>
                             <p class="hint-text" style="margin-top:8px;" data-i18n="rig.wp.hint">
                                 Il modello si colora con la rampa di Blender: blu = peso 0, ciano, verde, giallo,
@@ -2888,27 +2896,29 @@
                             Rotation o tutti e due.
                         </p>
                         <button class="btn btn-secondary" id="resetPoseBtn"
-                            style="width:100%; padding:8px; font-size:12px; margin-top:8px;">↺ Riporta a T-pose</button>
+                            style="width:100%; padding:8px; font-size:12px; margin-top:8px;"><span aria-hidden="true">&#8634;</span> <span data-i18n="rig.resetPose">Riporta a T-pose</span></button>
                     </div>
 
-                    <div class="section-title" style="margin-top:16px;">Punta arto (IK)</div>
+                    <div class="section-title" style="margin-top:16px;" data-i18n="rig.ikTitle">Punta arto (IK)</div>
                     <div class="controls-group glass" style="padding:16px;">
                         <button class="btn btn-secondary" id="ikToggleBtn" style="width:100%; padding:9px; font-size:12px;"
-                            title="Trascina la mano o il piede: spalla e gomito (anca e ginocchio) si sistemano da soli">🎯 Punta arto</button>
+                            title="Trascina la mano o il piede: spalla e gomito (anca e ginocchio) si sistemano da soli"
+                            data-i18n-title="rig.ikToggleTitle"><span aria-hidden="true">&#127919;</span> <span data-i18n="rig.ikToggle">Punta arto</span></button>
                         <p id="ikHint" class="hint-text" style="margin-top:8px;"></p>
-                        <p class="hint-text" style="margin-top:4px;">
+                        <p class="hint-text" style="margin-top:4px;" data-i18n="rig.ikHintLong">
                             Attiva la modalità, poi trascina con il tasto sinistro l'estremità dell'arto verso il punto
                             voluto: invece di ruotare tre ossa a mano, la catena si orienta da sola. Il ginocchio piega
                             avanti e il gomito indietro. Ogni trascinamento è un solo Ctrl+Z.
                         </p>
                     </div>
 
-                    <div class="section-title" style="margin-top:16px;">Libreria pose</div>
+                    <div class="section-title" style="margin-top:16px;" data-i18n="rig.poseLibTitle">Libreria pose</div>
                     <div class="controls-group glass" style="padding:16px;">
                         <button class="btn btn-secondary" id="poseSaveBtn" style="width:100%; padding:8px; font-size:12px;"
-                            title="Salva la posa corrente nella libreria, riusabile su altri oggetti">💾 Salva posa corrente</button>
+                            title="Salva la posa corrente nella libreria, riusabile su altri oggetti"
+                            data-i18n-title="rig.poseSaveTitle"><span aria-hidden="true">&#128190;</span> <span data-i18n="rig.poseSave">Salva posa corrente</span></button>
                         <div id="poseLibList" style="margin-top:10px;"></div>
-                        <p id="poseLibEmpty" class="hint-text" style="margin-top:4px;">
+                        <p id="poseLibEmpty" class="hint-text" style="margin-top:4px;" data-i18n="rig.poseLibEmpty">
                             Nessuna posa salvata. Le pose restano su questo computer e valgono per qualsiasi oggetto
                             con gli stessi nomi di ossa.
                         </p>
@@ -2928,7 +2938,7 @@
                                 <option value="wave" data-i18n="rig.clipWave">Saluto</option>
                             </select>
                         </div>
-                        <p class="hint-text" style="margin-top:8px;">Le clip sono generate dallo scheletro e servono per
+                        <p class="hint-text" style="margin-top:8px;" data-i18n="rig.clipHint">Le clip sono generate dallo scheletro e servono per
                             l'anteprima. Vengono incluse nell'export GLB.</p>
                     </div>
 
@@ -3007,7 +3017,7 @@
         <div id="gizmoBar" class="canvas-hud"
             style="position:absolute; top:14px; left:14px; z-index:20; gap:6px; padding:6px;">
             <button id="gizmoRotateBtn" class="gizmo-btn active" title="Ruota osso — posa (R)" data-i18n-title="gizmo.rotateTitle" data-i18n="gizmo.rotate">⟳ Ruota</button>
-            <button id="gizmoTranslateBtn" class="gizmo-btn" title="Sposta giunto — modifica scheletro (G)" data-i18n-title="gizmo.translateTitle">✥
+            <button id="gizmoTranslateBtn" class="gizmo-btn" title="Sposta giunto — modifica scheletro (G)" data-i18n-title="gizmo.translateTitle" data-i18n="gizmo.translate">&#10021;
                 Sposta</button>
         </div>
         <div id="loaderOverlay" class="loader-overlay glass" style="display: none;">
@@ -3336,14 +3346,14 @@
                             <label data-i18n="settings.accent">Colore accento</label>
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <div id="accentPresets" style="display:flex; gap:6px;">
-                                    <button type="button" class="accent-swatch" data-accent="#475569" title="Grafite" style="background:#475569;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#6366f1" title="Indaco" style="background:#6366f1;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#0ea5e9" title="Azzurro" style="background:#0ea5e9;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#10b981" title="Verde" style="background:#10b981;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#f59e0b" title="Ambra" style="background:#f59e0b;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#ec4899" title="Magenta" style="background:#ec4899;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#475569" title="Grafite" data-i18n-title="settings.accentGraphite" style="background:#475569;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#6366f1" title="Indaco" data-i18n-title="settings.accentIndigo" style="background:#6366f1;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#0ea5e9" title="Azzurro" data-i18n-title="settings.accentSky" style="background:#0ea5e9;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#10b981" title="Verde" data-i18n-title="settings.accentGreen" style="background:#10b981;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#f59e0b" title="Ambra" data-i18n-title="settings.accentAmber" style="background:#f59e0b;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#ec4899" title="Magenta" data-i18n-title="settings.accentMagenta" style="background:#ec4899;"></button>
                                 </div>
-                                <input type="color" id="accentColorInput" value="#475569" title="Colore personalizzato" style="width:32px; height:28px; padding:2px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--input-bg); cursor:pointer;">
+                                <input type="color" id="accentColorInput" value="#475569" title="Colore personalizzato" data-i18n-title="settings.accentCustom" style="width:32px; height:28px; padding:2px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--input-bg); cursor:pointer;">
                             </div>
                         </div>
                         <div class="control-row">
@@ -3354,10 +3364,10 @@
                             <label data-i18n="settings.font">Carattere</label>
                             <select id="fontSelect" class="field-strong" style="padding:6px; font-size:12px; width:180px;">
                                 <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans</option>
-                                <option value="system-ui, sans-serif">Sistema</option>
+                                <option value="system-ui, sans-serif" data-i18n="settings.fontSystem">Sistema</option>
                                 <option value="'Segoe UI', Tahoma, sans-serif">Segoe UI</option>
                                 <option value="Georgia, serif">Georgia (serif)</option>
-                                <option value="'Courier New', monospace">Monospazio</option>
+                                <option value="'Courier New', monospace" data-i18n="settings.fontMono">Monospazio</option>
                             </select>
                         </div>
                         <div class="control-row">
@@ -3379,7 +3389,7 @@
                         </div>
                         <div id="shortcutConflict" style="display:none; font-size:11px; color:var(--danger, #ef4444); line-height:1.4; padding:4px 0;"></div>
                         <div style="display:flex; gap:6px;">
-                            <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" title="Ripristina tutte le scorciatoie ai valori predefiniti">↺ Ripristina predefiniti</button>
+                            <button class="btn btn-secondary" id="shortcutsResetBtn" style="flex:1; font-size:11px; padding:8px 6px;" title="Ripristina tutte le scorciatoie ai valori predefiniti" data-i18n-title="shortcut.resetTitle"><span aria-hidden="true">&#8634;</span> <span data-i18n="shortcut.reset">Ripristina predefiniti</span></button>
                         </div>
                     </div>
                 </div>

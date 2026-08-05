@@ -6,9 +6,10 @@
                 gizmoRotateBtn.classList.toggle('active', mode === 'rotate');
                 gizmoTranslateBtn.classList.toggle('active', mode === 'translate');
                 if (typeof updateGizmo === 'function') updateGizmo();
+                // t() all'USO, non a livello di modulo: i dizionari arrivano in async.
                 if (rig) rigHint.textContent = mode === 'translate'
-                    ? 'Modalità SPOSTA (G): trascina per muovere il giunto e adattare lo scheletro. Premi R per tornare a ruotare.'
-                    : 'Modalità RUOTA (R): trascina gli anelli per posare l\'osso. Premi G per spostare il giunto.';
+                    ? t('gizmo.hintTranslate')
+                    : t('gizmo.hintRotate');
             }
             gizmoRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
             gizmoTranslateBtn.addEventListener('click', () => setGizmoMode('translate'));

@@ -35,6 +35,11 @@ const els={};
 });
 global.document.getElementById=(id)=>els[id]||null;
 
+// `t` esiste sempre nel bundle vero (23-i18n.js sta piu' su nel manifest). Qui
+// torna la chiave con i segnaposto risolti, cosi' un'asserzione puo' leggere
+// SIA la chiave sia i valori che le sono stati passati.
+global.t = (k, vars) => k + (vars ? JSON.stringify(vars) : '');
+
 function attr(arr,item=3){
   return { count: arr.length/item,
     getX:i=>arr[i*item], getY:i=>arr[i*item+1], getZ:i=>arr[i*item+2] };

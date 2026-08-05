@@ -104,60 +104,42 @@
             /* ===== T6: Pannello rimappatura scorciatoie ============================
              * Elenca ogni azione di KEYMAP con il suo tasto e permette di rimapparla:
              * clic sul tasto -> "premi un tasto" -> nuova assegnazione. Rileva i
-             * conflitti (tasto già usato) e li segnala in italiano senza applicare.
+             * conflitti (tasto gia' usato) e li segnala senza applicare.
              * Dopo un rebind valido aggiorna KEYMAP in memoria (applicazione immediata)
              * e persiste via savePref('keymap', ...). */
-            const SHORTCUT_TOOL_LABELS = {
-                view: 'Strumento: Vista',
-                place: 'Strumento: Aggiungi',
-                remove: 'Strumento: Rimuovi',
-                draw: 'Strumento: Disegna',
-                pick: 'Strumento: Contagocce'
-            };
-            const SHORTCUT_SINGLE_LABELS = {
-                toggleMode: 'Modalità Oggetto/Modifica',
-                extrude: 'Estrusione',
-                brushDown: 'Pennello −',
-                brushUp: 'Pennello +',
-                togglePlay: 'Play/Pausa animazione'
-            };
+            // Solo l'ORDINE, non le etichette: il testo si prende da t() al momento del
+            // render. Con le etichette in una costante di modulo si risolverebbero al
+            // CARICAMENTO, quando i18nDict e' ancora vuoto, e resterebbero congelate.
+            const SHORTCUT_TOOL_ORDER = ['view', 'place', 'remove', 'draw', 'pick'];
             const SHORTCUT_SINGLE_ORDER = ['toggleMode', 'extrude', 'brushDown', 'brushUp', 'togglePlay'];
 
-            // Etichetta tradotta con ripiego italiano. Serve il ripiego perche'
-            // renderShortcutsPanel() gira anche PRIMA che i dizionari siano stati
-            // caricati (19-prefs viene prima di 23-i18n nel manifest) e li' t()
-            // restituirebbe la chiave nuda.
-            function shortcutLabel(key, fallback) {
-                const s = (typeof t === 'function') ? t(key) : key;
-                return (!s || s === key) ? fallback : s;
-            }
-
             function keyDisplay(k) {
-                if (k === ' ' || k === 'Spacebar' || k === 'Space') return 'Spazio';
+                if (k === ' ' || k === 'Spacebar' || k === 'Space') return t('shortcut.keySpace');
                 if (k === 'ArrowUp') return '↑';
                 if (k === 'ArrowDown') return '↓';
                 if (k === 'ArrowLeft') return '←';
                 if (k === 'ArrowRight') return '→';
-                if (k === 'Escape') return 'Esc';
+                if (k === 'Escape') return t('shortcut.keyEsc');
                 if (typeof k !== 'string' || k.length === 0) return '—';
                 return k.length === 1 ? k.toUpperCase() : k;
             }
 
             // Costruisce la lista piatta dei binding attuali a partire da KEYMAP.
+            // `i18nKey` viaggia con il binding: serve sia per il testo ora sia per
+            // l'attributo data-i18n, che lascia ad applyI18n il cambio lingua.
             function collectShortcutBindings() {
                 const list = [];
                 const tools = KEYMAP.tools || {};
-                // Ordine stabile per strumento (non per tasto), così l'elenco non salta
+                // Ordine stabile per strumento (non per tasto), cosi' l'elenco non salta
                 // quando si rimappa.
-                const toolOrder = Object.keys(SHORTCUT_TOOL_LABELS);
                 const keyByTool = {};
                 Object.keys(tools).forEach(k => { keyByTool[tools[k]] = k; });
-                toolOrder.forEach(tool => {
+                SHORTCUT_TOOL_ORDER.forEach(tool => {
                     if (keyByTool[tool] !== undefined) {
                         const tk = 'shortcut.tool' + tool.charAt(0).toUpperCase() + tool.slice(1);
                         list.push({
                             id: 'tool:' + tool, type: 'tool', tool, key: keyByTool[tool],
-                            label: shortcutLabel(tk, SHORTCUT_TOOL_LABELS[tool])
+                            i18nKey: tk, label: t(tk)
                         });
                     }
                 });
@@ -165,7 +147,7 @@
                     if (KEYMAP[prop] !== undefined) {
                         list.push({
                             id: 'single:' + prop, type: 'single', prop, key: KEYMAP[prop],
-                            label: shortcutLabel('shortcut.' + prop, SHORTCUT_SINGLE_LABELS[prop])
+                            i18nKey: 'shortcut.' + prop, label: t('shortcut.' + prop)
                         });
                     }
                 });
@@ -195,7 +177,8 @@
             function assignShortcut(binding, newKey) {
                 const conflict = collectShortcutBindings().find(b => b.id !== binding.id && b.key === newKey);
                 if (conflict) {
-                    showShortcutConflict('Il tasto "' + keyDisplay(newKey) + '" è già usato da "' + conflict.label + '". Scegli un altro tasto.');
+                    showShortcutConflict(t('shortcut.conflict',
+                        { key: keyDisplay(newKey), action: conflict.label }));
                     return false;
                 }
                 showShortcutConflict('');
@@ -218,7 +201,7 @@
                 shortcutListeningId = binding.id;
                 showShortcutConflict('');
                 btnEl.classList.add('listening');
-                btnEl.textContent = 'premi un tasto…';
+                btnEl.textContent = t('shortcut.pressKey');
                 shortcutListenHandler = function (e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -240,12 +223,19 @@
                     row.className = 'shortcut-row';
                     const label = document.createElement('div');
                     label.className = 'shortcut-label';
+                    // data-i18n, non solo textContent: il pannello viene costruito una
+                    // volta sola (anche PRIMA che i dizionari arrivino), quindi senza
+                    // l'annotazione il cambio lingua non lo toccherebbe piu'.
+                    label.setAttribute('data-i18n', binding.i18nKey);
                     label.textContent = binding.label;
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = 'shortcut-key' + (shortcutListeningId === binding.id ? ' listening' : '');
-                    btn.textContent = shortcutListeningId === binding.id ? 'premi un tasto…' : keyDisplay(binding.key);
-                    btn.title = 'Clicca e premi la nuova combinazione (Esc per annullare)';
+                    const listening = (shortcutListeningId === binding.id);
+                    btn.className = 'shortcut-key' + (listening ? ' listening' : '');
+                    if (listening) btn.setAttribute('data-i18n', 'shortcut.pressKey');
+                    btn.textContent = listening ? t('shortcut.pressKey') : keyDisplay(binding.key);
+                    btn.setAttribute('data-i18n-title', 'shortcut.rebindTitle');
+                    btn.title = t('shortcut.rebindTitle');
                     btn.addEventListener('click', () => {
                         if (shortcutListeningId === binding.id) { stopShortcutListening(); return; }
                         startShortcutListening(binding, btn);

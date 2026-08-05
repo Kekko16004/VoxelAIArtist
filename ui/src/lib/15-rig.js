@@ -1438,7 +1438,7 @@
                 }
                 if (typeof updateGizmo === 'function') updateGizmo();
                 const nSel = rig.bones.filter(bd => !bd.helper).length;
-                rigHint.textContent = `Rig "${rig.type}" pronto: ${nSel} ossa. Clic sul PALLINO di un giunto per selezionarlo, poi R per ruotare (posa) o G per spostare il giunto. Ctrl+Z annulla.`;
+                rigHint.textContent = t('rig.ready', { type: rig.type, count: nSel });
                 updateWeightPaintUI();
             }
 
@@ -2170,7 +2170,7 @@
             });
 
             if (weightPaintToggle) weightPaintToggle.addEventListener('click', () => {
-                if (!rig || !rig.bones.length) { alert('Prima crea uno scheletro con Auto-Rig.'); return; }
+                if (!rig || !rig.bones.length) { alert(t('rig.needAutoRig')); return; }
                 setWeightPaint(!weightPaintActive);
             });
             // Le modalita' del pennello stanno su DUE barre segmentate (mix/add/sub e
@@ -2338,10 +2338,8 @@
                 if (showRigBtn) showRigBtn.style.display = (has && !rigPreviewActive) ? 'block' : 'none';
                 if (rigHint && !rigPreviewActive) {
                     rigHint.textContent = has
-                        ? `Rig salvato su questo oggetto: ${rig.bones.filter(b => !b.helper).length} ossa, posa e pesi inclusi. `
-                          + 'Viene esportato in JSON e GLB. Premi "Mostra rig" per rientrare in anteprima, '
-                          + 'oppure Auto-Rig per rigenerarlo da zero (perdi posa e correzioni dei pesi).'
-                        : 'Nessun rig. Premi Auto-Rig per generare uno scheletro con pesi rigidi (ogni voxel segue un solo osso, cosi\' i cubi non si deformano).';
+                        ? t('rig.hintSaved', { count: rig.bones.filter(b => !b.helper).length })
+                        : t('rig.hintNoRig');
                 }
                 updateWeightPaintUI();
             }
@@ -2444,7 +2442,7 @@
                     row.addEventListener('click', () => selectBone(i));
                     // Doppio clic = rinomina (32-rig-tools.js). Il nome dell'osso e' la sua
                     // identita': la rinomina migra posa, pesi e track delle animazioni.
-                    row.title = 'Doppio clic per rinominare';
+                    row.title = t('rig.dblClickRename');
                     row.addEventListener('dblclick', () => {
                         if (typeof rigRenameBonePrompt === 'function') rigRenameBonePrompt(i);
                     });
@@ -3021,7 +3019,7 @@
                     label.style.cssText = 'flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
                     const playBtn = document.createElement('button');
                     playBtn.className = 'btn btn-secondary';
-                    playBtn.textContent = 'Play';
+                    playBtn.textContent = t('rig.animPlay');
                     playBtn.style.cssText = 'padding:4px 10px; font-size:11px;';
                     playBtn.addEventListener('click', () => {
                         animSelect.value = a.name;
@@ -3031,7 +3029,7 @@
                     const delBtn = document.createElement('button');
                     delBtn.className = 'btn btn-secondary';
                     delBtn.textContent = 'X';
-                    delBtn.title = 'Elimina animazione';
+                    delBtn.title = t('rig.deleteAnim');
                     delBtn.style.cssText = 'padding:4px 9px; font-size:11px;';
                     delBtn.addEventListener('click', () => removeCustomAnim(a.name));
                     row.appendChild(label); row.appendChild(playBtn); row.appendChild(delBtn);
@@ -3063,7 +3061,7 @@
             }
 
             if (addAnimBtn) addAnimBtn.addEventListener('click', () => {
-                if (!rig || !rig.bones || !rig.bones.length) { alert("Prima crea uno scheletro (Rig) per l'oggetto."); return; }
+                if (!rig || !rig.bones || !rig.bones.length) { alert(t('rig.needRigForObject')); return; }
                 const show = animForm.style.display === 'none' || !animForm.style.display;
                 animForm.style.display = show ? 'flex' : 'none';
                 if (show) animPromptInput.focus();
@@ -3074,13 +3072,13 @@
             });
 
             if (animGenerateBtn) animGenerateBtn.addEventListener('click', () => {
-                if (!rig || !skeleton) { alert("Scheletro non pronto."); return; }
+                if (!rig || !skeleton) { alert(t('rig.skeletonNotReady')); return; }
                 const desc = animPromptInput.value.trim();
-                if (!desc) { alert("Descrivi l'animazione da generare."); return; }
+                if (!desc) { alert(t('rig.describeAnim')); return; }
                 const boneNames = rig.bones.map(b => b.name);
                 const origHtml = animGenerateBtn.innerHTML;
                 animGenerateBtn.disabled = true;
-                animGenerateBtn.innerHTML = '<span class="spinner"></span> Genero...';
+                animGenerateBtn.innerHTML = '<span class="spinner"></span> ' + t('rig.animGenerating');
                 fetch(animApiUrl(), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3097,16 +3095,16 @@
                         throw ex;
                     }))
                     .then(anim => {
-                        if (!anim || !Array.isArray(anim.tracks) || !anim.tracks.length) throw new Error("L'AI non ha restituito track validi.");
+                        if (!anim || !Array.isArray(anim.tracks) || !anim.tracks.length) throw new Error(t('rig.aiNoTracks'));
                         if (animNameInput.value.trim()) anim.name = animNameInput.value.trim();
                         const test = buildClipFromAnimData(anim);
-                        if (!test) throw new Error("Nessun osso valido nei track generati.");
+                        if (!test) throw new Error(t('rig.aiNoValidBones'));
                         const finalName = addCustomAnim(anim);
                         animForm.style.display = 'none';
                         animNameInput.value = ''; animPromptInput.value = '';
-                        rigHint.textContent = `Animazione "${finalName}" creata e in riproduzione.`;
+                        rigHint.textContent = t('rig.animCreated', { name: finalName });
                     })
-                    .catch(err => alert('Errore animazione: ' + err.message))
+                    .catch(err => alert(t('rig.animError', { error: err.message })))
                     .finally(() => { animGenerateBtn.disabled = false; animGenerateBtn.innerHTML = origHtml; });
             });
 
@@ -3121,7 +3119,7 @@
 
             autoRigBtn.addEventListener('click', () => {
                 const voxels = currentModelData.voxels || [];
-                if (!voxels.length) { rigHint.textContent = 'Nessun voxel da riggare. Genera o carica un modello prima.'; return; }
+                if (!voxels.length) { rigHint.textContent = t('rig.hintNoVoxels'); return; }
                 pushHistory();
                 rig = rigType === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
                 selectedBoneIndex = -1;
@@ -3554,16 +3552,16 @@
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
                 label.appendChild(cb);
-                label.appendChild(document.createTextNode('Specchia Posa (Mirror)'));
-                
+                label.appendChild(document.createTextNode(t('rig.pasteMirror')));
+
                 const btnOk = document.createElement('button');
                 btnOk.className = 'btn btn-primary';
-                btnOk.textContent = 'Applica';
+                btnOk.textContent = t('rig.pasteMirrorApply');
                 btnOk.style.padding = '4px 12px';
-                
+
                 const btnCancel = document.createElement('button');
                 btnCancel.className = 'btn btn-secondary';
-                btnCancel.textContent = 'Annulla';
+                btnCancel.textContent = t('rig.pasteMirrorCancel');
                 btnCancel.style.padding = '4px 12px';
 
                 toast.appendChild(label);

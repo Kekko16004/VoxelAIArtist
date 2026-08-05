@@ -284,7 +284,14 @@
             // Applica alla UI l'attuale editorMode (badge, cursore, tool).
             function applyEditorMode() {
                 const badge = document.getElementById('editorModeBadge');
-                if (badge) badge.textContent = editorMode === 'object' ? 'Modalità Oggetto' : 'Modalità Modifica';
+                if (badge) {
+                    // Il data-i18n va SCAMBIATO, non solo il testo: il template lo nasce
+                    // con "mode.edit" e al cambio lingua applyI18n riscriverebbe il badge
+                    // con la modalita' sbagliata.
+                    const k = (editorMode === 'object') ? 'mode.object' : 'mode.edit';
+                    badge.setAttribute('data-i18n', k);
+                    badge.textContent = t(k);
+                }
                 if (editorMode === 'object') {
                     // In Modalità Oggetto niente editing: torna alla vista/orbita.
                     if (currentTool !== 'view') setTool('view');
@@ -334,7 +341,7 @@
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = selectedObjectIds.indexOf(obj.id) !== -1;
-                    chk.title = 'Seleziona per Unisci';
+                    chk.title = t('objects.selectForMerge');
                     chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary,#475569);';
                     chk.addEventListener('click', (ev) => {
                         ev.stopPropagation();
@@ -345,7 +352,7 @@
 
                     const eye = document.createElement('span');
                     eye.textContent = obj.visible ? '👁' : '🚫';
-                    eye.title = obj.visible ? 'Nascondi oggetto' : 'Mostra oggetto';
+                    eye.title = obj.visible ? t('objects.hide') : t('objects.show');
                     eye.style.cssText = 'cursor:pointer; user-select:none; opacity:' + (obj.visible ? '1' : '0.5') + ';';
                     eye.addEventListener('click', (ev) => {
                         ev.stopPropagation();
@@ -413,7 +420,7 @@
 
                             const partDup = document.createElement('span');
                             partDup.textContent = '📋';
-                            partDup.title = 'Duplica come oggetto separato';
+                            partDup.title = t('objects.partDuplicateTitle');
                             partDup.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDup.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
@@ -434,11 +441,11 @@
 
                             const partDel = document.createElement('span');
                             partDel.textContent = '🗑';
-                            partDel.title = 'Elimina parte/figlio';
+                            partDel.title = t('objects.partDeleteTitle');
                             partDel.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.6;';
                             partDel.addEventListener('click', (ev) => {
                                 ev.stopPropagation();
-                                if (!confirm('Eliminare la parte "' + partName + '"?')) return;
+                                if (!confirm(t('objects.confirmDeletePart', { name: partName }))) return;
                                 if (typeof pushHistory === 'function') pushHistory();
                                 obj.data.voxels = obj.data.voxels.filter(v => v.part !== partName);
                                 if (activePartName === partName) activePartName = null;
@@ -469,13 +476,12 @@
                 updateObjDeleteBtn();
             }
 
-            // t() con ripiego: prima che l'i18n sia caricato t() restituisce la CHIAVE
-            // stessa, che nel bottone si vedrebbe come "objects.delete". In quel caso si
-            // usa il testo italiano, che e' la lingua sorgente (ed e' gia' nel template).
-            // Stesso schema usato in 31-help.js.
-            function objT(key, vars, fallbackIt) {
-                const s = (typeof t === 'function') ? t(key, vars) : key;
-                return (s && s !== key) ? s : fallbackIt;
+            // Alias storico di t(). Nessun ripiego italiano: prima che i dizionari
+            // arrivino t() rende la CHIAVE nuda, ed e' il comportamento documentato
+            // (vedi 23-i18n.js). I data-i18n qui sotto lasciano ad applyI18n il
+            // compito di riscrivere il bottone quando la lingua cambia davvero.
+            function objT(key, vars) {
+                return t(key, vars);
             }
 
             // Aggiorna etichetta e tooltip del tasto Elimina in base alla selezione.
@@ -503,8 +509,7 @@
                 delBtn.style.overflow = 'hidden';
                 delBtn.style.textOverflow = 'ellipsis';
                 if (activePartName) {
-                    const label = objT('objects.deleteChild', { name: activePartName },
-                        '🗑 Elimina figlio: ' + activePartName);
+                    const label = objT('objects.deleteChild', { name: activePartName });
                     delBtn.removeAttribute('data-i18n');
                     delBtn.removeAttribute('data-i18n-title');
                     delBtn.textContent = label;
@@ -512,8 +517,8 @@
                 } else {
                     delBtn.setAttribute('data-i18n', 'objects.delete');
                     delBtn.setAttribute('data-i18n-title', 'objects.deleteTitle');
-                    delBtn.textContent = objT('objects.delete', null, '🗑 Elimina attivo');
-                    delBtn.title = objT('objects.deleteTitle', null, 'Elimina l\'oggetto attivo');
+                    delBtn.textContent = objT('objects.delete');
+                    delBtn.title = objT('objects.deleteTitle');
                 }
             }
 
@@ -542,7 +547,7 @@
             function objNew() {
                 const hasContent = sceneObjects.some(o => (o.data.voxels || []).length > 0);
                 if (hasContent) {
-                    if (!confirm('Vuoi aggiungere un nuovo oggetto mantenendo quelli attuali? (Annulla per non fare nulla)')) return;
+                    if (!confirm(t('objects.confirmNew'))) return;
                 }
                 if (typeof pushHistory === 'function') pushHistory();
                 const gSize = (currentModelData.metadata && currentModelData.metadata.grid_size) || [16, 16, 16];
@@ -571,7 +576,7 @@
             function objRename() {
                 const active = getActiveObject();
                 if (!active) return;
-                const name = prompt('Nuovo nome per l\'oggetto:', active.name);
+                const name = prompt(t('objects.promptRename'), active.name);
                 if (name === null) return;
                 const trimmed = name.trim();
                 // Il nome sta nella rosa degli scatti (sceneMeta), quindi basta lo scatto
@@ -594,7 +599,7 @@
                 const active = getActiveObject();
                 if (!active) return false;
                 if (activePartName) {
-                    if (conferma && !confirm('Eliminare la parte/figlio "' + activePartName + '"?')) return false;
+                    if (conferma && !confirm(t('objects.confirmDeleteChild', { name: activePartName }))) return false;
                     if (typeof pushHistory === 'function') pushHistory();
                     active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                     activePartName = null;
@@ -603,7 +608,7 @@
                     renderObjectsList();
                     return true;
                 }
-                if (conferma && !confirm('Eliminare l\'oggetto "' + active.name + '"?')) return false;
+                if (conferma && !confirm(t('objects.confirmDelete', { name: active.name }))) return false;
                 const idx = sceneObjects.findIndex(o => o.id === active.id);
                 if (idx === -1) return false;
                 // Lo scatto si porta dietro il contenuto dell'oggetto che sta per sparire:
@@ -637,14 +642,14 @@
                     // fallback: attivo + primo altro visibile
                     const others = sceneObjects.filter(o => o.id !== activeObjectId);
                     if (!getActiveObject() || !others.length) {
-                        alert('Servono almeno due oggetti da unire. Spunta le caselle nell\'outliner.');
+                        alert(t('objects.mergeNeedTwo'));
                         return;
                     }
                     ids = [activeObjectId, others[0].id];
                 }
                 // Ordina secondo l'ordine di scena per un merge deterministico.
                 const toMerge = sceneObjects.filter(o => ids.indexOf(o.id) !== -1);
-                if (toMerge.length < 2) { alert('Selezione non valida per l\'unione.'); return; }
+                if (toMerge.length < 2) { alert(t('objects.mergeInvalid')); return; }
 
                 const map = new Map(); // "x,y,z" -> color (ultimo vince)
                 // L'unione FA SPARIRE gli originali: lo scatto se li porta dietro tutti,

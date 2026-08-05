@@ -102,6 +102,18 @@
                     // applica normalmente.
                     if (!sameAsDom) applyI18n(document);
                     i18nApplied = true;
+                    // applyI18n riscrive solo i nodi ANNOTATI (data-i18n*). I title
+                    // messi da JS su elementi costruiti a runtime non sono annotati -
+                    // e uno di loro ha un segnaposto ({color}), che un attributo non
+                    // saprebbe esprimere - quindi restano com'erano al momento in cui
+                    // sono stati creati. Quelle liste nascono PRIMA che i dizionari
+                    // siano caricati, quando t() ritorna la chiave nuda: senza questo
+                    // ridisegno si vedono per sempre 'objects.hide' e simili, e
+                    // cambiare lingua non li tocca. Misurato in GUI su tutte e 6 le
+                    // lingue.
+                    if (typeof renderObjectsList === 'function') { try { renderObjectsList(); } catch (e) {} }
+                    if (typeof renderPaletteSwatches === 'function') { try { renderPaletteSwatches(); } catch (e) {} }
+                    if (typeof renderMaterialsPanel === 'function') { try { renderMaterialsPanel(); } catch (e) {} }
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
                     if (sel && sel.value !== code) sel.value = code;

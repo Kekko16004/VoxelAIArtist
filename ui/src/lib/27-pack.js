@@ -88,8 +88,14 @@
                 input.type = 'text';
                 input.className = 'field';
                 input.style.cssText = 'padding: 8px; font-size: 12px;';
-                input.placeholder = (typeof t === 'function')
-                    ? t('pack.objPlaceholder') : 'Es. Vaso fiori';
+                // Annotati, non solo tradotti: queste righe contengono il testo
+                // DIGITATO dall'utente, quindi ridisegnarle a ogni cambio lingua
+                // glielo cancellerebbe. Con data-i18n-* ci pensa applyI18n, che
+                // riscrive l'attributo lasciando intatto `value`. Serve anche al
+                // primo avvio: la riga nasce prima che i dizionari siano caricati,
+                // quando t() ritorna la chiave nuda.
+                input.setAttribute('data-i18n-placeholder', 'pack.objPlaceholder');
+                input.placeholder = t('pack.objPlaceholder');
                 if (value) input.value = value;
                 input.addEventListener('input', packUpdateEstimate);
                 // Invio = aggiungi un'altra riga: si compila la lista senza mouse.
@@ -110,7 +116,8 @@
                 del.className = 'pack-row-btn danger';
                 del.type = 'button';
                 del.textContent = '−';
-                del.title = (typeof t === 'function') ? t('pack.removeObjTitle') : 'Rimuovi questo oggetto';
+                del.setAttribute('data-i18n-title', 'pack.removeObjTitle');
+                del.title = t('pack.removeObjTitle');
                 del.addEventListener('click', () => {
                     row.remove();
                     packSyncRemoveButtons();
@@ -162,7 +169,7 @@
                                 packReferences.push({ name: file.name, data: data });
                                 packRenderRefs();
                             } catch (err) {
-                                alert(((typeof t === 'function') ? t('pack.refError') : 'Riferimento non valido: ') + file.name);
+                                alert((t('pack.refError')) + file.name);
                             }
                         };
                         reader.readAsText(file);
@@ -193,10 +200,8 @@
                 });
                 if (packRefHint) {
                     packRefHint.textContent = packReferences.length
-                        ? ((typeof t === 'function') ? t('pack.refsHintLoaded', { n: packReferences.length })
-                            : `${packReferences.length} riferimento(i): palette e stile verranno estratti da questi file.`)
-                        : ((typeof t === 'function') ? t('pack.refsHint')
-                            : 'Nessun riferimento: lo stile del primo asset generato guiderà tutti gli altri.');
+                        ? (t('pack.refsHintLoaded', { n: packReferences.length }))
+                        : (t('pack.refsHint'));
                 }
             }
 
@@ -210,9 +215,7 @@
                 if (!total) { packEstimate.textContent = ''; return; }
                 // ~45 s per asset e' l'ordine di grandezza osservato con Gemini.
                 const mins = Math.max(1, Math.round(total * 45 / 60));
-                packEstimate.textContent = (typeof t === 'function')
-                    ? t('pack.estimate', { total: total, mins: mins })
-                    : `${total} asset da generare — circa ${mins} minuti (uno alla volta, per non farsi limitare dall'API).`;
+                packEstimate.textContent = t('pack.estimate', { total: total, mins: mins });
             }
             if (packVariants) packVariants.addEventListener('change', packUpdateEstimate);
 
@@ -234,23 +237,20 @@
                 packStartBtn.addEventListener('click', async () => {
                     const objects = packGetObjects();
                     if (!objects.length) {
-                        alert((typeof t === 'function') ? t('pack.noObjects')
-                            : 'Scrivi almeno un oggetto da generare!');
+                        alert(t('pack.noObjects'));
                         return;
                     }
                     const variants = parseInt(packVariants.value, 10) || 1;
                     const total = objects.length * variants;
                     // Conferma sopra i 12 job: e' oltre i ~10 minuti di attesa.
                     if (total > 12) {
-                        const msg = (typeof t === 'function')
-                            ? t('pack.confirmBig', { total: total })
-                            : `Stai per generare ${total} asset. Può richiedere molto tempo. Procedere?`;
+                        const msg = t('pack.confirmBig', { total: total });
                         if (!confirm(msg)) return;
                     }
 
                     packStartBtn.disabled = true;
                     packStartBtn.innerHTML = '<span class="spinner"></span> ' +
-                        ((typeof t === 'function') ? t('pack.starting') : 'Avvio...');
+                        (t('pack.starting'));
 
                     try {
                         const res = await fetch(packApi('/api/pack/start'), {
@@ -269,7 +269,7 @@
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore sconosciuto');
+                        if (!res.ok) throw new Error(data.error || t('common.unknownError'));
                         packRunId = data.id;
                         packActiveJobId = null;
                         Object.keys(packModelCache).forEach(k => delete packModelCache[k]);
@@ -278,10 +278,10 @@
                         packStartPolling();
                         if (packCancelBtn) packCancelBtn.style.display = '';
                     } catch (err) {
-                        alert(((typeof t === 'function') ? t('pack.startError') : 'Errore avvio pack: ') + err.message);
+                        alert((t('pack.startError')) + err.message);
                     } finally {
                         packStartBtn.disabled = false;
-                        packStartBtn.textContent = (typeof t === 'function') ? t('pack.startBtn') : 'Genera Pack';
+                        packStartBtn.textContent = t('pack.startBtn');
                     }
                 });
             }
@@ -289,8 +289,7 @@
             if (packCancelBtn) {
                 packCancelBtn.addEventListener('click', async () => {
                     if (!packRunId) return;
-                    if (!confirm((typeof t === 'function') ? t('pack.confirmCancel')
-                        : 'Annullare il pack? Gli asset già pronti restano disponibili.')) return;
+                    if (!confirm(t('pack.confirmCancel'))) return;
                     try {
                         const res = await fetch(packApi('/api/pack/cancel'), {
                             method: 'POST',
@@ -351,14 +350,12 @@
                     const head = document.createElement('div');
                     head.style.cssText = 'font-weight:700; margin-bottom:2px;'
                         + (clean ? '' : ' color:var(--danger);');
-                    head.textContent = (typeof t === 'function') ? t('pack.coherenceTitle') : 'Coerenza del pack';
+                    head.textContent = t('pack.coherenceTitle');
                     packCoherence.appendChild(head);
                     const body = document.createElement('div');
                     body.textContent = clean
-                        ? ((typeof t === 'function') ? t('pack.coherenceOk')
-                            : 'Tutti gli asset hanno dimensioni coerenti.')
-                        : ((typeof t === 'function') ? t('pack.coherenceOutliers')
-                            : 'Alcuni asset sono fuori scala rispetto al resto del pack.');
+                        ? (t('pack.coherenceOk'))
+                        : (t('pack.coherenceOutliers'));
                     packCoherence.appendChild(body);
                     if (!clean) {
                         rep.outliers.slice(0, 5).forEach(o => {
@@ -385,14 +382,14 @@
                 }
                 if (packProgressText) {
                     let txt = `${done}/${total}`;
-                    if (c.running) txt += ' · ' + ((typeof t === 'function') ? t('pack.inProgress') : 'in corso');
-                    if (errs) txt += ` · ${errs} ` + ((typeof t === 'function') ? t('pack.errors') : 'errori');
+                    if (c.running) txt += ' · ' + (t('pack.inProgress'));
+                    if (errs) txt += ` · ${errs} ` + (t('pack.errors'));
                     if (run.etaSeconds != null && run.etaSeconds > 0 && run.status === 'running') {
                         const m = Math.ceil(run.etaSeconds / 60);
-                        txt += ' · ~' + m + ((typeof t === 'function') ? t('pack.minShort') : ' min');
+                        txt += ' · ~' + m + (t('pack.minShort'));
                     }
                     if (run.status === 'cancelled') {
-                        txt += ' · ' + ((typeof t === 'function') ? t('pack.cancelled') : 'annullato');
+                        txt += ' · ' + (t('pack.cancelled'));
                     }
                     packProgressText.textContent = txt;
                 }
@@ -482,14 +479,15 @@
                 btn.appendChild(meta);
 
                 if (job.status === 'done') {
-                    btn.title = (typeof t === 'function') ? t('pack.clickToView')
-                        : 'Clicca per vedere questo modello nella griglia';
+                    btn.title = t('pack.clickToView');
                     btn.addEventListener('click', () => packLoadJob(job.id));
                 } else if (job.status === 'error') {
-                    btn.title = (job.error || '') + ' — ' + ((typeof t === 'function') ? t('pack.clickToRetry') : 'clicca per riprovare');
+                    btn.title = (job.error || '') + ' — ' + (t('pack.clickToRetry'));
                     btn.addEventListener('click', () => packRetryJob(job.id));
                 } else {
-                    btn.title = job.label + ' — ' + job.status;
+                    // Un segnaposto unico, non una concatenazione: il trattino e la
+                    // sequenza etichetta/stato appartengono alla traduzione.
+                    btn.title = t('pack.jobStatusTitle', { label: job.label, status: job.status });
                 }
                 return btn;
             }
@@ -530,7 +528,7 @@
                         const res = await fetch(packApi('/api/pack/result?runId=' +
                             encodeURIComponent(packRunId) + '&jobId=' + encodeURIComponent(jobId)));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Asset non disponibile');
+                        if (!res.ok) throw new Error(data.error || t('pack.assetUnavailable'));
                         model = data.model;
                         packModelCache[jobId] = model;
                     }
@@ -541,7 +539,7 @@
                     packActiveJobId = jobId;
                     packHighlightActive();
                 } catch (err) {
-                    alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore caricamento asset: ') + err.message);
+                    alert((t('pack.loadError')) + err.message);
                 }
             }
 
@@ -569,9 +567,9 @@
                     try {
                         const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!res.ok) throw new Error(data.error || t('common.error'));
                         if (!data.count) {
-                            alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
+                            alert(t('pack.noneReady'));
                             return;
                         }
                         // Affianco gli asset sull'asse X per non sovrapporli: un pack
@@ -597,7 +595,7 @@
                         buildModel();
                         packActiveJobId = null;
                     } catch (err) {
-                        alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore: ') + err.message);
+                        alert((t('pack.loadError')) + err.message);
                     }
                 });
             }
@@ -613,14 +611,13 @@
                     const origLabel = packExportAllBtn.textContent;
                     try {
                         packExportAllBtn.disabled = true;
-                        packExportAllBtn.textContent = (typeof t === 'function')
-                            ? t('pack.exporting') : 'Preparazione ZIP...';
+                        packExportAllBtn.textContent = t('pack.exporting');
 
                         const res = await fetch(packApi('/api/pack/all?runId=' + encodeURIComponent(packRunId || '')));
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error || 'Errore');
+                        if (!res.ok) throw new Error(data.error || t('common.error'));
                         if (!data.count) {
-                            alert((typeof t === 'function') ? t('pack.noneReady') : 'Nessun asset pronto.');
+                            alert(t('pack.noneReady'));
                             return;
                         }
 
@@ -678,7 +675,7 @@
                         const stamp = new Date().toISOString().slice(0, 10);
                         downloadBlob(createZipBlob(files), 'VoxelAI_Pack_' + stamp + '.zip');
                     } catch (err) {
-                        alert(((typeof t === 'function') ? t('pack.loadError') : 'Errore: ') + err.message);
+                        alert((t('pack.loadError')) + err.message);
                     } finally {
                         packExportAllBtn.disabled = false;
                         packExportAllBtn.textContent = origLabel;

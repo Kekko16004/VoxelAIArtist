@@ -27,6 +27,14 @@ class El {
   appendChild(c){ this.children.push(c); c.parentElement=this; return c; }
   remove(){ if(this.parentElement){ const i=this.parentElement.children.indexOf(this); if(i>=0) this.parentElement.children.splice(i,1); } }
   addEventListener(e,f){ (this.listeners[e]=this.listeners[e]||[]).push(f); }
+  // Ogni Element vero li ha: la carenza era dello stub, non del sorgente.
+  // Servono da quando le righe del pack si annotano con data-i18n-* invece di
+  // essere ridisegnate a ogni cambio lingua (ridisegnarle cancellerebbe il
+  // testo digitato dall'utente).
+  setAttribute(k,v){ this._attrs=this._attrs||{}; this._attrs[k]=String(v);
+    if(k.indexOf('data-')===0){ this.dataset[k.slice(5).replace(/-([a-z])/g,(m,c)=>c.toUpperCase())]=String(v); } }
+  getAttribute(k){ return (this._attrs&&k in this._attrs)?this._attrs[k]:null; }
+  hasAttribute(k){ return !!(this._attrs&&k in this._attrs); }
   dispatch(e,ev){ (this.listeners[e]||[]).forEach(f=>f(ev||{preventDefault(){},stopPropagation(){}})); }
   click(){ this.dispatch('click'); }
   get nextElementSibling(){ if(!this.parentElement) return null;

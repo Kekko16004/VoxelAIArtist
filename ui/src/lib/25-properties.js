@@ -15,7 +15,8 @@
                 const obj = (typeof getActiveObject === 'function') ? getActiveObject() : null;
 
                 if (!obj) {
-                    panel.innerHTML = '<div class="screens-section-note" data-i18n="properties.empty">Nessun oggetto selezionato.</div>';
+                    panel.innerHTML = '<div class="screens-section-note" data-i18n="properties.empty">' +
+                        t('properties.empty') + '</div>';
                     if (typeof applyI18n === 'function') applyI18n(panel);
                     return;
                 }
@@ -26,40 +27,42 @@
 
                 panel.innerHTML =
                     '<div class="control-row">' +
-                        '<label data-i18n="properties.name">Nome</label>' +
+                        '<label data-i18n="properties.name">' + t('properties.name') + '</label>' +
                         '<input type="text" id="propName" class="field-strong" style="width:170px; padding:6px; font-size:12px;">' +
                     '</div>' +
                     '<div class="control-row">' +
-                        '<label data-i18n="properties.visible">Visibile</label>' +
+                        '<label data-i18n="properties.visible">' + t('properties.visible') + '</label>' +
                         '<label class="switch"><input type="checkbox" id="propVisible"><span class="slider"></span></label>' +
                     '</div>' +
                     '<div class="menu-sep"></div>' +
-                    '<div class="menu-label" data-i18n="properties.transform">Trasformazione</div>' +
+                    '<div class="menu-label" data-i18n="properties.transform">' + t('properties.transform') + '</div>' +
                     '<div style="display:flex; gap:6px;">' +
                         '<label style="flex:1; font-size:11px; color:var(--text-muted);">X<input type="number" id="propPosX" class="field-strong" step="1" value="0" style="width:100%; padding:5px; font-size:12px; margin-top:2px;"></label>' +
                         '<label style="flex:1; font-size:11px; color:var(--text-muted);">Y<input type="number" id="propPosY" class="field-strong" step="1" value="0" style="width:100%; padding:5px; font-size:12px; margin-top:2px;"></label>' +
                         '<label style="flex:1; font-size:11px; color:var(--text-muted);">Z<input type="number" id="propPosZ" class="field-strong" step="1" value="0" style="width:100%; padding:5px; font-size:12px; margin-top:2px;"></label>' +
                     '</div>' +
                     '<div class="control-row" style="margin-top:6px;">' +
-                        '<label data-i18n="properties.rotation">Rotazione Y (90°)</label>' +
+                        '<label data-i18n="properties.rotation">' + t('properties.rotation') + '</label>' +
                         '<input type="number" id="propRotY" class="field-strong" step="90" value="0" style="width:80px; padding:5px; font-size:12px;">' +
                     '</div>' +
                     '<div class="control-row">' +
-                        '<label data-i18n="properties.scale">Scala</label>' +
+                        '<label data-i18n="properties.scale">' + t('properties.scale') + '</label>' +
                         '<input type="number" id="propScale" class="field-strong" step="1" min="1" value="1" style="width:80px; padding:5px; font-size:12px;">' +
                     '</div>' +
                     ((typeof rig !== 'undefined' && rig && rig.bones) ?
                         '<div class="menu-sep"></div>' +
-                        '<div class="menu-label">Ruota Scheletro (Rig)</div>' +
+                        '<div class="menu-label" data-i18n="properties.rigRotate">' + t('properties.rigRotate') + '</div>' +
                         '<div class="control-row">' +
-                            '<label title="Ruota solo le ossa rispetto alla mesh">Orientamento</label>' +
+                            '<label data-i18n="properties.rigOrientation" data-i18n-title="properties.rigOrientationTitle"' +
+                            ' title="' + t('properties.rigOrientationTitle') + '">' + t('properties.rigOrientation') + '</label>' +
                             '<div style="display:flex; gap:4px;">' +
-                                '<button class="btn btn-secondary" id="propRotRig90Btn" style="padding:4px 8px; font-size:11px;">+90°</button>' +
-                                '<button class="btn btn-secondary" id="propRotRig180Btn" style="padding:4px 8px; font-size:11px;">180°</button>' +
+                                '<button class="btn btn-secondary" id="propRotRig90Btn" style="padding:4px 8px; font-size:11px;">+90&deg;</button>' +
+                                '<button class="btn btn-secondary" id="propRotRig180Btn" style="padding:4px 8px; font-size:11px;">180&deg;</button>' +
                             '</div>' +
                         '</div>' : '') +
-                    '<div class="screens-section-note" data-i18n="properties.liveNote">Anteprima dal vivo mentre modifichi. Al rilascio del campo la trasformazione viene cotta nei voxel (coordinate intere, rotazione a 90°).</div>' +
-                    '<div class="screens-section-note" style="text-align:center;">' + voxCount + ' voxel</div>';
+                    '<div class="screens-section-note" data-i18n="properties.liveNote">' + t('properties.liveNote') + '</div>' +
+                    '<div class="screens-section-note" style="text-align:center;">' +
+                        t('properties.voxelCount', { n: voxCount }) + '</div>';
 
                 // Popola i valori.
                 const nameEl = document.getElementById('propName');

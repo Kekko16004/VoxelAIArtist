@@ -3,7 +3,7 @@
              * navigazione 3D, l'editing o la logica dei pulsanti esistenti:
              *
              *   1. Un launcher a tutto schermo mostrato all'avvio con i progetti
-             *      recenti (GET /api/recent), "Nuovo progetto" e "Apri progetto…".
+             *      recenti (GET /api/recent), "Nuovo progetto" e "Apri progetto...".
              *   2. Sezioni chiare nel pannello impostazioni (tab "Vista"): Aspetto,
              *      Salvataggio, Avvio (le Scorciatoie restano dove sono, intatte).
              *   3. Raggruppamento + tooltip italiani sulla toolbar/footer.
@@ -14,11 +14,32 @@
              *
              * LIMITE NOTO (desktop): il backend NON espone una route "leggi file da
              * percorso"; /api/project/open apre solo il QFileDialog. Quindi il clic su
-             * un recente NON può caricare direttamente quel path: ripiega su
+             * un recente NON puo' caricare direttamente quel path: ripiega su
              * openProject() (dialog nativo) segnalandolo all'utente.
              *
-             * Tutto è avvolto in try/catch: se qualcosa fallisce, il bootstrap (18)
+             * Tutto e' avvolto in try/catch: se qualcosa fallisce, il bootstrap (18)
              * che gira DOPO questo modulo non deve mai rompersi. */
+
+            // Questo modulo e il 24 (plugin) costruiscono DOM ALL'AVVIO, cioe' prima
+            // che bootI18n (23-i18n.js, che viene dopo nel manifest ed e' async) abbia
+            // caricato i dizionari: li' t() ritorna la chiave nuda e applyI18n non
+            // avrebbe niente da mettere. Peggio: alla PRIMA applicazione in italiano
+            // applyI18n viene saltata di proposito (anti-flicker), quindi un nodo
+            // creato a runtime e annotato con data-i18n resterebbe vuoto per sempre.
+            // whenI18nReady() richiama `fn` quando il dizionario c'e' davvero. Il
+            // numero di tentativi e' limitato: se i locali non arrivano proprio (file://
+            // senza backend) si esegue comunque l'ultimo giro, che mostra le chiavi --
+            // lo stesso ripiego dichiarato per la Guida, non uno schermo vuoto a vita.
+            function whenI18nReady(fn) {
+                let tries = 0;
+                const ready = () => (typeof i18nCache !== 'undefined' && i18nCache && i18nCache.it)
+                    || (typeof i18nDict !== 'undefined' && i18nDict && Object.keys(i18nDict).length > 0);
+                const tick = () => {
+                    if (ready() || tries++ >= 100) { try { fn(); } catch (e) { } return; }
+                    setTimeout(tick, 60);
+                };
+                tick();
+            }
 
             (function initScreens() {
                 function screensApi(route) {
@@ -27,6 +48,15 @@
                 // Capacita' (19-prefs.js): hasLocalBackend() = c'e' il server Python
                 // (anche in modalita' web), hasNativeDialogs() = ci sono i dialog Qt.
                 const LAUNCHER_PREF_KEY = 'showLauncherOnStart';
+
+                // Traduce un sottoalbero appena costruito. I testi non stanno nel
+                // sorgente: il markup porta solo data-i18n / data-i18n-title /
+                // data-i18n-placeholder e li riempie applyI18n dal dizionario.
+                function localize(root) {
+                    whenI18nReady(() => {
+                        if (root && typeof applyI18n === 'function') applyI18n(root);
+                    });
+                }
 
                 /* ---------- 0. Stili (hover/anim) iniettati una volta ---------- */
                 function injectStyles() {
@@ -54,7 +84,6 @@
                     const ov = document.createElement('div');
                     ov.id = 'launcherOverlay';
                     ov.setAttribute('role', 'dialog');
-                    ov.setAttribute('aria-label', 'Apri o crea un progetto');
                     ov.innerHTML =
                         '<div class="launcher-card glass">' +
                           '<div class="launcher-logo">' +
@@ -62,21 +91,29 @@
                             '<div><div style="font-size:18px;font-weight:700;color:var(--text-primary);">Voxel AI Artist</div>' +
                             '<div style="font-size:11px;color:var(--accent-primary);">by KFDev</div></div>' +
                           '</div>' +
-                          '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 16px;">Riprendi un progetto recente o creane uno nuovo.</div>' +
-                          '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">Progetti recenti</div>' +
+                          '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 16px;" data-i18n="launcher.subtitle"></div>' +
+                          '<div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:8px;" data-i18n="launcher.recentTitle"></div>' +
                           '<div id="launcherRecentList" style="overflow-y:auto;flex:1;min-height:60px;max-height:320px;margin-bottom:14px;"></div>' +
                           '<div style="display:flex;gap:10px;margin-bottom:14px;">' +
-                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Crea un nuovo progetto vuoto ed entra nella scena">＋ Nuovo progetto</button>' +
-                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" title="Apri un progetto esistente (.voxai / .json / .vox / .schem)">📂 Apri progetto…</button>' +
+                            '<button class="btn btn-primary" id="launcherNewBtn" style="flex:1;font-size:12px;padding:11px 6px;" data-i18n-title="launcher.newBtnTitle" data-i18n="launcher.newBtn"></button>' +
+                            '<button class="btn btn-secondary" id="launcherOpenBtn" style="flex:1;font-size:12px;padding:11px 6px;" data-i18n-title="launcher.openBtnTitle" data-i18n="launcher.openBtn"></button>' +
                           '</div>' +
                           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--glass-border);padding-top:12px;">' +
                             '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;">' +
                               '<input type="checkbox" id="launcherShowOnStart" checked style="cursor:pointer;accent-color:var(--accent-primary);">' +
-                              'Mostra questa schermata all\'avvio</label>' +
-                            '<button class="btn btn-secondary" id="launcherSkipBtn" style="font-size:12px;padding:8px 16px;" title="Chiudi e vai alla scena corrente">Salta</button>' +
+                              // Lo <span> non e' cosmetico: applyI18n scrive textContent,
+                              // e sull'etichetta intera cancellerebbe la checkbox dentro.
+                              '<span data-i18n="launcher.showOnStart"></span></label>' +
+                            '<button class="btn btn-secondary" id="launcherSkipBtn" style="font-size:12px;padding:8px 16px;" data-i18n-title="launcher.skipTitle" data-i18n="launcher.skip"></button>' +
                           '</div>' +
                         '</div>';
                     document.body.appendChild(ov);
+                    // aria-label non e' fra gli attributi che applyI18n conosce, quindi
+                    // si scrive a mano quando il dizionario e' pronto.
+                    whenI18nReady(() => {
+                        if (typeof applyI18n === 'function') applyI18n(ov);
+                        ov.setAttribute('aria-label', t('launcher.dialogLabel'));
+                    });
 
                     // Chiude cliccando fuori dalla card.
                     ov.addEventListener('click', (e) => { if (e.target === ov) hideLauncher(); });
@@ -126,7 +163,10 @@
                     if (!entry) return;
                     if (hasNativeDialogs()) {
                         if (typeof openProject === 'function') {
-                            alert('Seleziona "' + (entry.name || entry.path || 'il progetto') + '" nella finestra che sta per aprirsi.\n\n(Percorso: ' + (entry.path || '') + ')');
+                            alert(t('launcher.selectInDialog', {
+                                name: entry.name || entry.path || t('launcher.theProject'),
+                                path: entry.path || ''
+                            }));
                             try { await openProject(); } catch (e) { }
                         }
                         return;
@@ -160,13 +200,16 @@
                     const listEl = document.getElementById('launcherRecentList');
                     if (!listEl) return;
                     if (!hasLocalBackend()) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Senza l\'app avviata (python main.py) i progetti recenti non sono disponibili. Usa "Apri progetto…".</div>';
+                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;" data-i18n="launcher.recentNeedsApp"></div>';
+                        localize(listEl);
                         return;
                     }
-                    listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Caricamento…</div>';
+                    listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;" data-i18n="common.loading"></div>';
+                    localize(listEl);
                     const items = await fetchRecent();
                     if (!items.length) {
-                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;">Nessun progetto recente. Creane uno nuovo o aprine uno esistente.</div>';
+                        listEl.innerHTML = '<div class="screens-section-note" style="padding:8px;" data-i18n="launcher.recentEmpty"></div>';
+                        localize(listEl);
                         return;
                     }
                     listEl.innerHTML = '';
@@ -176,7 +219,7 @@
                         row.title = it.path || '';
                         const info = document.createElement('div');
                         info.style.cssText = 'overflow:hidden;';
-                        const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || 'Progetto';
+                        const nm = it.name || (String(it.path || '').split(/[\\/]/).pop()) || t('launcher.projectFallback');
                         info.innerHTML = '<div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(nm) + '</div>' +
                             '<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(it.path || '') + (it.lastOpened ? ' · ' + fmtRecentDate(it.lastOpened) : '') + '</div>';
                         info.style.cursor = 'pointer';
@@ -184,12 +227,13 @@
                         const del = document.createElement('button');
                         del.className = 'launcher-recent-del';
                         del.textContent = '✕';
-                        del.title = 'Rimuovi dai recenti';
+                        del.setAttribute('data-i18n-title', 'launcher.removeRecent');
                         del.addEventListener('click', async (e) => { e.stopPropagation(); await deleteRecent(it.path); refreshLauncherRecent(); });
                         row.appendChild(info);
                         row.appendChild(del);
                         listEl.appendChild(row);
                     });
+                    localize(listEl);
                 }
 
                 function escapeHtml(s) {
@@ -218,27 +262,28 @@
                     const wrap = document.createElement('div');
                     wrap.id = 'startupSettingsSection';
                     wrap.innerHTML =
-                        '<div class="section-title">Avvio</div>' +
+                        '<div class="section-title" data-i18n="screens.startup"></div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<label class="control-row" style="cursor:pointer;">' +
-                            '<span>Mostra la schermata iniziale all\'avvio</span>' +
+                            '<span data-i18n="screens.showLauncher"></span>' +
                             '<label class="switch"><input type="checkbox" id="settingsShowLauncher" checked><span class="slider"></span></label>' +
                           '</label>' +
-                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" title="Apri la schermata dei progetti recenti">🗂 Apri schermata iniziale</button>' +
+                          '<button class="btn btn-secondary" id="openLauncherBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openLauncherTitle" data-i18n="screens.openLauncher"></button>' +
                         '</div>' +
-                        '<div class="section-title">Salvataggio</div>' +
+                        '<div class="section-title" data-i18n="screens.saving"></div>' +
                         '<div class="controls-group glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">' +
                           '<div class="control-row">' +
-                            '<label>Cartella di default (Salvataggio/Esportazione)</label>' +
+                            '<label data-i18n="screens.defaultDir"></label>' +
                             '<div style="display:flex; gap:6px; flex:1;">' +
-                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly placeholder="Predefinita (Appdata)">' +
-                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;">Sfoglia...</button>' +
+                               '<input type="text" id="settingsDefaultSaveDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly data-i18n-placeholder="screens.defaultDirPlaceholder">' +
+                               '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;" data-i18n="common.browse"></button>' +
                             '</div>' +
                           '</div>' +
-                          '<div class="screens-section-note">I salvataggi automatici vengono conservati in una cartella dedicata dal backend Python (funziona sia in modalità web sia desktop).</div>' +
-                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" title="Apri la cartella dei salvataggi automatici">📁 Apri cartella autosave</button>' +
+                          '<div class="screens-section-note" data-i18n="screens.autosaveNote"></div>' +
+                          '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder"></button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
+                    localize(wrap);
 
                     const defaultSaveInput = document.getElementById('settingsDefaultSaveDir');
                     if (defaultSaveInput && typeof window.getPref === 'function') {
@@ -246,12 +291,12 @@
                     }
                     const chooseDirBtn = document.getElementById('settingsChooseDirBtn');
                     if (chooseDirBtn) chooseDirBtn.addEventListener('click', async () => {
-                        if (!hasNativeDialogs()) { alert('La finestra di scelta cartella è un dialog di sistema: serve la modalità desktop (avvia con "python main.py --py").'); return; }
+                        if (!hasNativeDialogs()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
                         try {
                             const res = await fetch(screensApi('/api/settings/choose-dir'));
                             const data = await res.json().catch(() => ({}));
                             if (!res.ok || data.error) {
-                                alert('Impossibile aprire la finestra di selezione cartella: ' + (data.error || ('HTTP ' + res.status)));
+                                alert(t('screens.chooseDirError', { error: data.error || ('HTTP ' + res.status) }));
                                 return;
                             }
                             if (data.folder) {
@@ -259,8 +304,8 @@
                                 if (typeof window.savePref === 'function') window.savePref('default_save_dir', data.folder);
                             }
                         } catch(e) {
-                            console.error('Errore scelta cartella', e);
-                            alert('Errore nell\'apertura della finestra di selezione cartella.');
+                            console.error('[screens] choose-dir failed', e);
+                            alert(t('screens.chooseDirFailed'));
                         }
                     });
 
@@ -276,17 +321,17 @@
                     const folderBtn = document.getElementById('settingsOpenAutosaveFolderBtn');
                     if (folderBtn) folderBtn.addEventListener('click', async () => {
                         if (typeof openAutosaveFolder === 'function') { try { await openAutosaveFolder(); } catch (e) { } return; }
-                        if (!hasLocalBackend()) { alert('Serve l\'app avviata (python main.py): senza backend non c\'è nessuna cartella da aprire.'); return; }
+                        if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
                     });
 
                     // Raggruppamento visivo (non funzionale) del pannello Scorciatoie T6:
-                    // gli anteponiamo un titolo di sezione senza spostarlo né toccarne gli id.
+                    // gli anteponiamo un titolo di sezione senza spostarlo ne' toccarne gli id.
                     try {
                         const sc = document.getElementById('shortcutsPanel');
                         if (sc && sc.parentElement && !sc.parentElement.dataset.scGrouped) {
                             const prev = sc.parentElement.previousElementSibling;
-                            // Il titolo "Scorciatoie da tastiera" esiste già nel template; niente da fare.
+                            // Il titolo "Scorciatoie da tastiera" esiste gia' nel template; niente da fare.
                             sc.parentElement.dataset.scGrouped = '1';
                         }
                     } catch (e) { }
@@ -295,37 +340,40 @@
                 /* ---------- 3. Toolbar/footer: raggruppamento + tooltip ----------
                  * Riusa gli id e i listener esistenti: NON ricabliamo la logica dei
                  * pulsanti. Aggiungiamo solo etichette di gruppo e tooltip (title) dove
-                 * mancano. Lo stato attivo degli strumenti è già gestito da setTool(). */
+                 * mancano. Lo stato attivo degli strumenti e' gia' gestito da setTool(). */
                 function enhanceToolbar() {
                     const footer = document.querySelector('.sidebar-footer');
                     if (!footer || footer.dataset.grouped) return;
                     footer.dataset.grouped = '1';
 
-                    function groupLabel(text) {
+                    // Riceve la CHIAVE, non il testo: il contenuto lo mette applyI18n,
+                    // cosi' l'etichetta segue anche i cambi di lingua successivi.
+                    function groupLabel(key) {
                         const d = document.createElement('div');
                         d.className = 'screens-toolbar-group';
-                        d.textContent = text;
+                        d.setAttribute('data-i18n', key);
                         d.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:6px 0 2px;';
                         return d;
                     }
                     // Etichetta "Progetto" davanti al blocco salva/apri (primo figlio).
                     const first = footer.firstElementChild;
-                    if (first) footer.insertBefore(groupLabel('Progetto'), first);
+                    if (first) footer.insertBefore(groupLabel('toolbar.groupProject'), first);
                     // Etichetta "File / Export" prima del primo btn-group (export OBJ/MTL).
                     const firstBtnGroup = footer.querySelector('.btn-group');
-                    if (firstBtnGroup) footer.insertBefore(groupLabel('File / Export'), firstBtnGroup);
+                    if (firstBtnGroup) footer.insertBefore(groupLabel('toolbar.groupFileExport'), firstBtnGroup);
 
                     // Tooltip di rinforzo (solo se assenti) sui pulsanti principali.
                     const tips = {
-                        savePlainJsonBtn: 'Salva la scena come file JSON in chiaro (.json)',
-                        exportMtlBtn: 'Esporta il file materiali (.mtl) da affiancare all\'OBJ',
-                        exportObjBtn: 'Esporta la mesh in Wavefront OBJ (con MTL)',
-                        exportGlbBtn: 'Esporta GLB con scheletro e animazioni (Blender/Unity/Godot)'
+                        savePlainJsonBtn: 'toolbar.savePlainJsonTitle',
+                        exportMtlBtn: 'toolbar.exportMtlTitle',
+                        exportObjBtn: 'toolbar.exportObjTitle',
+                        exportGlbBtn: 'toolbar.exportGlbTitle'
                     };
                     Object.keys(tips).forEach(id => {
                         const el = document.getElementById(id);
-                        if (el && !el.getAttribute('title')) el.setAttribute('title', tips[id]);
+                        if (el && !el.getAttribute('title')) el.setAttribute('data-i18n-title', tips[id]);
                     });
+                    localize(footer);
                 }
 
                 /* ---------- Init: applica prefs e mostra il launcher all'avvio ---------- */

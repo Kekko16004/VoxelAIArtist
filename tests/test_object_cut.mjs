@@ -73,6 +73,10 @@ function nuovoMondo(cfg) {
     let modale = ${cfg.modale ? 'true' : 'false'};
     let sullaTimeline = ${cfg.timeline ? 'true' : 'false'};
     function confirm(msg) { L.conferme.push(msg); return RISPOSTA; }
+    // Il bundle vero ha SEMPRE t (23-i18n.js sta prima di tutti nel manifest): la
+    // carenza era dello stub, non del sorgente. Prima di bootI18n il t vero
+    // ritorna la chiave nuda, quindi questo riproduce il caso reale peggiore.
+    function t(k, vars) { return k; }
     function tlModalOpen() { return modale; }
     function tlAreaActive() { return sullaTimeline; }
     function isTextEntry(t) {
