@@ -809,6 +809,45 @@
             font-family: inherit;
         }
 
+        /* Input file: il browser disegna un bottone GRIGIO DI SISTEMA (il "Scegli
+           file" bianco che stonava nel pannello) e accanto il nome del file. Nessuna
+           delle due parti eredita il tema, e ::file-selector-button e' l'unico modo
+           di raggiungere la prima. `color: transparent` sul campo nasconde
+           l'etichetta "Nessun file selezionato", che e' testo del BROWSER: non passa
+           da t(), quindi resta nella lingua del sistema qualunque lingua scelga
+           l'utente. Il nome del file scelto lo mostriamo noi, tradotto. */
+        .field-file {
+            background: var(--input-bg-strong) !important;
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            outline: none;
+            font-family: inherit;
+            font-size: 11px;
+            padding: 6px;
+            color: transparent;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .field-file::file-selector-button {
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 6px 10px;
+            margin-right: 8px;
+            color: var(--text-primary);
+            background: var(--hover-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .field-file:hover::file-selector-button {
+            background: var(--glass-bg);
+            border-color: var(--accent-primary);
+        }
+
         .field:focus,
         .field-strong:focus {
             border-color: var(--accent-primary);
@@ -925,15 +964,26 @@
         .material-card {
             position: relative;
             aspect-ratio: 1;
-            border-radius: var(--radius-sm);
-            border: 2px solid transparent;
+            border-radius: var(--radius-md);
+            border: 2px solid var(--glass-border);
             background-size: cover;
             image-rendering: pixelated;
             cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+            transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+            overflow: hidden;
+        }
+
+        .material-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+            border-color: var(--accent-primary);
         }
 
         .material-card.active {
             border-color: var(--accent-primary);
+            border-width: 3px;
+            box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb, 88, 101, 242), .3);
         }
 
         .material-card .material-card-name {
@@ -943,35 +993,47 @@
             bottom: 0;
             font-size: 9px;
             text-align: center;
-            background: rgba(0, 0, 0, .55);
-            border-radius: 0 0 4px 4px;
-            padding: 1px 2px;
+            background: linear-gradient(to top, rgba(0, 0, 0, .75), transparent);
+            padding: 8px 2px 3px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            font-weight: 600;
         }
 
-        /* La X di eliminazione, in alto a destra sulla scheda. */
-        .material-card .material-card-del {
+        /* Pulsanti sulla card: edit in basso a sinistra, delete in alto a destra */
+        .material-card .material-card-btn {
             position: absolute;
-            top: 2px;
-            right: 2px;
-            width: 16px;
-            height: 16px;
-            line-height: 14px;
+            width: 20px;
+            height: 20px;
+            line-height: 18px;
             padding: 0;
             font-size: 12px;
             color: #fff;
-            background: rgba(0, 0, 0, .55);
-            border: none;
-            border-radius: 50%;
+            background: rgba(0, 0, 0, .65);
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 4px;
             cursor: pointer;
             opacity: 0;
-            transition: opacity 0.15s;
+            transition: opacity 0.15s, background 0.15s;
         }
 
-        .material-card:hover .material-card-del,
-        .material-card .material-card-del:focus {
+        .material-card .material-card-btn:hover {
+            background: rgba(0, 0, 0, .85);
+        }
+
+        .material-card .material-card-edit {
+            bottom: 2px;
+            left: 2px;
+        }
+
+        .material-card .material-card-del {
+            top: 2px;
+            right: 2px;
+        }
+
+        .material-card:hover .material-card-btn,
+        .material-card .material-card-btn:focus {
             opacity: 1;
         }
 
@@ -979,6 +1041,206 @@
            Cliccarlo e' proprio il modo per tornare al colore. */
         .muted-by-material {
             opacity: .45;
+        }
+
+        /* Anteprima live: una sfera renderizzata con il materiale in costruzione.
+           Il canvas ha un renderer THREE dedicato (vedi 36-materials.js), perche'
+           quello della scena e' legato al viewport principale. */
+        .material-preview-wrap {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 8px;
+            border-radius: var(--radius-md);
+            background: var(--hover-bg);
+            border: 1px solid var(--glass-border);
+        }
+
+        #materialPreviewCanvas {
+            width: 88px;
+            height: 88px;
+            flex: 0 0 88px;
+            border-radius: var(--radius-sm);
+            background: #1a1a1f;
+            display: block;
+        }
+
+        .material-preview-info {
+            font-size: 10px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            min-width: 0;
+        }
+
+        /* Ritaglio della texture: il canvas mostra l'immagine intera e sopra ci
+           sta un rettangolo trascinabile con maniglie agli angoli e ai lati. */
+        .material-crop-wrap {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+            touch-action: none;
+        }
+
+        #materialCropCanvas {
+            display: block;
+            max-width: 100%;
+            image-rendering: pixelated;
+            cursor: crosshair;
+        }
+
+        .material-crop-rect {
+            position: absolute;
+            border: 1px solid var(--accent-primary);
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55);
+            pointer-events: none;
+        }
+
+        /* Terzi: le due linee orizzontali e verticali dentro il rettangolo. Sono
+           :before/:after del rettangolo, cosi' non servono altri nodi. */
+        .material-crop-rect::before,
+        .material-crop-rect::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .material-crop-rect::before {
+            border-left: 1px solid rgba(255, 255, 255, .28);
+            border-right: 1px solid rgba(255, 255, 255, .28);
+            margin: 0 33.33%;
+        }
+
+        .material-crop-rect::after {
+            border-top: 1px solid rgba(255, 255, 255, .28);
+            border-bottom: 1px solid rgba(255, 255, 255, .28);
+            margin: 33.33% 0;
+        }
+
+        /* Maniglie: 8 quadratini. pointer-events NONE di proposito -- il
+           trascinamento e' gestito dal canvas sottostante, che decide quale
+           maniglia hai preso dalla distanza del punto. Renderle cliccabili
+           ruberebbe l'evento al canvas e romperebbe il disegno di un nuovo
+           rettangolo partendo da un bordo. */
+        .material-crop-handle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-primary);
+            border: 1px solid #fff;
+            border-radius: 2px;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Scacchiera dietro tutto cio' che puo' essere trasparente (anteprima
+           texture, canvas del pixel art): senza, un pixel trasparente e uno del
+           colore del pannello sono indistinguibili. */
+        .alpha-checker {
+            background-image:
+                linear-gradient(45deg, #3a3a42 25%, transparent 25%),
+                linear-gradient(-45deg, #3a3a42 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #3a3a42 75%),
+                linear-gradient(-45deg, transparent 75%, #3a3a42 75%);
+            background-size: 12px 12px;
+            background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+            background-color: #2b2b31;
+        }
+
+        /* ===== Creatore di texture (pixel art) ===== */
+        .pixel-canvas-wrap {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            padding: 8px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border);
+            background: var(--inset-bg);
+            touch-action: none;
+        }
+
+        /* Il canvas e' piccolo (8..128 px di lato) e ingrandito dal CSS:
+           image-rendering pixelated e' cio' che tiene i pixel netti invece di
+           interpolarli. La griglia sopra e' un SECONDO canvas sovrapposto, cosi'
+           disegnarla non sporca i pixel che poi diventano la texture.
+           Gli id sono quelli del template (materialArtCanvas / materialGridCanvas):
+           con selettori sbagliati il canvas resterebbe alla sua dimensione nativa
+           di 16 px e la griglia scivolerebbe accanto invece che sopra. */
+        #materialArtCanvas,
+        #materialGridCanvas {
+            display: block;
+            width: 100%;
+            max-width: 256px;
+            aspect-ratio: 1;
+            image-rendering: pixelated;
+        }
+
+        #materialArtCanvas {
+            border-radius: var(--radius-sm);
+            cursor: crosshair;
+        }
+
+        /* La griglia non deve mai ricevere un clic: sta SOPRA il canvas dei pixel,
+           quindi senza pointer-events: none intercetterebbe ogni pennellata. */
+        #materialGridCanvas {
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        .pixel-tool-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .pixel-tool-btn {
+            padding: 8px 4px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--glass-border);
+            background: var(--hover-bg);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .pixel-tool-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--accent-primary);
+        }
+
+        .pixel-tool-btn.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: #fff;
+        }
+
+        /* Le tinte recenti del pixel editor. Il trasparente si vede come
+           scacchiera (vedi .alpha-checker), non come un buco nel pannello. */
+        .pixel-swatches {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .pixel-swatch {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .pixel-swatch.active {
+            border-color: var(--accent-primary);
         }
 
         /* Tool selector (Edit modes) */
@@ -2584,46 +2846,220 @@
                     </div>
                 </div>
 
-                <!-- ===== Materiali (texture su tutte e 6 le facce) ===== -->
+                <!-- ===== Creatore di materiali =====
+                     La CREAZIONE vive qui (il pannello Materiali sotto e' la
+                     libreria: elenco, scelta, modifica, eliminazione). La texture
+                     ha una sola sorgente: la TELA. Che si parta da un'immagine
+                     ritagliata o da uno sfondo pieno, i pixel finiscono sempre
+                     nella tela, e da li' si possono ancora disegnare. -->
                 <div>
-                    <div class="section-title" data-i18n="materials.sectionTitle">Materiali</div>
-                    <div class="controls-group glass" id="materialsPanel" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
-                        <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;"
-                            data-i18n="materials.hint">
-                            Un materiale applica la stessa texture a tutte e 6 le facce del voxel. Selezionarne uno disattiva il colore attivo.
+                    <div class="section-title" data-i18n="matcreate.sectionTitle">Creatore di materiali</div>
+                    <div class="controls-group glass" id="materialCreatorPanel" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+                        <div class="hint-text" data-i18n="matcreate.hint">
+                            Disegna la texture o partine da un'immagine: la tela e' la stessa, quindi un'immagine importata si puo' ancora ritoccare pixel per pixel.
                         </div>
-                        <div id="materialsGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
-                        <p id="materialsEmpty" style="font-size:11px; color:var(--text-secondary); margin:0;"
-                            data-i18n="materials.empty">Nessun materiale. Creane uno per usare le texture.</p>
                         <button class="btn btn-secondary" id="newMaterialBtn" style="padding:8px; font-size:12px;"
                             data-i18n="materials.new">+ Nuovo materiale</button>
-                        <div id="materialForm" style="display:none; flex-direction:column; gap:8px;">
-                            <input type="text" id="materialName" class="text-input"
+
+                        <div id="materialForm" style="display:none; flex-direction:column; gap:10px;">
+                            <input type="text" id="materialName" class="field-strong" style="padding:8px; font-size:12px;"
                                 data-i18n-placeholder="materials.namePlaceholder" placeholder="Nome del materiale">
-                            <input type="file" id="materialTextureInput" accept="image/*" style="font-size:11px;"
-                                data-i18n-title="materials.chooseFile" title="Scegli immagine">
+
+                            <!-- Sorgente della texture -->
+                            <div class="segmented" id="materialSourceSeg" style="grid-template-columns:repeat(3,1fr);">
+                                <button class="seg-btn active" data-source="flat" data-i18n="matcreate.srcFlat">Tinta unita</button>
+                                <button class="seg-btn" data-source="draw" data-i18n="matcreate.srcDraw">Disegna</button>
+                                <button class="seg-btn" data-source="image" data-i18n="matcreate.srcImage">Da immagine</button>
+                            </div>
+
+                            <!-- Sorgente "Da immagine": file + ritaglio -->
+                            <div id="materialImageSetup" style="display:none; flex-direction:column; gap:8px;">
+                                <input type="file" id="materialTextureInput" accept="image/*" class="field-file"
+                                    data-i18n-title="materials.chooseFile" title="Scegli immagine">
+                                <div class="hint-text" id="materialFileName" data-i18n="materials.noTexture">Nessuna texture scelta</div>
+
+                                <!-- Ritaglio: appare solo quando c'e' un'immagine da ritagliare -->
+                                <div id="materialCropSection" style="display:none; flex-direction:column; gap:6px;">
+                                    <label class="hint-text"
+                                        data-i18n="materials.cropLabel">Ritaglio: trascina per scegliere la porzione di immagine da usare.</label>
+                                    <div class="material-crop-wrap">
+                                        <canvas id="materialCropCanvas"></canvas>
+                                        <div class="material-crop-rect" id="materialCropRect"></div>
+                                        <div class="material-crop-handle" data-handle="nw"></div>
+                                        <div class="material-crop-handle" data-handle="n"></div>
+                                        <div class="material-crop-handle" data-handle="ne"></div>
+                                        <div class="material-crop-handle" data-handle="e"></div>
+                                        <div class="material-crop-handle" data-handle="se"></div>
+                                        <div class="material-crop-handle" data-handle="s"></div>
+                                        <div class="material-crop-handle" data-handle="sw"></div>
+                                        <div class="material-crop-handle" data-handle="w"></div>
+                                    </div>
+                                    <div class="hint-text" id="materialCropInfo"></div>
+                                    <div class="btn-group" style="grid-template-columns:1fr 1fr;">
+                                        <button class="btn btn-secondary" id="materialCropResetBtn" style="padding:6px; font-size:11px;"
+                                            data-i18n="materials.cropReset">Tutta l'immagine</button>
+                                        <button class="btn btn-secondary" id="materialCropSquareBtn" style="padding:6px; font-size:11px;"
+                                            data-i18n="matcreate.cropSquare">Quadrato</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dimensione della tela (vale per "Disegna" e per il
+                                 ricampionamento di un'immagine importata) -->
+                            <div id="materialCanvasSetup" style="display:none; flex-direction:column; gap:8px;">
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.size">Dimensione</label>
+                                    <select id="materialCanvasSize" class="field-strong" style="padding:6px; font-size:12px;">
+                                        <option value="8">8 x 8</option>
+                                        <option value="16" selected>16 x 16</option>
+                                        <option value="32">32 x 32</option>
+                                        <option value="64">64 x 64</option>
+                                        <option value="128">128 x 128</option>
+                                    </select>
+                                </div>
+                                <div class="control-row" id="materialCanvasBgRow">
+                                    <label data-i18n="matcreate.background">Sfondo</label>
+                                    <input type="color" id="materialCanvasBg" class="accent-swatch" value="#8B5A2B"
+                                        style="width:26px; height:26px;"
+                                        data-i18n-title="matcreate.backgroundTitle" title="Colore di sfondo della tela">
+                                    <label class="hint-text" style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                                        <input type="checkbox" id="materialCanvasBgTransparent" style="width:auto; margin:0;">
+                                        <span data-i18n="matcreate.transparent">Trasparente</span>
+                                    </label>
+                                </div>
+                                <button class="btn btn-secondary" id="materialCanvasNewBtn" style="padding:6px; font-size:11px;"
+                                    data-i18n="matcreate.newCanvas">Nuova tela</button>
+                            </div>
+
+                            <!-- Editor pixel art: la tela e i suoi strumenti -->
+                            <div id="materialDrawSection" style="display:none; flex-direction:column; gap:8px;">
+                                <div class="pixel-canvas-wrap">
+                                    <canvas id="materialArtCanvas" class="alpha-checker" width="16" height="16"></canvas>
+                                    <canvas id="materialGridCanvas" width="256" height="256"></canvas>
+                                </div>
+                                <div class="pixel-tool-row">
+                                    <button class="pixel-tool-btn active" data-pixeltool="pencil"
+                                        data-i18n="matcreate.toolPencil" data-i18n-title="matcreate.toolPencilTitle"
+                                        title="Matita: dipinge un pixel">Matita</button>
+                                    <button class="pixel-tool-btn" data-pixeltool="eraser"
+                                        data-i18n="matcreate.toolEraser" data-i18n-title="matcreate.toolEraserTitle"
+                                        title="Gomma: rende il pixel trasparente">Gomma</button>
+                                    <button class="pixel-tool-btn" data-pixeltool="fill"
+                                        data-i18n="matcreate.toolFill" data-i18n-title="matcreate.toolFillTitle"
+                                        title="Riempimento: dipinge l'area contigua dello stesso colore">Riempi</button>
+                                    <button class="pixel-tool-btn" data-pixeltool="pick"
+                                        data-i18n="matcreate.toolPick" data-i18n-title="matcreate.toolPickTitle"
+                                        title="Contagocce: prende il colore del pixel">Preleva</button>
+                                </div>
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.penColor">Colore</label>
+                                    <input type="color" id="materialPenColor" class="accent-swatch" value="#E8C39E"
+                                        style="width:26px; height:26px;">
+                                    <span class="hint-text" id="materialPenHex" style="font-variant-numeric:tabular-nums;">#E8C39E</span>
+                                </div>
+                                <div class="pixel-swatches" id="materialPenSwatches"></div>
+                                <div class="btn-group" style="grid-template-columns:1fr 1fr 1fr;">
+                                    <button class="btn btn-secondary" id="materialArtUndoBtn" disabled style="padding:6px; font-size:11px;"
+                                        data-i18n="matcreate.undo">Annulla</button>
+                                    <button class="btn btn-secondary" id="materialArtRedoBtn" disabled style="padding:6px; font-size:11px;"
+                                        data-i18n="matcreate.redo">Ripeti</button>
+                                    <button class="btn btn-secondary" id="materialArtClearBtn" style="padding:6px; font-size:11px;"
+                                        data-i18n="matcreate.clear">Svuota</button>
+                                </div>
+                            </div>
+
+                            <!-- Mappatura UV: quante volte la texture si ripete su una
+                                 faccia, dove comincia e di quanto e' ruotata -->
+                            <div id="materialUvSection" style="display:none; flex-direction:column; gap:6px;">
+                                <div class="section-title" style="font-size:11px; margin:2px 0 0;" data-i18n="matcreate.uvTitle">Mappatura UV</div>
+                                <div class="hint-text" data-i18n="matcreate.uvHint">
+                                    Ripetizioni per faccia del voxel: 1 = l'immagine intera su ogni faccia, 2 = quattro copie.
+                                </div>
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.uvRepeat">Ripetizioni</label>
+                                    <input type="range" id="materialUvRepeat" min="0.25" max="8" step="0.25" value="1">
+                                    <span id="materialUvRepeatValue" class="hint-text" style="min-width:30px; text-align:right;">1.00</span>
+                                </div>
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.uvOffsetU">Scorrimento U</label>
+                                    <input type="range" id="materialUvOffsetU" min="0" max="1" step="0.05" value="0">
+                                    <span id="materialUvOffsetUValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
+                                </div>
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.uvOffsetV">Scorrimento V</label>
+                                    <input type="range" id="materialUvOffsetV" min="0" max="1" step="0.05" value="0">
+                                    <span id="materialUvOffsetVValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
+                                </div>
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.uvRotation">Rotazione</label>
+                                    <input type="range" id="materialUvRotation" min="0" max="270" step="90" value="0">
+                                    <span id="materialUvRotationValue" class="hint-text" style="min-width:30px; text-align:right;"></span>
+                                </div>
+                            </div>
+
+                            <!-- Anteprima live -->
+                            <div class="material-preview-wrap">
+                                <canvas id="materialPreviewCanvas" class="alpha-checker" width="176" height="176"></canvas>
+                                <div class="material-preview-info">
+                                    <strong data-i18n="materials.previewTitle">Anteprima</strong>
+                                    <div data-i18n="materials.previewHint">Il cubo mostra la texture come la vedrai sul voxel.</div>
+                                    <div class="segmented" id="materialPreviewShape" style="grid-template-columns:repeat(2,1fr); margin-top:6px;">
+                                        <button class="seg-btn active" data-shape="box" data-i18n="matcreate.shapeBox">Cubo</button>
+                                        <button class="seg-btn" data-shape="sphere" data-i18n="matcreate.shapeSphere">Sfera</button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="control-row">
                                 <label data-i18n="materials.roughness">Ruvidita</label>
                                 <input type="range" id="materialRoughness" min="0" max="1" step="0.05" value="0.6">
+                                <span id="materialRoughnessValue" class="hint-text" style="min-width:30px; text-align:right;">0.60</span>
                             </div>
                             <div class="control-row">
                                 <label data-i18n="materials.metalness">Metallicita</label>
                                 <input type="range" id="materialMetalness" min="0" max="1" step="0.05" value="0">
+                                <span id="materialMetalnessValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
                             </div>
                             <div class="control-row">
                                 <label data-i18n="materials.emissive">Emissivo</label>
                                 <input type="range" id="materialEmissive" min="0" max="1" step="0.05" value="0">
+                                <span id="materialEmissiveValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
                             </div>
+                            <div class="control-row">
+                                <label data-i18n="matcreate.opacity">Opacita</label>
+                                <input type="range" id="materialOpacity" min="0" max="1" step="0.05" value="1">
+                                <span id="materialOpacityValue" class="hint-text" style="min-width:30px; text-align:right;">1.00</span>
+                            </div>
+                            <div class="hint-text" data-i18n="matcreate.opacityHint">
+                                Opacita sotto 1 rende il materiale trasparente (vetro, acqua, foglie). I pixel trasparenti della texture lo sono comunque.
+                            </div>
+
                             <div class="btn-group" style="grid-template-columns:1fr 1fr;">
-                                <button class="btn btn-primary" id="materialCreateBtn" style="padding:8px; font-size:12px;"
+                                <button class="btn btn-primary" id="materialSaveBtn" style="padding:8px; font-size:12px;"
                                     data-i18n="materials.create">Crea</button>
                                 <button class="btn btn-secondary" id="materialCancelBtn" style="padding:8px; font-size:12px;"
                                     data-i18n="materials.cancel">Annulla</button>
                             </div>
+                            <button class="btn btn-secondary" id="materialSaveToLibBtn" style="padding:8px; font-size:12px;"
+                                data-i18n="materials.saveToLib" data-i18n-title="materials.saveToLibTitle"
+                                title="Salva questo materiale nella libreria personale, senza aggiungerlo al progetto">+ Libreria</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ===== Materiali (texture su tutte e 6 le facce) ===== -->
+                <div>
+                    <div class="section-title" data-i18n="materials.sectionTitle">Materiali</div>
+                    <div class="controls-group glass" id="materialsPanel" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+                        <div class="hint-text" data-i18n="materials.hint">
+                            Un materiale applica la stessa texture a tutte e 6 le facce del voxel. Selezionarne uno disattiva il colore attivo.
+                        </div>
+                        <div id="materialsGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
+                        <p id="materialsEmpty" class="hint-text" style="margin:0;"
+                            data-i18n="materials.empty">Nessun materiale. Creane uno per usare le texture.</p>
                         <div class="section-title" style="font-size:11px; margin-top:4px;" data-i18n="materials.library">Libreria personale</div>
                         <div id="materialLibraryGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
-                        <p id="materialLibraryEmpty" style="font-size:11px; color:var(--text-secondary); margin:0;"
+                        <p id="materialLibraryEmpty" class="hint-text" style="margin:0;"
                             data-i18n="materials.libraryEmpty">La libreria e vuota.</p>
                     </div>
                 </div>
@@ -2636,7 +3072,7 @@
                             data-i18n="plugins.hint">
                             Gli script vengono eseguiti in una sandbox isolata (nessun accesso a rete, file o DOM). Ricevono i voxel dell'oggetto attivo e ne restituiscono di nuovi.
                         </div>
-                        <select id="pluginSelect" class="lang-select" data-i18n-title="plugins.selectTitle"
+                        <select id="pluginSelect" class="field-strong" style="padding:8px; font-size:12px;" data-i18n-title="plugins.selectTitle"
                             title="Scegli un plugin"></select>
                         <p id="pluginDesc" style="font-size:11px; color:var(--text-secondary); line-height:1.4; margin:0; min-height:14px;"></p>
                         <textarea id="pluginCode" spellcheck="false"

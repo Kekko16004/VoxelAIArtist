@@ -135,8 +135,24 @@
                     mtlText += `Ka ${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)}\n`;
                     mtlText += `Ks 0.0000 0.0000 0.0000\n`;
                     mtlText += `Ns 1.0000\n`;
-                    mtlText += `d 1.0000\n`;
-                    mtlText += `illum 1\n`;
+                    // `d` e' la DISSOLVENZA del formato MTL: 1 = opaco. Va scritta
+                    // dall'opacita' del materiale, altrimenti un vetro esportato
+                    // arriverebbe pieno in Blender. `Tr` e' la stessa cosa invertita
+                    // e non si emette: i due si contraddicono e i loader la
+                    // risolvono in modo diverso (l'ultimo letto vince, e quale sia
+                    // dipende dal loader).
+                    //
+                    // Il default e' 1 e non `def.opacity` nudo: normalizeMaterial lo
+                    // riempie sempre, ma una definizione arrivata da un plugin (o da
+                    // un percorso che salta la normalizzazione) lo avrebbe undefined,
+                    // e un toFixed su undefined farebbe fallire l'INTERO export
+                    // invece di sbagliare una riga.
+                    const alpha = (def && typeof def.opacity === 'number') ? def.opacity : 1;
+                    mtlText += `d ${alpha.toFixed(4)}\n`;
+                    // illum 1 e' diffuso senza speculare; con la trasparenza serve
+                    // il 2, che e' il modello che i loader collegano alla
+                    // dissolvenza.
+                    mtlText += `illum ${alpha < 1 ? 2 : 1}\n`;
                     if (def && def.texture && def.texture.data) {
                         mtlText += `map_Kd ${textureFileName(def.id)}\n`;
                     }

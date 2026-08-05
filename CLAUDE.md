@@ -44,7 +44,23 @@ pannello tornava vuoto), `activeColorRow`/`activeMaterialName` non esistevano ne
 template (meta' della mutua esclusione era invisibile), un `.voxai` salvato non si
 riapriva perche' nessuno scartava la busta, e gli oggetti inattivi perdevano le
 texture. Nessuno di questi e' visibile leggendo il codice o dai test unitari.
+Lo stesso giorno `.superpowers/check_creator.py` (55 controlli sul Creatore di
+materiali) ne ha trovato un **quinto della stessa famiglia**: il CSS del pixel
+editor puntava a `#pixelArtCanvas` mentre il template dichiara
+`#materialArtCanvas`, quindi nessuna regola si applicava — la tela restava larga
+16 px, la griglia scivolava accanto invece che sopra e i clic della gomma cadevano
+su un'altra cella. Sintomo: "la gomma non cancella". Causa: un selettore.
 Regole apprese:
+- Un pannello nuovo va provato **con clic veri**, e le asserzioni sui pixel del
+  canvas 2D (`getImageData`) sono affidabili: e' il canvas WebGL a non esserlo.
+- Sul CSS non si asserisce "non deve essere bianco": in tema chiaro
+  `--input-bg-strong` *e'* `#ffffff` e `--radius-sm` *e'* `0px` per scelta
+  estetica. Si asserisce che il campo sia **identico a un campo noto**, in
+  **entrambi** i temi.
+- Il gestore dei dialoghi (`page.on('dialog', ...)`) va registrato **prima** di
+  qualunque clic che possa aprirne uno: Playwright per difetto li RIFIUTA, e un
+  `confirm()` rifiutato fa saltare l'azione senza dirlo (una prima stesura
+  contava 256 pixel "dipinti" che erano lo sfondo di una tela mai rifatta).
 - Misurare i pixel con `page.screenshot(clip=...)` + PIL, **mai** con
   `canvas.toDataURL()`: il `WebGLRenderer` non chiede `preserveDrawingBuffer`,
   quindi il buffer e' gia' scartato e si ottengono immagini bianche.
@@ -230,7 +246,110 @@ Oltre alla libreria di progetto c'e' una **libreria personale** in `localStorage
 (`voxelai-material-library`, max 40) per riusare un materiale fra progetti diversi.
 Importarne uno **rinumera** l'id: due progetti possono aver usato `m1` per
 materiali diversi, e tenere l'id d'origine legherebbe la copia al materiale
-gia' presente invece di aggiungerne uno.
+gia' presente invece di aggiungerne uno. **Ci si scrive SOLO col bottone
+"+ Libreria"**: prima ogni creazione la riempiva da sola e in una sessione di
+prove si intasava di materiali usa-e-getta, arrivando a rifiutare (max 40) quelli
+che si volevano tenere davvero.
+
+### Creatore di materiali (`#materialCreatorPanel`)
+La **creazione** vive in una sezione propria, sopra `#materialsPanel` (che resta
+l'elenco: scelta, modifica, eliminazione). Il form ha tre sorgenti
+(`_formState.source`): `flat` (tinta unita), `draw`, `image`. Nei due casi
+non-flat la texture ha **una sola sorgente: la tela** (`#materialArtCanvas`), un
+canvas di w x h pixel VERI (8..128) che il CSS ingrandisce con
+`image-rendering: pixelated`. Un'immagine importata viene **ricampionata nella
+stessa tela** dopo il ritaglio, quindi resta modificabile pixel per pixel invece
+di essere un blocco intoccabile. Il canvas visibile *e'* il buffer: non c'e' un
+secondo buffer da tenere in sincronia, che e' il posto dove questi editor
+divergono. La griglia sta su un **secondo canvas sovrapposto**
+(`#materialGridCanvas`), o finirebbe dentro la texture.
+- Gli **id nel CSS devono essere quelli del template**. Con selettori sbagliati
+  (`#pixelArtCanvas` invece di `#materialArtCanvas`) il canvas resta alla sua
+  dimensione nativa di 16 px, la griglia scivola *accanto* invece che sopra, e le
+  coordinate dei clic cadono altrove: la gomma sembrava non cancellare.
+  Trovato in GUI reale, invisibile ai test unitari.
+- `#materialGridCanvas` vuole `pointer-events: none`: sta SOPRA la tela.
+- La **storia** e' una pila di `ImageData` (max 40). Lo snapshot si prende una
+  volta **per tratto**, non per cella, o annullare una pennellata di trenta celle
+  richiederebbe trenta annullamenti. Una modifica nuova azzera il redo.
+- `commitArtToTexture()` (che fa un `toDataURL`) si chiama alla **fine** del
+  tratto: a ogni cella comprimerebbe un PNG per movimento del puntatore.
+- Cambiare la dimensione **RICAMPIONA** il disegno (`resizeArtCanvas`) invece di
+  buttarlo; per ripartire da zero c'e' "Nuova tela". Il ricampionamento passa da
+  un canvas d'appoggio perche' assegnare `width`/`height` a un canvas lo
+  **azzera**: leggere i pixel dopo il resize darebbe una tela vuota.
+- `artPaintCell` fa `clearRect` prima di `fillRect`: `fillRect` **fonde** col
+  pixel esistente, quindi dipingere un colore opaco sopra un pixel
+  semitrasparente darebbe una tinta mista.
+- Il riempimento confronta anche l'**alpha**, cosi' riempire una zona trasparente
+  funziona invece di essere un no-op — ed e' il caso piu' comune (dare uno sfondo
+  a un disegno cominciato su tela vuota).
+- Lo sfondo "trasparente" **non e' un colore**: `artBackgroundColor()` ritorna
+  `null` e la tela resta vuota, non nera.
+
+**Ritaglio** (`#materialCropSection`): otto maniglie, piu' sposta-dentro e
+disegna-fuori. Le maniglie hanno `pointer-events: none` di proposito — il
+trascinamento lo gestisce il canvas, che decide quale maniglia hai preso dalla
+**distanza in pixel di schermo** (una soglia in pixel immagine sarebbe enorme su
+una foto piccola e invisibile su una grande). `cropResize` normalizza i bordi, o
+trascinare il sinistro oltre il destro darebbe una larghezza negativa. Il tetto
+`MATERIAL_TEXTURE_MAX` si applica al **ritaglio**, non all'immagine intera, e il
+lato corto segue la **proporzione** del ritaglio: forzare il quadrato
+schiaccerebbe una selezione larga, ed e' uno dei motivi per cui una texture
+"sembra sbagliata" pur essendo mappata bene.
+
+**Mappatura UV** (`normalizeUv` / `applyUvToTexture`): `repeat` (ripetizioni per
+faccia), `offsetU/V`, `rotation`. `repeat` non puo' essere 0 — azzererebbe la
+matrice UV e la faccia mostrerebbe un solo texel stirato, che si legge come "la
+texture non si e' caricata". La rotazione e' **quantizzata a 90 gradi**: un
+angolo qualunque interpola una texture ai pixel netti e la sfoca, e NearestFilter
+non basta (e' il campionamento ruotato a cadere fra i texel). `center` va a
+(0.5, 0.5) **prima** di ruotare, o l'immagine gira attorno all'angolo (0,0) e
+esce dal quadrato UV. Le stesse UV si applicano in export GLB, o la texture
+uscirebbe mappata diversamente da come si vede nel visore.
+
+**Trasparenza** (`applyTransparency`): due sorgenti indipendenti, `opacity` del
+materiale e pixel non opachi della texture (`texture.alpha`, misurato all'import
+da `pixelsHaveAlpha` e portato appresso, per non ridecodificare il PNG a ogni
+costruzione del materiale). **alphaTest e opacity NON si combinano**: alphaTest
+confronta l'alpha FINALE, cioe' `opacity * alphaDelTexel`, quindi con opacity 0.4
+e soglia 0.5 spariscono anche i pixel pieni e il materiale diventa **invisibile**
+invece che semitrasparente. Quindi il taglio secco (`alphaTest = 0.5`, bordi
+netti per la pixel art) si usa solo a opacita' piena, e sotto 1 si passa alla
+fusione. `depthWrite` resta **true**: la scena e' fatta di InstancedMesh per
+colore, che non si possono ordinare per voxel. Nel MTL diventa `d` (+ `illum 2`)
+e non `Tr`, che e' la stessa cosa invertita e i loader la risolvono in modo
+diverso; nel GLB diventa `alphaMode` BLEND o MASK.
+
+**L'anteprima** e' un **CUBO** per difetto, non una sfera: su una sfera la
+texture si avvolge una volta e si stringe ai poli, quindi sembra sbagliata anche
+quando la mappatura e' giusta — ed e' proprio l'immagine che fa dubitare che le
+UV non funzionino. La sfera resta a scelta perche' ruvidita' e metallicita' si
+leggono meglio su una curva continua. Il renderer e' **proprio** (quello della
+scena e' legato al canvas del viewport), costruito una volta e tenuto: i browser
+concedono una manciata di contesti GL per pagina prima di buttare via i piu'
+vecchi, cioe' quello del viewport. `metalness` senza `envMap` rende **nero** (e'
+fisicamente giusto: niente da riflettere), quindi c'e' un CubeTexture a gradiente
+generato su canvas — su r128 va diretto in `envMap`, senza PMREMGenerator. La
+rotazione gira **solo a form aperto**.
+
+**Gli handler del form si agganciano UNA VOLTA sola** (`initMaterialsPanel`) e
+leggono `_formState` / `_art`, che l'apertura riempie. Tenerli dentro la funzione
+d'apertura li accumulava, perche' `addEventListener` aggiunge e non sostituisce:
+alla terza apertura uno slider aggiornava l'anteprima tre volte per movimento e
+"Salva" creava tre materiali. In modifica il salvataggio passa da
+`updateMaterial`, che muta **in place**: la lista non cresce e i voxel che
+citavano l'id continuano a citarlo. Mutare invece di sostituire la voce
+nell'array e' obbligatorio perche' le liste per-oggetto sono **alias** della
+stessa lista di scena.
+
+**I campi del form usano le classi del tema**: `.field-strong` per testo e
+select, `.field-file` per l'input file. Una classe che non esiste in CSS
+(c'era un `.text-input`) lascia il campo col **bianco di sistema** e non si nota
+in tema chiaro, dove `--input-bg-strong` *e'* `#ffffff`: la verifica giusta e'
+che il campo sia identico agli altri **in entrambi i temi**. Il bottone "Scegli
+file" e' uno pseudo-elemento del browser e si raggiunge solo con
+`::file-selector-button`.
 
 Export: OBJ/MTL emette gli UV `0..uw / 0..uh` con `RepeatWrapping`, cosi' la
 texture si ripete **una volta per voxel** invece di stirarsi sul quad unito dal

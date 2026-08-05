@@ -20,7 +20,7 @@ function loadMaterials() {
   // Image/document, mentre la sua URL non ha createObjectURL).
   return new Function('currentModelData', 'THREE', 'document', 'Image', 'URL', src + `
    ;return { materialsOfProject, materialById, addMaterial, removeMaterial,
-             nextMaterialId, tokenOf, decodeToken, isMaterialToken,
+             updateMaterial, nextMaterialId, tokenOf, decodeToken, isMaterialToken,
              averageColorFromPixels, setActiveMaterial, getActiveMaterialId,
              fitTextureSize, importTextureFile, threeMaterialFor,
              clearMaterialCache };`);
@@ -68,8 +68,51 @@ check('removeMaterial su id ignoto da\' false', api.removeMaterial('m1') === fal
   api.removeMaterial('m1');
 }
 
-// --- normalizzazione dei parametri ---
-// null e '' sono ASSENZA, non zero: in JSON un valore mancante si scrive null, e
+// --- updateMaterial --------------------------------------------------------
+// La modifica e' IN PLACE: muta l'oggetto esistente invece di sostituirlo, cosi'
+// ogni riferimento alla lista (che e' aliasata fra oggetti) lo vede aggiornato.
+{
+  const { model: m, api: a } = fresh();
+  const orig = a.addMaterial({ name: 'Originale', color: '#111111', roughness: 0.5 });
+  const ref1 = a.materialsOfProject();
+  const ref2 = m.metadata.materials;
+  const updated = a.updateMaterial(orig.id, { name: 'Modificato', roughness: 0.9 });
+  check('updateMaterial ritorna il materiale', updated && updated.id === orig.id, updated && updated.id);
+  check('il nome e\' stato modificato', updated.name === 'Modificato', updated.name);
+  check('roughness e\' stato modificato', updated.roughness === 0.9, String(updated.roughness));
+  check('il colore NON modificato resta invariato', updated.color === '#111111', updated.color);
+  check('updateMaterial muta IN PLACE, non sostituisce', a.materialById(orig.id) === orig);
+  check('ogni riferimento alla lista lo vede aggiornato', ref1[0].name === 'Modificato' && ref2[0].name === 'Modificato');
+  check('updateMaterial su id inesistente da\' null', a.updateMaterial('m99', { name: 'X' }) === null);
+}
+
+// Un patch con `texture: null` ESPLICITO rimuove la texture; senza quella chiave
+// la texture attuale resta dov'e'. E' la differenza fra "non tocco la texture" e
+// "la tolgo", che il form di modifica richiede.
+{
+  const { api: a } = fresh();
+  const tex = { data: 'data:image/png;base64,AAA', w: 16, h: 16 };
+  const m = a.addMaterial({ name: 'T', texture: tex, color: '#FF0000' });
+  const senzaChiave = a.updateMaterial(m.id, { roughness: 0.8 });
+  check('updateMaterial senza texture nel patch conserva quella esistente',
+    senzaChiave.texture && senzaChiave.texture.data === tex.data, JSON.stringify(senzaChiave.texture));
+  const conNull = a.updateMaterial(m.id, { texture: null });
+  check('updateMaterial con texture: null esplicito la rimuove',
+    conNull.texture === null, JSON.stringify(conNull.texture));
+}
+
+// Anche sul patch si applica la normalizzazione: un hex storto o un roughness
+// fuori range vengono aggiustati, e il materiale non resta invalido. In modifica
+// puo' arrivare dall'utente tanto quanto in creazione.
+{
+  const { api: a } = fresh();
+  const m = a.addMaterial({ name: 'X', color: '#00FF00', roughness: 0.5 });
+  const patched = a.updateMaterial(m.id, { color: '#zzzzzz', roughness: 99 });
+  check('updateMaterial normalizza un hex malformato', patched.color === '#CCCCCC', patched.color);
+  check('updateMaterial clampa roughness fuori range', patched.roughness === 1, String(patched.roughness));
+}
+
+// --- normalizzazione dei parametri ---// null e '' sono ASSENZA, non zero: in JSON un valore mancante si scrive null, e
 // Number(null) e' 0 (che isFinite accetta), quindi senza una guardia esplicita il
 // default 0.6 non scattava mai e la superficie usciva a specchio. Si vedeva solo
 // su roughness perche' e' l'unico default diverso da zero.
@@ -235,7 +278,14 @@ function makeThree() {
   }
   class TextureLoader {
     load(url, onLoad) {
-      const tex = { image: url, disposed: 0, dispose() { this.disposed++; } };
+      // La texture vera ha repeat/offset (Vector2) e center: applyUvToTexture li
+      // scrive, quindi lo stub deve averli o si romperebbe qui mentre in browser
+      // funziona.
+      const vec = () => ({ x: 0, y: 0, set(a, b) { this.x = a; this.y = b; } });
+      const tex = {
+        image: url, disposed: 0, dispose() { this.disposed++; },
+        repeat: vec(), offset: vec(), center: vec(), rotation: 0
+      };
       loaded.push(tex);
       if (onLoad) onLoad(tex);
       return tex;
@@ -285,6 +335,119 @@ function makeThree() {
   check('emissive > 0 accende il materiale',
     m.emissive && m.emissive.value === '#FF4400' && m.emissiveIntensity === 0.8,
     JSON.stringify([m.emissive, m.emissiveIntensity]));
+}
+
+// --- opacita' e trasparenza -------------------------------------------------
+// Due sorgenti indipendenti: l'opacity del materiale e i pixel non opachi della
+// texture. La trappola e' che alphaTest e opacity NON si combinano: alphaTest
+// confronta l'alpha FINALE (opacity * alphaDelTexel) con la soglia, quindi con
+// opacity 0.4 e soglia 0.5 spariscono anche i pixel pieni e il materiale
+// diventa invisibile invece che semitrasparente.
+{
+  const { api: a } = fresh();
+  check('opacity assente vale 1 (pieno)', a.addMaterial({ name: 'x' }).opacity === 1);
+  const { api: b } = fresh();
+  check('opacity null vale 1, non 0', b.addMaterial({ name: 'x', opacity: null }).opacity === 1);
+  const { api: c } = fresh();
+  check('opacity viene clampata in 0..1',
+    c.addMaterial({ name: 'x', opacity: 5 }).opacity === 1
+    && c.addMaterial({ name: 'y', opacity: -3 }).opacity === 0);
+}
+
+{
+  const THREE = makeThree();
+  const { api: a } = fresh({ THREE });
+  a.addMaterial({ id: 'm1', name: 'Pieno', color: '#8B5A2B' });
+  const m = a.threeMaterialFor('@m1');
+  check('un materiale pieno NON e\' trasparente', !m.transparent, String(m.transparent));
+  check('un materiale pieno non ha alphaTest', !m.alphaTest, String(m.alphaTest));
+}
+
+{
+  const THREE = makeThree();
+  const { api: a } = fresh({ THREE });
+  a.addMaterial({ id: 'm1', name: 'Vetro', color: '#AACCFF', opacity: 0.35 });
+  const m = a.threeMaterialFor('@m1');
+  check('opacity < 1 accende la trasparenza', m.transparent === true, String(m.transparent));
+  check('e trasporta il valore di opacity', m.opacity === 0.35, String(m.opacity));
+  check('opacity < 1 NON usa alphaTest (spegnerebbe tutto)',
+    !m.alphaTest, String(m.alphaTest));
+}
+
+{
+  const THREE = makeThree();
+  const { api: a } = fresh({ THREE });
+  a.addMaterial({ id: 'm1', name: 'Foglia', color: '#3A7D2C',
+    texture: { data: 'data:image/png;base64,AAAA', w: 16, h: 16, alpha: true } });
+  const m = a.threeMaterialFor('@m1');
+  check('una texture con alpha accende la trasparenza', m.transparent === true, String(m.transparent));
+  check('a opacita\' piena il taglio e\' secco (alphaTest 0.5)',
+    m.alphaTest === 0.5, String(m.alphaTest));
+}
+
+{
+  const THREE = makeThree();
+  const { api: a } = fresh({ THREE });
+  a.addMaterial({ id: 'm1', name: 'Foglia velata', color: '#3A7D2C', opacity: 0.4,
+    texture: { data: 'data:image/png;base64,AAAA', w: 16, h: 16, alpha: true } });
+  const m = a.threeMaterialFor('@m1');
+  check('texture con alpha + opacity < 1: nessun alphaTest',
+    !m.alphaTest, String(m.alphaTest));
+  check('e la fusione usa l\'opacity chiesta', m.opacity === 0.4, String(m.opacity));
+}
+
+{
+  const { api: a } = fresh();
+  const senza = a.addMaterial({ name: 'x', texture: { data: 'd', w: 4, h: 4 } });
+  check('senza il flag, la texture e\' considerata opaca', senza.texture.alpha === false,
+    String(senza.texture.alpha));
+  const con = a.addMaterial({ name: 'y', texture: { data: 'd', w: 4, h: 4, alpha: true } });
+  check('il flag alpha della texture viene conservato', con.texture.alpha === true,
+    String(con.texture.alpha));
+}
+
+// --- mappatura UV -----------------------------------------------------------
+// `repeat` non puo' essere 0: azzererebbe la matrice UV e la faccia mostrerebbe
+// un solo texel stirato, che si legge come "la texture non si e' caricata".
+// La rotazione e' quantizzata a 90 gradi perche' un angolo qualunque interpola
+// una texture ai pixel netti e la sfoca.
+{
+  const { api: a } = fresh();
+  const d = a.addMaterial({ name: 'x' });
+  check('senza uv valgono i default (1, 0, 0, 0)',
+    d.uv.repeat === 1 && d.uv.offsetU === 0 && d.uv.offsetV === 0 && d.uv.rotation === 0,
+    JSON.stringify(d.uv));
+  const z = a.addMaterial({ name: 'y', uv: { repeat: 0 } });
+  check('repeat 0 viene portato al minimo, non lasciato a zero', z.uv.repeat > 0,
+    String(z.uv.repeat));
+  const big = a.addMaterial({ name: 'z', uv: { repeat: 1000 } });
+  check('repeat enorme viene tagliato', big.uv.repeat === 64, String(big.uv.repeat));
+  const rot = a.addMaterial({ name: 'w', uv: { rotation: 100 } });
+  check('la rotazione si quantizza a 90 gradi', rot.uv.rotation === 90, String(rot.uv.rotation));
+  const neg = a.addMaterial({ name: 'v', uv: { rotation: -90 } });
+  check('una rotazione negativa rientra in 0..359', neg.uv.rotation === 270, String(neg.uv.rotation));
+  const nan = a.addMaterial({ name: 'u', uv: { repeat: 'abc', offsetU: null } });
+  check('valori non numerici tornano ai default',
+    nan.uv.repeat === 1 && nan.uv.offsetU === 0, JSON.stringify(nan.uv));
+}
+
+{
+  const THREE = makeThree();
+  const { api: a } = fresh({ THREE });
+  a.addMaterial({ id: 'm1', name: 'Mattoni', color: '#8B5A2B',
+    texture: { data: 'data:image/png;base64,AAAA', w: 16, h: 16 },
+    uv: { repeat: 4, offsetU: 0.25, offsetV: 0.5, rotation: 90 } });
+  const m = a.threeMaterialFor('@m1');
+  check('le ripetizioni arrivano sulla texture',
+    m.map.repeat.x === 4 && m.map.repeat.y === 4, JSON.stringify(m.map.repeat));
+  check('lo scorrimento arriva sulla texture',
+    m.map.offset.x === 0.25 && m.map.offset.y === 0.5, JSON.stringify(m.map.offset));
+  // center a 0.5,0.5 PRIMA di ruotare: attorno all'angolo (0,0) l'immagine
+  // uscirebbe dal quadrato UV invece di girare sul posto.
+  check('il centro di rotazione e\' il centro della texture',
+    m.map.center.x === 0.5 && m.map.center.y === 0.5, JSON.stringify(m.map.center));
+  check('la rotazione arriva in radianti',
+    Math.abs(m.map.rotation - Math.PI / 2) < 1e-9, String(m.map.rotation));
 }
 
 // La texture: filtri e wrapping sono il punto, non il caricamento in se'.
@@ -348,6 +511,11 @@ function makeThree() {
 // Il canvas e' finto: registra le chiamate e restituisce pixel noti. Prova che
 // l'import ridimensiona (il tetto e' applicato QUI, non in normalizeMaterial),
 // che disattiva lo smoothing e che la tinta media arriva dallo stesso canvas.
+//
+// drawImage viene chiamata nella forma a 9 argomenti (sorgente + destinazione),
+// che e' quella che il ritaglio richiede: senza il rettangolo sorgente non si
+// potrebbe prendere una porzione dell'immagine. Senza ritaglio la sorgente e'
+// l'immagine INTERA, ed e' quello che il primo blocco verifica.
 {
   const calls = { drawImage: null, smoothing: null, getImageData: null, revoked: [] };
   const pixels = new Uint8Array([255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255]);
@@ -359,7 +527,7 @@ function makeThree() {
           return {
             set imageSmoothingEnabled(v) { calls.smoothing = v; },
             get imageSmoothingEnabled() { return calls.smoothing; },
-            drawImage(img, x, y, w, h) { calls.drawImage = [x, y, w, h]; },
+            drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) { calls.drawImage = [sx, sy, sw, sh, dx, dy, dw, dh]; },
             getImageData(x, y, w, h) { calls.getImageData = [x, y, w, h]; return { data: pixels }; }
           };
         },
@@ -379,14 +547,47 @@ function makeThree() {
   const res = await a.importTextureFile({ name: 'x.png' });
   check('l\'import ridimensiona entro il tetto', res.w === 128 && res.h === 64,
     `${res.w}x${res.h}`);
+  check('senza ritaglio la sorgente e\' l\'immagine intera',
+    JSON.stringify(calls.drawImage.slice(0, 4)) === JSON.stringify([0, 0, 512, 256]),
+    JSON.stringify(calls.drawImage));
   check('l\'import disegna alla dimensione ridotta',
-    JSON.stringify(calls.drawImage) === JSON.stringify([0, 0, 128, 64]),
+    JSON.stringify(calls.drawImage.slice(4)) === JSON.stringify([0, 0, 128, 64]),
     JSON.stringify(calls.drawImage));
   check('l\'import non interpola nel ridimensionamento', calls.smoothing === false,
     String(calls.smoothing));
   check('l\'import ritorna un data URL PNG', res.data === 'data:image/png;base64,ZZZZ', res.data);
   check('la tinta media viene dai pixel del canvas ridotto', res.color === '#800000', res.color);
   check('il blob viene rilasciato', calls.revoked.length === 1, JSON.stringify(calls.revoked));
+
+  // Il ritaglio: il tetto si applica al RETTAGLIO, non all'immagine intera.
+  // 200x100 sta sotto i 128 di lato lungo? no: 200 > 128, quindi scende a 128x64.
+  // La sorgente invece resta esattamente il rettangolo chiesto.
+  const conCrop = await a.importTextureFile({ name: 'x.png' }, { x: 10, y: 20, w: 200, h: 100 });
+  check('il ritaglio passa a drawImage come rettangolo sorgente',
+    JSON.stringify(calls.drawImage.slice(0, 4)) === JSON.stringify([10, 20, 200, 100]),
+    JSON.stringify(calls.drawImage));
+  check('il tetto si applica al ritaglio, non all\'immagine intera',
+    conCrop.w === 128 && conCrop.h === 64, `${conCrop.w}x${conCrop.h}`);
+
+  // Un ritaglio piu' piccolo del tetto NON viene ingrandito: ingrandirlo non
+  // aggiunge dettaglio e gonfia il base64 dentro il .voxai.
+  const piccolo = await a.importTextureFile({ name: 'x.png' }, { x: 0, y: 0, w: 40, h: 30 });
+  check('un ritaglio sotto il tetto resta alla sua dimensione',
+    piccolo.w === 40 && piccolo.h === 30, `${piccolo.w}x${piccolo.h}`);
+
+  // Un rettangolo che sfora il bordo viene INTERSECATO con l'immagine: drawImage
+  // con una sorgente fuori area disegna il nulla, quindi si otterrebbe una
+  // texture trasparente senza un errore da nessuna parte.
+  await a.importTextureFile({ name: 'x.png' }, { x: 500, y: 250, w: 999, h: 999 });
+  check('un ritaglio oltre il bordo viene intersecato con l\'immagine',
+    JSON.stringify(calls.drawImage.slice(0, 4)) === JSON.stringify([500, 250, 12, 6]),
+    JSON.stringify(calls.drawImage));
+
+  // Coordinate negative: si fermano a 0 invece di scorrere la sorgente indietro.
+  await a.importTextureFile({ name: 'x.png' }, { x: -50, y: -50, w: 100, h: 100 });
+  check('un ritaglio con coordinate negative parte da 0',
+    calls.drawImage[0] === 0 && calls.drawImage[1] === 0,
+    JSON.stringify(calls.drawImage));
 }
 
 // Un file che non e' un'immagine deve RIFIUTARE (e rilasciare il blob), non

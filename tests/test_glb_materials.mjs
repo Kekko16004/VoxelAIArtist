@@ -125,8 +125,13 @@ class Geo {
 const texLoads = [];
 class TextureLoaderStub {
     load(url, onLoad, onProgress, onError) {
+        // repeat/offset/center esistono su ogni THREE.Texture vera: applyUvToTexture
+        // le scrive, quindi senza di esse lo stub esploderebbe qui mentre in browser
+        // l'export funziona.
+        const vec2 = () => ({ x: 0, y: 0, set(a, b) { this.x = a; this.y = b; } });
         const tex = {
             url, magFilter: null, minFilter: null, wrapS: null, wrapT: null,
+            repeat: vec2(), offset: vec2(), center: vec2(), rotation: 0,
             name: '', loaded: false, userData: {}, dispose() { this.disposed = true; },
         };
         const rec = {

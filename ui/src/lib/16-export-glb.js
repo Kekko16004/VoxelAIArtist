@@ -106,9 +106,32 @@
                     m.emissive = new THREE.Color(dec.color).convertSRGBToLinear();
                     m.emissiveIntensity = def.emissive;
                 }
+                // Trasparenza. In glTF si traduce in alphaMode: BLEND per l'opacita'
+                // (il GLTFExporter la scrive da `transparent` + il quarto canale di
+                // baseColorFactor) e MASK per il taglio secco (da `alphaTest`, che
+                // diventa alphaCutoff).
+                //
+                // I due non si sommano, ed e' la stessa trappola del visore:
+                // alphaTest confronta l'alpha FINALE, cioe' opacity per l'alpha del
+                // texel, quindi con opacity 0.4 e soglia 0.5 spariscono anche i pixel
+                // pieni. A opacita' piena si usa il taglio, sotto la fusione.
+                if (def && def.opacity < 1) {
+                    m.transparent = true;
+                    m.opacity = def.opacity;
+                } else if (def && def.texture && def.texture.alpha) {
+                    m.transparent = true;
+                    m.alphaTest = 0.5;
+                }
                 const tex = exportTextureFor(def);
                 if (tex) {
                     m.map = tex;
+                    // Le UV del materiale valgono anche in export: il greedy mesher
+                    // emette UV 0..N (una ripetizione per voxel), e repeat le
+                    // moltiplica esattamente come a schermo. Senza, la stessa texture
+                    // uscirebbe mappata in modo diverso da come si vede nel visore --
+                    // che e' il difetto per cui non si capisce se il problema e' la
+                    // mappatura o l'immagine.
+                    if (typeof applyUvToTexture === 'function') applyUvToTexture(tex, def.uv);
                     // In glTF il colore finale e' baseColorFactor * texture: il fattore
                     // deve restare BIANCO, altrimenti la tinta si moltiplica due volte
                     // (stessa trappola dell'invariante 6 sul COLOR_0, vedi CLAUDE.md).
