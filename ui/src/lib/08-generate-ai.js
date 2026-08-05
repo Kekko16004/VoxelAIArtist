@@ -133,8 +133,25 @@
                     let produced = 0;
                     try { produced = (expandOps({ palette: palette, ops: diffOps, metadata: data.metadata || {} }).voxels || []).length; } catch (e) { produced = 0; }
                     if (curCount > 0 && produced >= curCount * 0.8) {
+                        // pushHistory PRIMA di sostituire: questo ramo butta via il
+                        // modello intero, cioe' e' la cosa piu' distruttiva che l'AI
+                        // possa fare, ed era l'unica non annullabile (il `return` qui
+                        // sotto saltava il pushHistory del percorso normale).
+                        pushHistory();
+                        // Il payload spedito all'AI omette i materiali di proposito
+                        // (getSavePayload con {materials:false}: una texture base64
+                        // costerebbe piu' del modello e all'AI non serve), quindi la
+                        // risposta non li riporta indietro. Si conservano quelli che
+                        // c'erano: senza, ogni riscrittura totale cancellerebbe le
+                        // definizioni del progetto e slegherebbe tutti i voxel.
+                        const matPrima = (currentModelData.metadata || {}).materials;
                         obj.data = expandOps(data);
                         currentModelData = obj.data;
+                        if (Array.isArray(matPrima) && matPrima.length) {
+                            if (!currentModelData.metadata) currentModelData.metadata = {};
+                            currentModelData.metadata.materials = matPrima;
+                        }
+                        if (typeof invalidateIncremental === 'function') invalidateIncremental();
                         return;
                     }
                 }

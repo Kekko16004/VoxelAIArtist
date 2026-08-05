@@ -253,6 +253,15 @@ run "Materiali (store, token, tinta media)" node tests/test_materials.mjs
 #         lo prende e' quello di isometria, non l'insieme dei `vt` (identico nei due casi).
 run "Export OBJ/MTL con texture" node tests/test_obj_materials.mjs
 
+# 4d-septies-ter. Il ramo di RISCRITTURA TOTALE della modifica AI. Quando l'AI
+#         risponde con un modello intero invece di un diff, applyModifyResult
+#         sostituisce l'oggetto in blocco: era l'azione piu' distruttiva che l'AI
+#         possa fare ed era anche l'unica NON annullabile (usciva con return prima
+#         di pushHistory). E siccome il payload spedito omette i materiali di
+#         proposito, sostituire in blocco cancellava le definizioni del progetto
+#         slegando ogni voxel. Il test estrae la funzione vera dal sorgente.
+run "Riscrittura totale dall'AI (Node)" node tests/test_ai_rewrite.mjs
+
 # 4d-quinquies. Persistenza dei pannelli del pannello destro: i quattro <details
 #         class="rp-section"> (Outliner, Proprieta', Palette, Vista) devono
 #         ricordare il loro stato aperto/chiuso tra una sessione e l'altra.
