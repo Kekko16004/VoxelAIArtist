@@ -19223,6 +19223,116 @@ async function voxelizeScene(gltfScene, options) {
                 activeMaterialId = id || null;
             }
 
+            // --- import della texture --------------------------------------------
+
+            // Il lato lungo comanda, l'altro segue in proporzione, minimo 1 pixel.
+            // Una texture gia' piccola NON viene ingrandita: ingrandirla non aggiunge
+            // dettaglio e gonfia il base64 dentro il .voxai.
+            //
+            // Il tetto MATERIAL_TEXTURE_MAX si applica QUI e non in normalizeMaterial:
+            // lo store non puo' ridimensionare niente, potrebbe solo rifiutare o
+            // troncare una definizione gia' scritta (cioe' buttare via dati
+            // dell'utente). L'import e' il solo punto che ha i pixel in mano.
+            function fitTextureSize(w, h, max) {
+                const M = max || MATERIAL_TEXTURE_MAX;
+                if (w <= M && h <= M) return { w: w, h: h };
+                const k = M / Math.max(w, h);
+                return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) };
+            }
+
+            // Legge un File immagine, lo ridimensiona su canvas e ne ricava la tinta
+            // media dallo STESSO canvas (un secondo passaggio sull'originale non
+            // aggiungerebbe precisione e costerebbe un'altra decodifica).
+            //
+            // Il messaggio dell'errore e' tecnico e NON va mostrato cosi' com'e':
+            // chi chiama presenta la sua stringa da t(). Vedi il pannello materiali.
+            function importTextureFile(file) {
+                return new Promise((resolve, reject) => {
+                    const url = URL.createObjectURL(file);
+                    const img = new Image();
+                    img.onload = () => {
+                        try {
+                            const size = fitTextureSize(img.width, img.height, MATERIAL_TEXTURE_MAX);
+                            const cv = document.createElement('canvas');
+                            cv.width = size.w; cv.height = size.h;
+                            const ctx = cv.getContext('2d');
+                            // NearestFilter a valle: qui teniamo il ridimensionamento
+                            // netto, altrimenti la voxel art esce sfocata gia' in origine.
+                            ctx.imageSmoothingEnabled = false;
+                            ctx.drawImage(img, 0, 0, size.w, size.h);
+                            const px = ctx.getImageData(0, 0, size.w, size.h).data;
+                            resolve({
+                                data: cv.toDataURL('image/png'),
+                                w: size.w, h: size.h,
+                                color: averageColorFromPixels(px)
+                            });
+                        } catch (e) { reject(e); }
+                        finally { URL.revokeObjectURL(url); }
+                    };
+                    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image decode failed')); };
+                    img.src = url;
+                });
+            }
+
+            // --- cache dei materiali THREE ---------------------------------------
+            // Un MeshStandardMaterial per token, riusato da entrambi i percorsi di
+            // rendering. Senza cache ogni pennellata ricreerebbe la texture (upload
+            // sulla GPU a ogni tratto) invece di riusarla.
+            let _materialCache = new Map();
+
+            function clearMaterialCache() {
+                _materialCache.forEach(m => {
+                    if (m.map && m.map.dispose) m.map.dispose();
+                    if (m.dispose) m.dispose();
+                });
+                _materialCache = new Map();
+            }
+
+            // `opts.color` e' il colore PROPRIO del voxel, usato solo quando il token
+            // e' un materiale che non esiste (piu'). Serve perche' decodeToken senza
+            // secondo argomento degrada al grigio neutro: un .voxai aperto senza le
+            // sue definizioni uscirebbe tutto grigio invece che a tinte piatte. Entra
+            // anche nella chiave di cache, o due orfani di colore diverso si
+            // spartirebbero lo stesso materiale (il primo vincerebbe per sempre).
+            function threeMaterialFor(token, opts) {
+                const wire = !!(opts && opts.wireframe);
+                const fallback = (opts && opts.color) || '';
+                const key = token + '|' + fallback + (wire ? '|w' : '');
+                const hit = _materialCache.get(key);
+                if (hit) return hit;
+
+                const dec = decodeToken(token, fallback);
+                // materialById, non `dec.material` : su un orfano l'id resta valorizzato
+                // (e' voluto, vedi decodeToken) ma la definizione non c'e'.
+                const def = materialById(dec.material);
+                const mat = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(dec.color),
+                    roughness: def ? def.roughness : 0.2,
+                    metalness: def ? def.metalness : 0.1,
+                    wireframe: wire
+                });
+                if (def && def.emissive > 0) {
+                    mat.emissive = new THREE.Color(dec.color);
+                    mat.emissiveIntensity = def.emissive;
+                }
+                if (def && def.texture && def.texture.data) {
+                    const tex = new THREE.TextureLoader().load(def.texture.data, () => {
+                        if (typeof requestRender === 'function') requestRender();
+                    });
+                    // Voxel art: nessuna interpolazione, e una ripetizione per voxel
+                    // (l'UV oltre 1 serve al greedy mesh dell'export).
+                    tex.magFilter = THREE.NearestFilter;
+                    tex.minFilter = THREE.NearestFilter;
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                    mat.map = tex;
+                    // Col map, `color` moltiplica la texture: bianco = texture pura.
+                    mat.color = new THREE.Color(0xffffff);
+                }
+                _materialCache.set(key, mat);
+                return mat;
+            }
+
             const clock = new THREE.Clock();
 
             // ===== RENDER ON-DEMAND (F7) =====
