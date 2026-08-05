@@ -342,3 +342,180 @@
                 _materialCache.set(key, mat);
                 return mat;
             }
+
+            // --- UI del pannello ---------------------------------------------------
+            // Il modulo viene caricato anche FUORI da una pagina: i test lo eseguono
+            // con new Function per provare lo store e i token, passando un `document`
+            // ridotto o nessuno. Si controllano i METODI che servono davvero, non
+            // l'esistenza dell'oggetto.
+            function hasPanelDom() {
+                return typeof document !== 'undefined' && !!document
+                    && typeof document.getElementById === 'function'
+                    && typeof document.createElement === 'function';
+            }
+
+            // La scheda mostra la texture (o la tinta piatta se non c'e'), il nome e,
+            // sui materiali del progetto, una X per eliminarlo. Il click destro fa lo
+            // stesso, ma da solo non basterebbe: su un pannello non si scopre.
+            function materialCardEl(def, onClick) {
+                const el = document.createElement('div');
+                el.className = 'material-card';
+                el.dataset.materialId = def.id;
+                el.style.backgroundColor = def.color;
+                if (def.texture && def.texture.data) el.style.backgroundImage = `url(${def.texture.data})`;
+                const nm = document.createElement('div');
+                nm.className = 'material-card-name';
+                nm.textContent = def.name;
+                el.appendChild(nm);
+                el.addEventListener('click', onClick);
+                return el;
+            }
+
+            // Elimina chiedendo conferma, poi svuota la cache e ridisegna: i voxel che
+            // citavano l'id restano, diventano orfani e tornano da soli a tinta unita
+            // (vedi decodeToken). Senza clearMaterialCache continuerebbero a mostrare
+            // la texture del materiale appena eliminato.
+            function deleteMaterialFromPanel(def) {
+                if (!confirm(t('materials.confirmDelete', { name: def.name }))) return;
+                removeMaterial(def.id);
+                clearMaterialCache();
+                renderMaterialsPanel();
+                if (typeof buildModel === 'function') buildModel(false);
+            }
+
+            function renderMaterialsPanel() {
+                if (!hasPanelDom()) return;
+                const grid = document.getElementById('materialsGrid');
+                if (!grid) return;
+                const list = materialsOfProject();
+                grid.innerHTML = '';
+                list.forEach(def => {
+                    const el = materialCardEl(def, () => setActiveMaterialAndSync(def.id));
+                    el.title = def.name;
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'material-card-del';
+                    del.textContent = '×';
+                    del.title = t('materials.deleteTitle');
+                    // stopPropagation: il bottone sta DENTRO la scheda, quindi senza
+                    // questo il click selezionerebbe anche il materiale che si sta
+                    // eliminando.
+                    del.addEventListener('click', ev => { ev.stopPropagation(); deleteMaterialFromPanel(def); });
+                    el.appendChild(del);
+                    el.addEventListener('contextmenu', ev => { ev.preventDefault(); deleteMaterialFromPanel(def); });
+                    grid.appendChild(el);
+                });
+                const empty = document.getElementById('materialsEmpty');
+                if (empty) empty.style.display = list.length ? 'none' : '';
+                renderMaterialLibrary();
+                refreshMaterialSelectionUI();
+            }
+
+            // --- libreria personale -------------------------------------------------
+            // Vive in localStorage, non nel progetto: serve a riusare un materiale FRA
+            // progetti diversi. E' un comfort, non un dato critico - se il browser la
+            // rifiuta si va avanti in silenzio.
+            function loadMaterialLibrary() {
+                try {
+                    const raw = localStorage.getItem(MATERIAL_LIB_KEY);
+                    const arr = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(arr) ? arr : [];
+                } catch (e) { return []; }
+            }
+
+            function saveMaterialLibrary(arr) {
+                try { localStorage.setItem(MATERIAL_LIB_KEY, JSON.stringify(arr.slice(0, MATERIAL_LIB_MAX))); }
+                catch (e) { /* quota piena: la libreria e' un comfort, non un dato critico */ }
+            }
+
+            function renderMaterialLibrary() {
+                if (!hasPanelDom()) return;
+                const grid = document.getElementById('materialLibraryGrid');
+                if (!grid) return;
+                const lib = loadMaterialLibrary();
+                grid.innerHTML = '';
+                lib.forEach((def, i) => {
+                    const el = materialCardEl(def, () => {
+                        // Importare RINUMERA: due progetti diversi possono aver usato m1
+                        // per materiali diversi, e tenere l'id di origine legherebbe la
+                        // copia al materiale gia' presente invece di aggiungerne uno.
+                        const copia = addMaterial(Object.assign({}, def, { id: null }));
+                        clearMaterialCache();
+                        renderMaterialsPanel();
+                        setActiveMaterialAndSync(copia.id);
+                    });
+                    el.title = t('materials.importFromLibrary') + ': ' + def.name;
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'material-card-del';
+                    del.textContent = '×';
+                    del.title = t('materials.deleteTitle');
+                    del.addEventListener('click', ev => {
+                        ev.stopPropagation();
+                        const cur = loadMaterialLibrary();
+                        cur.splice(i, 1);
+                        saveMaterialLibrary(cur);
+                        renderMaterialLibrary();
+                    });
+                    el.appendChild(del);
+                    grid.appendChild(el);
+                });
+                const empty = document.getElementById('materialLibraryEmpty');
+                if (empty) empty.style.display = lib.length ? 'none' : '';
+            }
+
+            (function initMaterialsPanel() {
+                // Fuori da una pagina non c'e' niente da agganciare: vedi hasPanelDom.
+                if (!hasPanelDom()) return;
+                const newBtn = document.getElementById('newMaterialBtn');
+                const form = document.getElementById('materialForm');
+                if (!newBtn || !form) return;   // pagina senza il pannello (es. settings.html)
+                let pendingTexture = null;
+
+                newBtn.addEventListener('click', () => {
+                    form.style.display = (form.style.display === 'none') ? 'flex' : 'none';
+                });
+                document.getElementById('materialCancelBtn').addEventListener('click', () => {
+                    form.style.display = 'none';
+                    pendingTexture = null;
+                });
+                document.getElementById('materialTextureInput').addEventListener('change', async e => {
+                    const f = e.target.files && e.target.files[0];
+                    if (!f) { pendingTexture = null; return; }
+                    // Il messaggio di importTextureFile e' tecnico e in inglese: si
+                    // mostra il nostro, tradotto.
+                    try { pendingTexture = await importTextureFile(f); }
+                    catch (err) { pendingTexture = null; alert(t('materials.textureError')); }
+                });
+                document.getElementById('materialCreateBtn').addEventListener('click', () => {
+                    const name = (document.getElementById('materialName').value || '').trim();
+                    if (!name) { alert(t('materials.nameRequired')); return; }
+                    const def = addMaterial({
+                        name: name,
+                        texture: pendingTexture ? { data: pendingTexture.data, w: pendingTexture.w, h: pendingTexture.h } : null,
+                        // Senza texture il materiale e' una tinta unita col colore
+                        // attivo: e' comunque utile per ruvidita'/metallicita'/emissivo.
+                        color: pendingTexture ? pendingTexture.color
+                            : (typeof activeColorHex === 'string' ? activeColorHex : MATERIAL_FALLBACK_COLOR),
+                        roughness: parseFloat(document.getElementById('materialRoughness').value),
+                        metalness: parseFloat(document.getElementById('materialMetalness').value),
+                        emissive: parseFloat(document.getElementById('materialEmissive').value)
+                    });
+                    const lib = loadMaterialLibrary();
+                    if (lib.length < MATERIAL_LIB_MAX) {
+                        // Copia, non l'oggetto vivo: il materiale del progetto puo'
+                        // essere modificato o eliminato, la voce in libreria no.
+                        lib.push(JSON.parse(JSON.stringify(def)));
+                        saveMaterialLibrary(lib);
+                    } else {
+                        alert(t('materials.libraryFull', { max: MATERIAL_LIB_MAX }));
+                    }
+                    form.style.display = 'none';
+                    document.getElementById('materialName').value = '';
+                    document.getElementById('materialTextureInput').value = '';
+                    pendingTexture = null;
+                    renderMaterialsPanel();
+                    setActiveMaterialAndSync(def.id);
+                });
+                renderMaterialsPanel();
+            })();

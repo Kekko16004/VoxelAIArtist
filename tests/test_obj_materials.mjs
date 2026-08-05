@@ -72,9 +72,16 @@ function load(model) {
         constructor(parts) { this.parts = parts; lastParts = parts; }
     }
     const doc = {
-        getElementById: (id) => ({
-            addEventListener: (ev, fn) => { handlers[id + ':' + ev] = fn; }
-        }),
+        // Risponde SOLO per gli id che 06-export-obj.js aggancia davvero. Uno stub
+        // che dice si' a qualunque id fa credere a 36-materials.js (concatenato qui
+        // sotto, stesso scope) che ci sia il pannello Materiali, e il suo init
+        // prova a costruire schede su elementi finti. Qui interessa l'export, non
+        // il pannello: quello ha il suo test.
+        getElementById: (id) => (
+            (id === 'exportObjBtn' || id === 'exportMtlBtn')
+                ? { addEventListener: (ev, fn) => { handlers[id + ':' + ev] = fn; } }
+                : null
+        ),
         createElement: () => ({
             style: {}, href: '', download: '',
             click() { downloads.push({ name: this.download, parts: lastParts }); }

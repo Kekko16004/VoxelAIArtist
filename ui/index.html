@@ -920,6 +920,67 @@
             box-shadow: var(--shadow-soft);
         }
 
+        /* Scheda di un materiale. image-rendering: pixelated perche' una texture
+           voxel e' piccola e va vista a pixel netti, come nel viewer (NearestFilter). */
+        .material-card {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: var(--radius-sm);
+            border: 2px solid transparent;
+            background-size: cover;
+            image-rendering: pixelated;
+            cursor: pointer;
+        }
+
+        .material-card.active {
+            border-color: var(--accent-primary);
+        }
+
+        .material-card .material-card-name {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            font-size: 9px;
+            text-align: center;
+            background: rgba(0, 0, 0, .55);
+            border-radius: 0 0 4px 4px;
+            padding: 1px 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* La X di eliminazione, in alto a destra sulla scheda. */
+        .material-card .material-card-del {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 16px;
+            height: 16px;
+            line-height: 14px;
+            padding: 0;
+            font-size: 12px;
+            color: #fff;
+            background: rgba(0, 0, 0, .55);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .material-card:hover .material-card-del,
+        .material-card .material-card-del:focus {
+            opacity: 1;
+        }
+
+        /* Colore attivo scavalcato da un materiale: SMORZATO, non disabilitato.
+           Cliccarlo e' proprio il modo per tornare al colore. */
+        .muted-by-material {
+            opacity: .45;
+        }
+
         /* Tool selector (Edit modes) */
         .tool-grid {
             display: grid;
@@ -2518,6 +2579,50 @@
                             <button class="btn btn-secondary" id="redoBtn" disabled
                                 style="padding:8px; font-size:12px;">↷ Ripeti</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ===== Materiali (texture su tutte e 6 le facce) ===== -->
+                <div>
+                    <div class="section-title" data-i18n="materials.sectionTitle">Materiali</div>
+                    <div class="controls-group glass" id="materialsPanel" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+                        <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;"
+                            data-i18n="materials.hint">
+                            Un materiale applica la stessa texture a tutte e 6 le facce del voxel. Selezionarne uno disattiva il colore attivo.
+                        </div>
+                        <div id="materialsGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
+                        <p id="materialsEmpty" style="font-size:11px; color:var(--text-secondary); margin:0;"
+                            data-i18n="materials.empty">Nessun materiale. Creane uno per usare le texture.</p>
+                        <button class="btn btn-secondary" id="newMaterialBtn" style="padding:8px; font-size:12px;"
+                            data-i18n="materials.new">+ Nuovo materiale</button>
+                        <div id="materialForm" style="display:none; flex-direction:column; gap:8px;">
+                            <input type="text" id="materialName" class="text-input"
+                                data-i18n-placeholder="materials.namePlaceholder" placeholder="Nome del materiale">
+                            <input type="file" id="materialTextureInput" accept="image/*" style="font-size:11px;"
+                                data-i18n-title="materials.chooseFile" title="Scegli immagine">
+                            <div class="control-row">
+                                <label data-i18n="materials.roughness">Ruvidita</label>
+                                <input type="range" id="materialRoughness" min="0" max="1" step="0.05" value="0.6">
+                            </div>
+                            <div class="control-row">
+                                <label data-i18n="materials.metalness">Metallicita</label>
+                                <input type="range" id="materialMetalness" min="0" max="1" step="0.05" value="0">
+                            </div>
+                            <div class="control-row">
+                                <label data-i18n="materials.emissive">Emissivo</label>
+                                <input type="range" id="materialEmissive" min="0" max="1" step="0.05" value="0">
+                            </div>
+                            <div class="btn-group" style="grid-template-columns:1fr 1fr;">
+                                <button class="btn btn-primary" id="materialCreateBtn" style="padding:8px; font-size:12px;"
+                                    data-i18n="materials.create">Crea</button>
+                                <button class="btn btn-secondary" id="materialCancelBtn" style="padding:8px; font-size:12px;"
+                                    data-i18n="materials.cancel">Annulla</button>
+                            </div>
+                        </div>
+                        <div class="section-title" style="font-size:11px; margin-top:4px;" data-i18n="materials.library">Libreria personale</div>
+                        <div id="materialLibraryGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
+                        <p id="materialLibraryEmpty" style="font-size:11px; color:var(--text-secondary); margin:0;"
+                            data-i18n="materials.libraryEmpty">La libreria e vuota.</p>
                     </div>
                 </div>
 
@@ -4409,7 +4514,10 @@
                     // non veniva messo). Esclusi qui, la cella risulta libera e si puo'
                     // costruire "sopra" la parte nascosta. syncVoxelsFromMap li conserva.
                     if (v._hidden) return;
-                    voxelMap.set(`${v.x},${v.y},${v.z}`, v.color.toUpperCase());
+                    // Il valore e' un TOKEN ('#RRGGBB' o '@m1'), non un colore: vedi
+                    // 36-materials.js. Le decine di confronti sparsi per l'editor lo
+                    // trattano come stringa opaca e restano invariati.
+                    voxelMap.set(`${v.x},${v.y},${v.z}`, tokenOf(v));
                 });
             }
 
@@ -4421,6 +4529,14 @@
             // nuovo blocco (visibile) sostituisce quello nascosto.
             function syncVoxelsFromMap() {
                 const partByKey = new Map();
+                // Colore PROPRIO di ogni cella prima della ricostruzione. Serve come
+                // ripiego per decodeToken su un id ORFANO: il token ha collassato il
+                // voxel a '@m1' buttandone via l'hex, quindi il suo colore vero puo'
+                // arrivare solo da qui. Senza, un .voxai aperto senza le sue definizioni
+                // vedrebbe ogni voxel texturizzato riscritto a #CCCCCC al primo sync --
+                // e questo array e' cio' che finisce su disco, quindi la perdita
+                // sarebbe definitiva.
+                const colorByKey = new Map();
                 const hiddenVoxels = [];
                 (currentModelData.voxels || []).forEach(v => {
                     const k = `${v.x},${v.y},${v.z}`;
@@ -4429,10 +4545,16 @@
                         return;
                     }
                     if (v.part !== undefined) partByKey.set(k, v.part);
+                    if (v.color) colorByKey.set(k, v.color);
                 });
-                const rebuilt = [...voxelMap.entries()].map(([k, color]) => {
+                const rebuilt = [...voxelMap.entries()].map(([k, token]) => {
                     const [x, y, z] = k.split(',').map(Number);
-                    const base = { x, y, z, color };
+                    // Una cella APPENA dipinta non ha un colore precedente, e non le
+                    // serve: solo un token materiale puo' essere privo di colore, e un
+                    // materiale appena posato per definizione esiste (vedi activeToken).
+                    const dec = decodeToken(token, colorByKey.get(k));
+                    const base = { x, y, z, color: dec.color };
+                    if (dec.material) base.material = dec.material;
                     const part = partByKey.get(k);
                     if (part !== undefined) {
                         base.part = part;
@@ -4506,6 +4628,14 @@
                 // gli indici puntano ai voxel sbagliati. Invalidiamo, cosi' il prossimo
                 // edit passa dal rebuild completo che riallinea tutto.
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                // I materiali appartengono all'OGGETTO (metadata.materials), quindi lo
+                // stesso id in due oggetti sono due materiali diversi: la cache dei
+                // MeshStandardMaterial e' indicizzata per token e va buttata, e il
+                // pannello deve mostrare l'elenco del nuovo attivo. Ogni chiamante di
+                // setActiveObject ridisegna subito dopo (buildModel), quindi liberare
+                // qui non lascia mesh con un materiale gia' rilasciato.
+                if (typeof clearMaterialCache === 'function') clearMaterialCache();
+                if (typeof renderMaterialsPanel === 'function') renderMaterialsPanel();
                 // T1 Fase B: refresh outliner selection / bounding-box highlight here.
                 return obj;
             }
@@ -4531,12 +4661,15 @@
                 rig = null;
                 if (parsed && Array.isArray(parsed.objects)) {
                     parsed.objects.forEach((o, i) => {
-                        const data = expandOps({
+                        // expandOps NON conosce i materiali (le ops sono di soli colori):
+                        // si riversano subito dopo, dalla mappa nel metadata. Vedi
+                        // applyMaterialMap in 07-save-payload.js.
+                        const data = applyMaterialMap(expandOps({
                             metadata: o.metadata || (o.name ? { name: o.name } : {}),
                             palette: o.palette,
                             ops: o.ops,
                             voxels: o.voxels
-                        });
+                        }));
                         const obj = createObject(data, {
                             name: o.name,
                             transform: o.transform,
@@ -4549,12 +4682,14 @@
                     if (!sceneObjects.length) createObject({ metadata: {}, voxels: [] });
                     setActiveObject(sceneObjects[0].id);
                 } else {
-                    const data = expandOps(parsed);
+                    const data = applyMaterialMap(expandOps(parsed));
                     const obj = createObject(data);
                     attachRigFromPayload(obj, parsed && parsed.rig, null);
                     setActiveObject(obj.id);
                 }
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                // La cache dei materiali e il pannello li rinfresca setActiveObject, che
+                // entrambi i rami qui sopra chiamano: rifarlo qui sarebbe solo un doppione.
             }
 
             // ===== T1 Fase B: modalità editor, rendering multi-oggetto, selezione =====
@@ -5096,16 +5231,18 @@
                 let firstNew = null;
                 if (parsed && Array.isArray(parsed.objects)) {
                     parsed.objects.forEach((o, i) => {
-                        const data = expandOps({
+                        // Come in loadSceneFromParsed: i materiali arrivano dal metadata,
+                        // non dalle ops.
+                        const data = applyMaterialMap(expandOps({
                             metadata: o.metadata || (o.name ? { name: o.name } : {}),
                             palette: o.palette, ops: o.ops, voxels: o.voxels
-                        });
+                        }));
                         const obj = createObject(data, { name: o.name, transform: o.transform, visible: o.visible });
                         attachRigFromPayload(obj, o.rig, i === 0 ? parsed.rig : null);
                         if (!firstNew) firstNew = obj;
                     });
                 } else {
-                    const data = expandOps(parsed);
+                    const data = applyMaterialMap(expandOps(parsed));
                     firstNew = createObject(data);
                     attachRigFromPayload(firstNew, parsed && parsed.rig, null);
                 }
@@ -5160,8 +5297,10 @@
                 // Palette: usa la funzione condivisa con il renderer incrementale
                 // (28-incremental.js) invece di duplicarne il codice, cosi' le due
                 // strade non possono divergere e le swatch non lampeggiano.
-                const uniqueColors = [...new Set(voxels.map(v => v.color.toUpperCase()))];
-                renderPaletteSwatches(uniqueColors);
+                // Token, non colori: due voxel dello stesso colore ma con materiali
+                // diversi sono due voci di palette distinte (vedi 36-materials.js).
+                const uniqueTokens = [...new Set(voxels.map(v => tokenOf(v)))];
+                renderPaletteSwatches(uniqueTokens);
 
                 let minX, maxX, minY, maxY, minZ, maxZ;
                 if (voxels.length === 0) {
@@ -5191,9 +5330,12 @@
                 modelPivotBaseCenter.copy(center);
 
                 if (voxels.length > 0) {
+                    // Un gruppo (= un InstancedMesh) per TOKEN, non per colore: e' il
+                    // solo modo di dare due materiali THREE diversi a due voxel che
+                    // condividono la tinta. Vedi 36-materials.js.
                     const colorGroups = {};
                     visibleVoxels.forEach(v => {
-                        const c = v.color.toUpperCase();
+                        const c = tokenOf(v);
                         if (!colorGroups[c]) colorGroups[c] = [];
                         colorGroups[c].push(v);
                     });
@@ -5206,12 +5348,10 @@
                         const groupList = colorGroups[colorHex];
                         const count = groupList.length;
 
-                        const material = new THREE.MeshStandardMaterial({
-                            color: new THREE.Color(colorHex),
-                            roughness: 0.2,
-                            metalness: 0.1,
-                            wireframe: toggleWireframe.checked
-                        });
+                        // Materiale condiviso e messo in cache per token (una sola
+                        // decodifica per gruppo, non per voxel): ricrearlo a ogni
+                        // rebuild rifarebbe l'upload della texture sulla GPU.
+                        const material = voxelMaterialFor(colorHex, groupList[0]);
 
                         const instMesh = new THREE.InstancedMesh(geometry, material, count);
                         const dummy = new THREE.Object3D();
@@ -5304,8 +5444,18 @@
                     m.geometry.dispose();
                 }
                 const mat = m.material;
-                if (Array.isArray(mat)) mat.forEach(x => x && x.dispose && x.dispose());
-                else if (mat && typeof mat.dispose === 'function') mat.dispose();
+                // Stessa trappola della geometria condivisa: i materiali dei voxel
+                // vengono dalla cache di 36-materials.js e sono condivisi fra i mesh e
+                // fra i rebuild. Liberarli qui li rendeva invalidi per gli altri
+                // (texture nera, mesh non disegnati). Sono marcati userData.shared da
+                // threeMaterialFor() e si liberano solo da clearMaterialCache().
+                const disposeMat = x => {
+                    if (!x || typeof x.dispose !== 'function') return;
+                    if (x.userData && x.userData.shared) return;
+                    x.dispose();
+                };
+                if (Array.isArray(mat)) mat.forEach(disposeMat);
+                else disposeMat(mat);
             }
 
             // ===== Geometria voxel condivisa =====
@@ -5351,12 +5501,15 @@
                 const min = [Infinity, Infinity, Infinity];
                 const max = [-Infinity, -Infinity, -Infinity];
                 for (const vx of voxels) {
-                    map.set(`${vx.x},${vx.y},${vx.z}`, vx.color.toUpperCase());
+                    // Si unisce per TOKEN, non per colore: due voxel dello stesso
+                    // colore con materiali diversi vogliono due `usemtl` distinti,
+                    // altrimenti la texture del primo si spalma anche sul secondo.
+                    map.set(`${vx.x},${vx.y},${vx.z}`, tokenOf(vx));
                     const p = [vx.x, vx.y, vx.z];
                     for (let i = 0; i < 3; i++) { if (p[i] < min[i]) min[i] = p[i]; if (p[i] > max[i]) max[i] = p[i]; }
                 }
                 const dims = [max[0] - min[0] + 1, max[1] - min[1] + 1, max[2] - min[2] + 1];
-                // voxel color at LOCAL coords (offset by min), or undefined if empty.
+                // voxel TOKEN at LOCAL coords (offset by min), or undefined if empty.
                 const voxel = (i, j, k) => map.get(`${i + min[0]},${j + min[1]},${k + min[2]}`);
                 const quads = [];
 
@@ -5374,12 +5527,12 @@
                                 const prev = (x[d] > 0) ? voxel(pc[0], pc[1], pc[2]) : undefined;
                                 // A face exists only where exactly one side is filled.
                                 let entry = null;
-                                if (cur && !prev) entry = { color: cur, back: false };
-                                else if (!cur && prev) entry = { color: prev, back: true };
+                                if (cur && !prev) entry = { token: cur, back: false };
+                                else if (!cur && prev) entry = { token: prev, back: true };
                                 mask[x[v] * w + x[u]] = entry;
                             }
                         }
-                        // Merge the 2D mask into maximal same-color rectangles.
+                        // Merge the 2D mask into maximal same-token rectangles.
                         for (let j = 0; j < h; j++) {
                             for (let i = 0; i < w;) {
                                 const start = mask[j * w + i];
@@ -5387,14 +5540,14 @@
                                 let wq = 1;
                                 while (i + wq < w) {
                                     const m = mask[j * w + i + wq];
-                                    if (m && m.color === start.color && m.back === start.back) wq++; else break;
+                                    if (m && m.token === start.token && m.back === start.back) wq++; else break;
                                 }
                                 let hq = 1;
                                 let grow = true;
                                 while (j + hq < h && grow) {
                                     for (let k = 0; k < wq; k++) {
                                         const m = mask[(j + hq) * w + i + k];
-                                        if (!(m && m.color === start.color && m.back === start.back)) { grow = false; break; }
+                                        if (!(m && m.token === start.token && m.back === start.back)) { grow = false; break; }
                                     }
                                     if (grow) hq++;
                                 }
@@ -5409,7 +5562,26 @@
                                 const p3 = off([base[0] + dv[0], base[1] + dv[1], base[2] + dv[2]]);
                                 const normal = [0, 0, 0]; normal[d] = start.back ? 1 : -1;
                                 const verts = start.back ? [p0, p3, p2, p1] : [p0, p1, p2, p3];
-                                quads.push({ verts, color: start.color, normal });
+                                // `token` e' cio' su cui il mesher ha unito ('#RRGGBB' o
+                                // '@m1'); `uw`/`uh` sono l'estensione del quad in VOXEL e
+                                // servono agli UV: la texture si ripete una volta per
+                                // voxel invece di stirarsi su tutto il quad.
+                                //
+                                // `uvs` esce GIA' ordinato come `verts`, non come lista
+                                // fissa: `verts` si inverte quando la faccia e' `back`, e
+                                // una lista fissa risulterebbe TRASPOSTA sull'altro verso
+                                // (su un quad 3x1 la texture si ripeterebbe 3 volte
+                                // nella direzione da 1 voxel). Su un quad quadrato la
+                                // svista e' invisibile, per questo va tenuta qui, dove i
+                                // due ordinamenti sono uno accanto all'altro.
+                                //
+                                // `color` e' un alias storico di `token` e ne condivide
+                                // il valore: NON e' piu' garantito che sia un hex, quindi
+                                // non ci si passi sopra un .replace('#','') o un parseInt.
+                                const uvs = start.back
+                                    ? [[0, 0], [0, hq], [wq, hq], [wq, 0]]
+                                    : [[0, 0], [wq, 0], [wq, hq], [0, hq]];
+                                quads.push({ verts, color: start.token, token: start.token, normal, uw: wq, uh: hq, uvs });
                                 for (let jj = 0; jj < hq; jj++)
                                     for (let ii = 0; ii < wq; ii++) mask[(j + jj) * w + i + ii] = null;
                                 i += wq;
@@ -5420,32 +5592,52 @@
                 return quads;
             }
 
-            // Material name for a color, sanitized so it's a valid OBJ/MTL token
-            // (Blender is picky: no '#', no stray chars).
-            function matNameFor(colorHex) {
-                return `mat_${colorHex.replace('#', '').toUpperCase()}`;
+            // Material name for a TOKEN, sanitized so it's a valid OBJ/MTL token
+            // (Blender is picky: no '#', no '@', no stray chars).
+            function matNameFor(token) {
+                if (isMaterialToken(token)) return `mat_${token.slice(1)}`;
+                return `mat_${String(token).replace('#', '').toUpperCase()}`;
             }
 
-            // Build the .mtl text for every color used in the model.
+            function textureFileName(id) { return `tex_${id}.png`; }
+
+            // Build the .mtl text for every TOKEN used in the model.
             // `voxelsOverride` permette di esportare un modello DIVERSO da quello
             // attivo (serve all'export del pack, che scrive N asset in uno ZIP).
             // Omesso = comportamento originale sull'oggetto attivo.
             function buildMtlText(voxelsOverride) {
                 let mtlText = `# Voxel Materials File\n# Exported from VoxelAIArtist\n\n`;
                 const allVoxels = voxelsOverride || currentModelData.voxels || [];
-                const uniqueColors = [...new Set(allVoxels.map(v => v.color.toUpperCase()))];
-                uniqueColors.forEach(color => {
-                    const hex = color.replace('#', '');
+                // Ogni token si porta dietro il colore di UN voxel che lo usa: su
+                // un id orfano e' l'unico modo di risalire alla tinta vera, perche'
+                // il token '@m1' l'ha gia' buttata via (vedi decodeToken).
+                const seen = new Map();
+                allVoxels.forEach(v => {
+                    const tok = tokenOf(v);
+                    if (!seen.has(tok)) seen.set(tok, v.color);
+                });
+                seen.forEach((voxelColor, token) => {
+                    const dec = decodeToken(token, voxelColor);
+                    // materialById, non `dec.material`: su un orfano l'id resta
+                    // valorizzato ma la definizione non c'e'.
+                    const def = materialById(dec.material);
+                    const hex = dec.color.replace('#', '');
                     const r = parseInt(hex.substring(0, 2), 16) / 255.0;
                     const g = parseInt(hex.substring(2, 4), 16) / 255.0;
                     const b = parseInt(hex.substring(4, 6), 16) / 255.0;
-                    mtlText += `newmtl ${matNameFor(color)}\n`;
+                    mtlText += `newmtl ${matNameFor(token)}\n`;
+                    // Kd resta anche con la texture: un .mtl aperto SENZA i PNG accanto
+                    // mostra allora la tinta media invece del bianco.
                     mtlText += `Kd ${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)}\n`;
                     mtlText += `Ka ${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)}\n`;
                     mtlText += `Ks 0.0000 0.0000 0.0000\n`;
                     mtlText += `Ns 1.0000\n`;
                     mtlText += `d 1.0000\n`;
-                    mtlText += `illum 1\n\n`;
+                    mtlText += `illum 1\n`;
+                    if (def && def.texture && def.texture.data) {
+                        mtlText += `map_Kd ${textureFileName(def.id)}\n`;
+                    }
+                    mtlText += `\n`;
                 });
                 return mtlText;
             }
@@ -5473,22 +5665,60 @@
                     if (id === undefined) { nLines.push(`vn ${n[0]} ${n[1]} ${n[2]}`); id = nLines.length; nIndex.set(key, id); }
                     return id;
                 };
+                const tIndex = new Map(); const tLines = [];
+                const tId = (u, v) => {
+                    const key = `${u},${v}`;
+                    let id = tIndex.get(key);
+                    if (id === undefined) { tLines.push(`vt ${u} ${v}`); id = tLines.length; tIndex.set(key, id); }
+                    return id;
+                };
 
                 // Group quad face lines by material.
                 const facesByMat = {};
                 quads.forEach(q => {
-                    const mat = matNameFor(q.color);
+                    const mat = matNameFor(q.token);
                     const ni = nId(q.normal);
                     const ids = q.verts.map(p => vId(p));
-                    const line = `f ${ids.map(id => `${id}//${ni}`).join(' ')}`;
+                    // UV 0..uw / 0..uh con wrap `repeat`: un quad che copre 3x2 voxel
+                    // ripete la texture 3x2 volte. Con 0..1 la texture si stirerebbe
+                    // sul quad intero e i voxel uniti dal greedy mesh sembrerebbero
+                    // un blocco solo. L'ordine lo decide il mesher insieme ai verts.
+                    const uvs = q.uvs.map(uv => tId(uv[0], uv[1]));
+                    const line = `f ${ids.map((id, i) => `${id}/${uvs[i]}/${ni}`).join(' ')}`;
                     (facesByMat[mat] = facesByMat[mat] || []).push(line);
                 });
 
-                objText += vLines.join('\n') + '\n' + nLines.join('\n') + '\n\n';
+                objText += vLines.join('\n') + '\n' + tLines.join('\n') + '\n' + nLines.join('\n') + '\n\n';
                 Object.keys(facesByMat).forEach(mat => {
                     objText += `usemtl ${mat}\n` + facesByMat[mat].join('\n') + '\n\n';
                 });
                 return objText;
+            }
+
+            // Con le texture i file diventano N+2 e scaricarli uno a uno e' scomodo
+            // (e i browser bloccano i download multipli). Senza texture resta il doppio
+            // download di prima: nessuna regressione per chi non usa i materiali.
+            function texturedMaterialsInUse(voxels) {
+                const ids = new Set(voxels.filter(v => v.material).map(v => v.material));
+                const out = [];
+                ids.forEach(id => {
+                    // materialById, non l'id nudo: un id ORFANO non ha PNG da
+                    // impacchettare e non deve far scattare lo ZIP da solo.
+                    const def = materialById(id);
+                    if (def && def.texture && def.texture.data) out.push(def);
+                });
+                return out;
+            }
+
+            // La data URL torna in BYTE: createZipBlob scrive tale e quale solo un
+            // Uint8Array, mentre una stringa la ricodifica in UTF-8 e il PNG
+            // uscirebbe corrotto (i byte oltre 0x7F diventano due byte).
+            function dataUrlToBytes(dataUrl) {
+                const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+                const bin = atob(b64);
+                const out = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+                return out;
             }
 
             // Exporting OBJ downloads the MTL too — Blender needs the .mtl next to the
@@ -5496,9 +5726,20 @@
             document.getElementById('exportObjBtn').addEventListener('click', () => {
                 const meta = currentModelData.metadata || {};
                 const name = (meta.name || "voxel_model").replace(/\s+/g, '_');
-                downloadFile(buildMtlText(), `${name}.mtl`, 'text/plain');
-                // Small delay so browsers don't collapse the two downloads into one.
-                setTimeout(() => downloadFile(buildObjText(`${name}.mtl`), `${name}.obj`, 'text/plain'), 150);
+                const voxels = currentModelData.voxels || [];
+                const textured = texturedMaterialsInUse(voxels);
+                if (textured.length === 0) {
+                    downloadFile(buildMtlText(), `${name}.mtl`, 'text/plain');
+                    // Small delay so browsers don't collapse the two downloads into one.
+                    setTimeout(() => downloadFile(buildObjText(`${name}.mtl`), `${name}.obj`, 'text/plain'), 150);
+                    return;
+                }
+                const files = [
+                    { name: `${name}.obj`, data: buildObjText(`${name}.mtl`) },
+                    { name: `${name}.mtl`, data: buildMtlText() }
+                ];
+                textured.forEach(def => files.push({ name: textureFileName(def.id), data: dataUrlToBytes(def.texture.data) }));
+                downloadBlob(createZipBlob(files), `${name}.zip`);
             });
 
             document.getElementById('exportMtlBtn').addEventListener('click', () => {
@@ -5519,7 +5760,132 @@
             // Save the current model (including any edits) as a flat-voxels JSON.
             // This round-trips perfectly: drop the file back on the dropzone to keep editing.
             // Compress one model-data payload into the compact palette + "set" ops format.
-            function buildObjectPayload(data) {
+            // ===== I MATERIALI NEL FORMATO COMPATTO =====
+            // Le ops sanno esprimere SOLO colori (palette -> hex): in una op non c'e'
+            // nessun posto dove mettere un materiale. Allargare la loro semantica
+            // vorrebbe dire una modifica ACCOPPIATA a expand_ops (src/parser.py) e a
+            // expandOps (ui/src/utils/expand-ops.js), cioe' il punto piu' sorvegliato
+            // del repo (tests/ops_parity_cases.json), e romperebbe il generatore AI, che
+            // di materiali non sa nulla. Scrivere palette['a'] = '@m1' non e' una via
+            // d'uscita: entrambi gli espansori risolverebbero quella chiave a #CCCCCC.
+            //
+            // Quindi i materiali viaggiano a parte, dentro il metadata, nella STESSA
+            // forma di una op `set` (id + triplette), e si riversano sui voxel DOPO
+            // l'espansione (applyMaterialMap). Il contratto ops resta intatto byte per
+            // byte, e un file di materiali aperto da una versione che non li conosce
+            // resta un modello valido a tinte piatte.
+            function buildMaterialMap(voxels) {
+                // Prima per CELLA, non direttamente per id: sulla stessa cella un voxel
+                // visibile deve vincere su uno nascosto, in qualunque ordine arrivino.
+                const byKey = new Map();
+                const solid = new Set();
+                (voxels || []).forEach(v => {
+                    if (!v || !v.material) return;
+                    const k = v.x + ',' + v.y + ',' + v.z;
+                    // Un voxel NASCOSTO conserva il suo materiale: nel ramo piatto di
+                    // buildObjectPayload finisce comunque nelle ops, quindi scartarlo qui
+                    // gli farebbe perdere la texture al primo salvataggio. Nel ramo con
+                    // le parti il nascosto non viene salvato e la sua tripletta resta
+                    // senza destinatario: applyMaterialMap assegna solo ai voxel che
+                    // esistono davvero, quindi e' innocua.
+                    if (v._hidden) {
+                        if (!solid.has(k)) byKey.set(k, v.material);
+                        return;
+                    }
+                    solid.add(k);
+                    byKey.set(k, v.material);
+                });
+                const byId = new Map();
+                byKey.forEach((id, k) => {
+                    let arr = byId.get(id);
+                    if (!arr) { arr = []; byId.set(id, arr); }
+                    const p = k.split(',');
+                    arr.push(Number(p[0]), Number(p[1]), Number(p[2]));
+                });
+                const out = [];
+                byId.forEach((coords, id) => out.push([id].concat(coords)));
+                return out;
+            }
+
+            // Ripassa le definizioni ARRIVATE da un file. Un .voxelai salvato da qui le
+            // ha gia' normalizzate, ma un JSON scritto a mano (o prodotto da un altro
+            // strumento) puo' portare un hex storto o un roughness null: decodeToken
+            // restituisce `mat.color` cosi' com'e', quindi il valore finirebbe dentro
+            // THREE.Color lontanissimo da qui. Gli id DUPLICATI vengono scartati (vince
+            // il primo), o materialById risolverebbe l'uno mentre il pannello mostra
+            // l'altro; quelli senza id sono irraggiungibili e se ne vanno.
+            function normalizeProjectMaterials(meta) {
+                if (!meta || !Array.isArray(meta.materials)) return;
+                if (typeof normalizeMaterial !== 'function') return;
+                const seen = new Set();
+                const clean = [];
+                meta.materials.forEach(def => {
+                    const id = (def && typeof def.id === 'string') ? def.id : '';
+                    if (!id || seen.has(id)) return;
+                    seen.add(id);
+                    clean.push(normalizeMaterial(def, id));
+                });
+                meta.materials = clean;
+            }
+
+            // Riversa metadata.material_map sui voxel GIA' espansi, in loco. Va chiamata
+            // su OGNI via d'ingresso (vedi 04-objects.js): expandOps non sa nulla di
+            // materiali e non deve impararlo.
+            //
+            // Un id privo di definizione NON viene applicato: il voxel resta a tinta
+            // unita, che e' il comportamento richiesto per i file importati senza
+            // texture. Non c'e' nessun ramo "se non ci sono texture": e' l'ASSENZA della
+            // definizione a produrlo. Qui e' diverso da decodeToken, che sull'orfano
+            // CONSERVA l'id: la' l'orfano e' un problema d'ordine transitorio (materiali
+            // caricati dopo i voxel), qui il file e' completo per definizione, quindi un
+            // id sconosciuto e' spazzatura che sporcherebbe il prossimo salvataggio.
+            //
+            // NIENTE materialById in questa funzione: quando gira, currentModelData
+            // punta ancora al progetto PRECEDENTE (loadSceneFromParsed espande prima di
+            // creare gli oggetti), quindi le sole definizioni valide sono quelle di
+            // `data`. Per lo stesso motivo non si passa da addMaterial: le definizioni
+            // sono gia' un elenco completo con i propri id, e addMaterial rimapperebbe
+            // in silenzio un id gia' preso legando i voxel al materiale sbagliato.
+            function applyMaterialMap(data) {
+                if (!data || !data.metadata) return data;
+                normalizeProjectMaterials(data.metadata);
+                const map = data.metadata.material_map;
+                if (!Array.isArray(map) || !Array.isArray(data.voxels)) return data;
+                const known = new Set((data.metadata.materials || []).map(m => m && m.id));
+                const byKey = new Map();
+                map.forEach(entry => {
+                    if (!Array.isArray(entry) || entry.length < 4) return;
+                    const id = entry[0];
+                    if (!known.has(id)) return;
+                    for (let i = 1; i + 2 < entry.length; i += 3) {
+                        byKey.set(entry[i] + ',' + entry[i + 1] + ',' + entry[i + 2], id);
+                    }
+                });
+                if (byKey.size === 0) return data;
+                data.voxels.forEach(v => {
+                    const id = byKey.get(v.x + ',' + v.y + ',' + v.z);
+                    if (id) v.material = id;
+                });
+                return data;
+            }
+
+            // Aggiunge definizioni e mappa al metadata SOLO se ce ne sono: un progetto
+            // senza materiali continua a produrre file identici a prima.
+            //
+            // `opts.materials === false` le OMETTE. Serve alla richiesta di MODIFICA
+            // all'AI, che spedisce il modello corrente dentro il prompt: una texture e'
+            // base64 fino a 128x128, cioe' decine di KB, e all'AI non serve (risponde
+            // con un diff di ops). Infilarcele costerebbe piu' del modello intero.
+            function withMaterials(out, meta, voxels, opts) {
+                if (opts && opts.materials === false) return out;
+                const defs = (meta && Array.isArray(meta.materials)) ? meta.materials : [];
+                const map = buildMaterialMap(voxels);
+                if (defs.length) out.materials = defs;
+                if (map.length) out.material_map = map;
+                return out;
+            }
+
+            function buildObjectPayload(data, opts) {
                 const meta = (data && data.metadata) || {};
                 const voxels = (data && data.voxels) || [];
 
@@ -5565,10 +5931,10 @@
                     }
 
                     return {
-                        metadata: {
+                        metadata: withMaterials({
                             name: meta.name || "voxel_model",
                             grid_size: meta.grid_size || [16, 16, 16]
-                        },
+                        }, meta, voxels, opts),
                         palette: palette,
                         parts: parts
                     };
@@ -5595,10 +5961,10 @@
                 }
 
                 return {
-                    metadata: {
+                    metadata: withMaterials({
                         name: meta.name || "voxel_model",
                         grid_size: meta.grid_size || [16, 16, 16]
-                    },
+                    }, meta, voxels, opts),
                     palette: palette,
                     ops: ops
                 };
@@ -5606,9 +5972,11 @@
 
             // Legacy single-object payload for the ACTIVE object. Kept for the AI
             // 'modify' request (which expects a single model) and as the save base.
-            function getSavePayload() {
+            // `opts` arriva fino a withMaterials: la richiesta all'AI passa
+            // { materials: false } perche' le texture base64 non stanno in un prompt.
+            function getSavePayload(opts) {
                 if (typeof stashRigToActiveObject === 'function') stashRigToActiveObject();
-                const out = buildObjectPayload(currentModelData);
+                const out = buildObjectPayload(currentModelData, opts);
                 const r = (typeof serializeRig === 'function') ? serializeRig(rig) : null;
                 if (r) out.rig = r;
                 return out;
@@ -5838,7 +6206,9 @@
 
                 // Cattura cio' che inviamo: in "modifica" la palette inviata serve a
                 // risolvere le chiavi colore del diff di risposta.
-                const sentPayload = getSavePayload();
+                // NIENTE materiali: le loro texture sono base64 fino a 128x128 l'una
+                // (decine di KB) e all'AI non servono, risponde con un diff di ops.
+                const sentPayload = getSavePayload({ materials: false });
 
                 fetch('/api/generate', {
                     method: 'POST',
@@ -6375,6 +6745,11 @@
                 activeColorHex = hex.toUpperCase();
                 activeColorInput.value = hex.toLowerCase();
                 activeColorHexEl.textContent = activeColorHex;
+                // Mutua esclusione: scegliere un colore toglie la selezione al materiale.
+                if (typeof setActiveMaterial === 'function') {
+                    setActiveMaterial(null);
+                    if (typeof refreshMaterialSelectionUI === 'function') refreshMaterialSelectionUI();
+                }
             }
             activeColorInput.addEventListener('input', e => setActiveColor(e.target.value));
 
@@ -6921,7 +7296,13 @@
                         const vz = Math.round(targetPoint.z);
                         if (vx >= 0 && vx < gSize[0] && vz >= 0 && vz < gSize[2]) {
                             return {
-                                voxel: { x: vx, y: -1, z: vz, color: activeColorHex },
+                                // Bersaglio FINTO sotto il piano di terra: serve solo per
+                                // le sue coordinate (la cella da riempire e' quella sopra).
+                                // Il campo si chiama `color` e va letto come tale da chi
+                                // capitasse a leggerlo, quindi qui il token si risolve.
+                                // Nessun orfano possibile: activeToken() ritorna '@id'
+                                // solo per un materiale che esiste.
+                                voxel: { x: vx, y: -1, z: vz, color: decodeToken(activeToken()).color },
                                 normal: { x: 0, y: 1, z: 0 }
                             };
                         }
@@ -7016,6 +7397,25 @@
                 return all;
             }
 
+            // Contagocce. Su un voxel texturizzato seleziona il suo MATERIALE: e' il
+            // comportamento atteso e cade fuori gratis dal token, senza un ramo dedicato.
+            //
+            // Si legge dalla voxelMap e non da `voxel.color`, perche' il colore di un
+            // voxel texturizzato e' la tinta media della sua texture: prelevarlo darebbe
+            // un colore piatto invece del materiale. Il colore proprio del voxel resta
+            // il ripiego per un id ORFANO, che non ha una definizione da selezionare.
+            //
+            // Il contagocce e' agganciato in DUE punti (pointerdown e performAction):
+            // sta qui una volta sola perche' la regola non possa divergere fra i due.
+            function adoptTokenAt(voxel) {
+                const tok = voxelMap.get(`${voxel.x},${voxel.y},${voxel.z}`);
+                if (isMaterialToken(tok) && materialById(tok.slice(1))) {
+                    setActiveMaterialAndSync(tok.slice(1));
+                } else {
+                    setActiveColor(decodeToken(tok, voxel.color).color);
+                }
+            }
+
             // Perform the current tool at the pointer. `isStroke` is true for the moves
             // during a held drag; history is pushed once per stroke (in pointerdown/click),
             // not per move, so an entire drag is a single undo step.
@@ -7029,11 +7429,16 @@
                     const cells = withMirrors(brushCells(base))
                         .filter(c => inBounds(c) && !voxelMap.has(`${c.x},${c.y},${c.z}`));
                     if (cells.length === 0) return false;
-                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                    // Nella mappa va il TOKEN, non il colore: con un materiale attivo si
+                    // posa quello (vedi activeToken in 36-materials.js). Calcolato una
+                    // volta sola e non per cella: risolve l'id con una scansione lineare.
+                    const tok = activeToken();
+                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                     // Percorso rapido (28-incremental.js): aggiorna solo le celle toccate
                     // e i mesh dei colori coinvolti. Se non e' disponibile si ricade sul
-                    // rebuild completo, che resta la strada sicura.
-                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                    // rebuild completo, che resta la strada sicura. Il campo `color` di
+                    // queste celle e' un token: applyVoxelEdits lo scompone da se'.
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: tok })))) {
                         syncVoxelsFromMap();
                         buildModel(false, true);
                     }
@@ -7051,21 +7456,25 @@
                     return true;
                 } else if (currentTool === 'draw') {
                     const base = { x: pick.voxel.x, y: pick.voxel.y, z: pick.voxel.z };
-                    // Only recolor existing voxels, and skip ones already the active color.
+                    // Il confronto e' fra TOKEN, perche' e' un token quello che c'e' nella
+                    // mappa: confrontarlo col solo colore non vedrebbe la differenza fra
+                    // un voxel a tinta unita e uno texturizzato della stessa tinta, e
+                    // riverniciarlo col materiale sembrerebbe non fare nulla.
+                    const tok = activeToken();
                     const cells = withMirrors(brushCells(base))
                         .filter(c => {
                             const k = `${c.x},${c.y},${c.z}`;
-                            return voxelMap.has(k) && voxelMap.get(k) !== activeColorHex;
+                            return voxelMap.has(k) && voxelMap.get(k) !== tok;
                         });
                     if (cells.length === 0) return false;
-                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
-                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: tok })))) {
                         syncVoxelsFromMap();
                         buildModel(false, true);
                     }
                     return true;
                 } else if (currentTool === 'pick') {
-                    setActiveColor(pick.voxel.color);
+                    adoptTokenAt(pick.voxel);
                     setTool('draw'); // natural flow: pick a color, then recolor with it
                     return false;
                 }
@@ -7169,7 +7578,7 @@
                 }
 
                 if (activeActionTool === 'pick') {
-                    setActiveColor(pick.voxel.color);
+                    adoptTokenAt(pick.voxel);
                     setTool('draw');
                     return;
                 }
@@ -7226,12 +7635,15 @@
                         const finalCells = withMirrors(cellsToApply).filter(inBounds);
                         if (finalCells.length > 0) {
                             let changed = false;
+                            // Come in performAction: nella mappa va il TOKEN, e si
+                            // calcola una volta per l'intera area invece che per cella.
+                            const tok = activeToken();
 
                             if (activeActionTool === 'place') {
                                 const emptyCells = finalCells.filter(c => !voxelMap.has(`${c.x},${c.y},${c.z}`));
                                 if (emptyCells.length > 0) {
                                     pushHistory();
-                                    emptyCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                                    emptyCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                                     changed = true;
                                 }
                             } else if (activeActionTool === 'remove') {
@@ -7244,11 +7656,11 @@
                             } else if (activeActionTool === 'draw') {
                                 const colorCells = finalCells.filter(c => {
                                     const k = `${c.x},${c.y},${c.z}`;
-                                    return voxelMap.has(k) && voxelMap.get(k) !== activeColorHex;
+                                    return voxelMap.has(k) && voxelMap.get(k) !== tok;
                                 });
                                 if (colorCells.length > 0) {
                                     pushHistory();
-                                    colorCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                                    colorCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                                     changed = true;
                                 }
                             }
@@ -7321,11 +7733,17 @@
                 });
             }
 
-            // Clicking a palette swatch loads it as the active paint color.
-            paletteEl.addEventListener('click', e => {
-                const sw = e.target.closest('.swatch');
-                if (sw && sw.title) setActiveColor(sw.title);
-            });
+            // NIENTE handler delegato sulla palette. Ce n'era uno che ricavava il
+            // colore da `sw.title`, ma il titolo non e' un hex: e' un testo tradotto
+            // ({color} o {name} + la spiegazione del clic), quindi finiva in
+            // activeColorHex come stringa qualsiasi. Ora e' anche peggio: ogni swatch
+            // ha gia' il SUO listener (renderPaletteSwatches, 28-incremental.js) e il
+            // click risale comunque fino a qui, cosi' la delega scattava DOPO e
+            // rimangiava la scelta -- misurato: selezionando '@m1' il materiale attivo
+            // tornava a null e activeColorHex diventava il titolo maiuscolo, che
+            // activeToken() avrebbe poi posato nella voxelMap come se fosse un colore.
+            // La palette e' costruita in un punto solo, quindi il listener per swatch
+            // basta e avanza.
 
             setTool('view');
             updateHistoryButtons();
@@ -8371,6 +8789,7 @@
 
                 const positions = [];
                 const normals = [];
+                const uvs = [];        // quadrato unitario per faccia (texture dei materiali)
                 const vColors = [];   // real voxel colors
                 const bColors = [];   // per-bone debug colors
                 const wColors = [];   // rampa peso dell'osso selezionato (stile Blender)
@@ -8390,11 +8809,28 @@
                     { n: [0, 0, 1], c: [[s, -s, s], [s, s, s], [-s, s, s], [-s, -s, s]] },
                     { n: [0, 0, -1], c: [[-s, -s, -s], [-s, s, -s], [s, s, -s], [s, -s, -s]] }
                 ];
+                // I 4 angoli del quadrato UV, nello stesso ordine dei 4 angoli di
+                // `faces`: il winding e' coerente su tutte e 6 le facce, quindi lo
+                // stesso quadrato le copre tutte ("la stessa texture su ogni faccia").
+                // Copia locale come `faces`: 16-export-glb.js ha la sua (UV_UNIT) e
+                // questo modulo si carica anche da solo nei test.
+                const UV_QUAD = [[0, 0], [0, 1], [1, 1], [1, 0]];
 
+                // Per TOKEN, non per colore: un voxel texturizzato e un voxel dello
+                // STESSO colore senza materiale devono finire in due gruppi (e quindi
+                // in due materiali glTF) diversi, o il secondo eredita la texture del
+                // primo. `tokenOf`/`decodeToken` stanno in 36-materials.js, che nel
+                // bundle e' un modulo dopo questo: le sue sono dichiarazioni di
+                // funzione, quindi sono in scope quando questa gira. Un
+                // "tokenOf is not defined" qui significa che quel modulo NON e' stato
+                // caricato, non che serva un fallback.
                 const byColor = {};
+                // Colore PROPRIO del gruppo: il token ha buttato via l'hex del voxel,
+                // quindi e' il solo fallback per un id materiale orfano.
+                const hexOfToken = {};
                 for (let i = 0; i < voxels.length; i++) {
-                    const c = voxels[i].color;
-                    if (!byColor[c]) byColor[c] = [];
+                    const c = tokenOf(voxels[i]);
+                    if (!byColor[c]) { byColor[c] = []; hexOfToken[c] = voxels[i].color; }
                     byColor[c].push(i);
                 }
 
@@ -8407,10 +8843,13 @@
                 // ogni pennellata costerebbe un rebuild completo (secondi su modelli grandi).
                 const vertexRanges = new Int32Array(voxels.length * 2);
 
-                for (const hexColor in byColor) {
+                for (const token in byColor) {
                     const groupStart = indices.length;
-                    const col = new THREE.Color(hexColor);
-                    for (const i of byColor[hexColor]) {
+                    // Il colore del voxel resta il fallback: su un id materiale orfano
+                    // il gruppo esce nella sua tinta piatta, non in grigio neutro.
+                    const dec = decodeToken(token, hexOfToken[token]);
+                    const col = new THREE.Color(dec.color);
+                    for (const i of byColor[token]) {
                         const v = voxels[i];
                         const bi = assignments[i];
                         const bc = boneColor(bi, bones.length);
@@ -8479,11 +8918,13 @@
                                 }
                             }
 
-                            for (const off of f.c) {
+                            for (let ci = 0; ci < f.c.length; ci++) {
+                                const off = f.c[ci];
                                 positions.push((v.x + off[0] - O.x) * K,
                                     (v.y + off[1] - O.y) * K,
                                     (v.z + off[2] - O.z) * K);
                                 normals.push(f.n[0], f.n[1], f.n[2]);
+                                uvs.push(UV_QUAD[ci][0], UV_QUAD[ci][1]);
                                 vColors.push(col.r, col.g, col.b);
                                 bColors.push(bc.r, bc.g, bc.b);
                                 wColors.push(wc.r, wc.g, wc.b);
@@ -8522,7 +8963,14 @@
                         skinning: true,
                         side: THREE.DoubleSide
                     });
-                    mat.userData.hexColor = hexColor;
+                    mat.userData.hexColor = dec.color;
+                    // Il token e l'id del materiale servono all'export, che da qui
+                    // ricava texture, ruvidita', metallicita' ed emissione
+                    // (applyExportMaterial in 16-export-glb.js). `hexColor` resta un hex
+                    // VERO anche quando il token e' '@m1': chi legge quel campo lo passa
+                    // a THREE.Color, e '@m1' diventerebbe nero.
+                    mat.userData.token = token;
+                    mat.userData.materialId = dec.material;
                     materials.push(mat);
                     groups.push({ start: groupStart, count, matIndex: materials.length - 1 });
                 }
@@ -8536,6 +8984,10 @@
                 const geo = new THREE.BufferGeometry();
                 geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
                 geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                // Gli UV servono solo all'export texturizzato (l'anteprima disegna dai
+                // colori per vertice), ma costano poco e tenerli qui evita una seconda
+                // costruzione della geometria a tempo di export.
+                geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
                 geo.setAttribute('color', new THREE.Float32BufferAttribute(vColors, 3));
                 geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
                 geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
@@ -10928,6 +11380,13 @@
                 { n: [0, 0, 1], v: [[.5, -.5, .5], [.5, .5, .5], [-.5, .5, .5], [-.5, -.5, .5]] },
                 { n: [0, 0, -1], v: [[-.5, -.5, -.5], [-.5, .5, -.5], [.5, .5, -.5], [.5, -.5, -.5]] }
             ];
+            // Il quadrato UV di UNA faccia. CUBE_FACES elenca i 4 angoli con winding
+            // coerente su tutte e 6 le facce, quindi lo stesso quadrato vale per
+            // ognuna: e' esattamente "la stessa texture su tutte e 6 le facce", senza
+            // bisogno di una geometria diversa. (buildSkinnedMesh in 15-rig.js ha la
+            // sua copia locale, UV_QUAD, per lo stesso motivo per cui ha una copia
+            // locale di CUBE_FACES: quel modulo si carica anche da solo nei test.)
+            const UV_UNIT = [[0, 0], [0, 1], [1, 1], [1, 0]];
 
             // --- GLB export ---------------------------------------------------------
             // Rigged path: export the live SkinnedMesh + Skeleton + preset clips.
@@ -10950,6 +11409,118 @@
             function exportCullInternal() {
                 const cb = document.getElementById('glbCullInternalCheckbox');
                 return cb ? cb.checked : true;
+            }
+
+            // --- materiali d'export ---------------------------------------------------
+            // NON si riusa `threeMaterialFor` (36-materials.js): quella e' la fabbrica
+            // del VISORE e tiene una cache condivisa con la scena viva, mentre questi
+            // materiali sono usa e getta e vengono distrutti da `restore()` a fine
+            // export -- disporre un materiale della cache (o la sua texture) spegnerebbe
+            // il modello a schermo. E i valori sono comunque altri: colore convertito in
+            // lineare, `side: THREE.FrontSide` (vedi i commenti sul culling) e i default
+            // 0.35/0.25 dell'export invece di quelli dell'anteprima.
+            //
+            // Le texture nascono da una data URL, quindi si decodificano in modo
+            // ASINCRONO. Il GLTFExporter r128 incorpora l'immagine disegnandola su un
+            // canvas dimensionato su image.width: chiamato prima del decode scrive un
+            // canvas 0x0, cioe' una texture VUOTA. Ogni texture registra qui la sua
+            // promessa e `exportGLB` aspetta prima di chiamare l'exporter.
+            let exportTexturePending = [];
+            // I materiali d'export a cui e' stata attaccata una texture. Si tiene la
+            // lista invece di ri-attraversare la scena: il root dell'export riggato e'
+            // una SkinnedMesh e quello statico un Group, quindi un traverse dovrebbe
+            // sapere di che forma e' l'albero. Qui i materiali sono nostri per
+            // costruzione, li abbiamo appena creati.
+            let exportTexturedMaterials = [];
+
+            function exportTextureFor(def) {
+                if (!def || !def.texture || !def.texture.data) return null;
+                let settle;
+                exportTexturePending.push(new Promise(res => { settle = res; }));
+                // Anche l'errore risolve: un'immagine illeggibile non deve appendere
+                // l'export per sempre, il GLB esce senza quella texture. Ma va anche
+                // MARCATA: risolvere e basta lascia `tex.image` undefined, e a quel
+                // punto il GLTFExporter r128 solleva mentre disegna sul canvas, dentro
+                // un .then() senza .catch(). Misurato: zero download, zero dispose,
+                // `restore()` mai eseguito e nessun errore all'utente - l'export
+                // spariva in silenzio. Vedi dropFailedExportTextures.
+                const tex = new THREE.TextureLoader().load(def.texture.data, settle, undefined, () => {
+                    tex.userData.exportFailed = true;
+                    settle();
+                });
+                // Voxel art: nessuna interpolazione fra i pixel.
+                tex.magFilter = THREE.NearestFilter;
+                tex.minFilter = THREE.NearestFilter;
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.name = 'tex_' + def.id;
+                return tex;
+            }
+
+            // Decora un materiale (statico o riggato) col contenuto del token.
+            // `fallbackColor` e' il colore PROPRIO del voxel: senza di lui un id
+            // materiale orfano (file aperto senza le sue definizioni) uscirebbe grigio
+            // neutro invece che nella sua tinta piatta.
+            function applyExportMaterial(m, token, fallbackColor) {
+                const dec = decodeToken(token, fallbackColor);
+                // materialById, non `dec.material`: su un id orfano l'id resta
+                // valorizzato di proposito ma la definizione non esiste.
+                const def = materialById(dec.material);
+                m.color = new THREE.Color(dec.color).convertSRGBToLinear();
+                m.roughness = def ? def.roughness : 0.35;
+                m.metalness = def ? def.metalness : 0.25;
+                // FrontSide, non DoubleSide: il culling per-parte (statico) e la regola
+                // di `deformsAlike` (riggato) lasciano di proposito due facce coplanari
+                // sul confine, una per lato. Col backface culling ognuna si vede solo
+                // dal suo lato; con DoubleSide sono z-fighting. Vale anche coi materiali
+                // texturizzati: la texture non cambia da che parte guarda una faccia.
+                m.side = THREE.FrontSide;
+                if (def && def.emissive > 0) {
+                    // In glTF emissiveFactor = colore x intensita'.
+                    m.emissive = new THREE.Color(dec.color).convertSRGBToLinear();
+                    m.emissiveIntensity = def.emissive;
+                }
+                const tex = exportTextureFor(def);
+                if (tex) {
+                    m.map = tex;
+                    // In glTF il colore finale e' baseColorFactor * texture: il fattore
+                    // deve restare BIANCO, altrimenti la tinta si moltiplica due volte
+                    // (stessa trappola dell'invariante 6 sul COLOR_0, vedi CLAUDE.md).
+                    m.color = new THREE.Color(0xffffff);
+                    // Se la texture non si decodifica il bianco va disfatto, o il
+                    // modello esce slavato: qui teniamo la tinta vera da rimettere.
+                    m.userData.exportBaseColor = dec.color;
+                    exportTexturedMaterials.push(m);
+                }
+                m.name = token;
+                return m;
+            }
+
+            // Stacca le texture che non si sono decodificate. Senza `image` il
+            // GLTFExporter r128 le disegna su un canvas dimensionato su `image.width`
+            // e SOLLEVA, dentro una catena di promise senza .catch: l'export moriva
+            // muto. Meglio un GLB a tinte piatte che nessun GLB.
+            // Ritorna quante ne ha scartate, cosi' il chiamante puo' avvisare.
+            function dropFailedExportTextures(mats) {
+                let dropped = 0;
+                (mats || []).forEach(m => {
+                    if (!m || !m.map || !m.map.userData || !m.map.userData.exportFailed) return;
+                    if (m.map.dispose) m.map.dispose();
+                    m.map = null;
+                    if (m.userData && m.userData.exportBaseColor) {
+                        m.color = new THREE.Color(m.userData.exportBaseColor).convertSRGBToLinear();
+                    }
+                    dropped++;
+                });
+                return dropped;
+            }
+
+            function disposeExportMaterial(m) {
+                if (!m) return;
+                // La texture e' stata creata QUI (mai presa dalla cache del visore),
+                // quindi si puo' disporre senza spegnere niente a schermo.
+                if (m.map && m.map.dispose) m.map.dispose();
+                if (m.dispose) m.dispose();
             }
 
             function buildStaticExportMesh(scale) {
@@ -10987,20 +11558,28 @@
 
                 Object.keys(partsMap).forEach(partName => {
                     const partData = partsMap[partName];
+                    // Per TOKEN, non per colore: due voxel dello stesso colore con
+                    // materiali diversi vogliono due materiali glTF distinti (uno con
+                    // la texture, uno senza). Raggruppando per colore il secondo
+                    // erediterebbe il materiale del primo.
                     const byColor = {};
+                    // Il colore PROPRIO del primo voxel di ogni gruppo: e' il solo
+                    // fallback disponibile per un token materiale orfano, perche' il
+                    // token ha gia' buttato via l'hex del voxel.
+                    const fallbackOf = {};
                     partData.voxels.forEach(v => {
-                        if (!byColor[v.color]) byColor[v.color] = [];
-                        byColor[v.color].push(v);
+                        const tok = tokenOf(v);
+                        if (!byColor[tok]) { byColor[tok] = []; fallbackOf[tok] = v.color; }
+                        byColor[tok].push(v);
                     });
 
                     const materials = [];
-                    const positions = [], normals = [], indices = []; let vbase = 0;
+                    const positions = [], normals = [], uvs = [], indices = []; let vbase = 0;
                     const geom = new THREE.BufferGeometry();
 
-                    Object.keys(byColor).forEach((hexColor) => {
+                    Object.keys(byColor).forEach((token) => {
                         const groupStart = indices.length;
-                        const col = new THREE.Color(hexColor).convertSRGBToLinear();
-                        byColor[hexColor].forEach(v => {
+                        byColor[token].forEach(v => {
                             CUBE_FACES.forEach(f => {
                                 const nx = v.x + f.n[0];
                                 const ny = v.y + f.n[1];
@@ -11013,11 +11592,12 @@
                                         (v.y + vt[1] * s - o.y) * K,
                                         (v.z + vt[2] * s - o.z) * K);
                                     normals.push(f.n[0], f.n[1], f.n[2]);
+                                    uvs.push(UV_UNIT[k][0], UV_UNIT[k][1]);
                                 }
                                 indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3); vbase += 4;
                             });
                         });
-                        // Niente gruppo (ne' materiale) per un colore che non ha
+                        // Niente gruppo (ne' materiale) per un token che non ha
                         // prodotto facce: qui capita a chi sta tutto dentro un'altra
                         // parte. Un gruppo con count 0 fa scrivere al GLTFExporter r128
                         // una primitiva SENZA `indices`, che per la specifica glTF si
@@ -11027,13 +11607,8 @@
                         // in 15-rig.js, dove il commento la racconta per esteso.
                         const count = indices.length - groupStart;
                         if (count === 0) return;
-                        // FrontSide, non DoubleSide: il culling per-parte (voxelSet qui
-                        // sopra e' costruito PER PARTE, apposta) lascia le facce sul
-                        // confine fra due parti, e le due parti ne emettono una ciascuna
-                        // nello stesso piano. Con DoubleSide sono z-fighting; col
-                        // backface culling ognuna si vede solo dal suo lato.
-                        const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.25, side: THREE.FrontSide });
-                        mat.name = hexColor;
+                        const mat = applyExportMaterial(new THREE.MeshStandardMaterial({}),
+                            token, fallbackOf[token]);
                         materials.push(mat);
                         geom.addGroup(groupStart, count, materials.length - 1);
                     });
@@ -11042,8 +11617,9 @@
 
                     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
                     geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                    geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
                     geom.setIndex(indices);
-                    
+
                     const mesh = new THREE.Mesh(geom, materials);
                     mesh.name = partName;
                     group.add(mesh);
@@ -11057,6 +11633,9 @@
                 const name = (meta.name || 'voxel_model').replace(/\s+/g, '_');
                 let exportRoot, animations = [];
                 let restore = null;
+                // Un export interrotto a meta' potrebbe aver lasciato promesse appese:
+                // ogni giro riparte da zero.
+                exportTexturePending.length = 0;
 
                 const haveRig = rig && rig.bones && rig.bones.length;
                 if (haveRig && !skinnedMesh) { applyRig(); }
@@ -11104,11 +11683,16 @@
 
                     (Array.isArray(outMesh.material) ? outMesh.material : [outMesh.material])
                         .forEach(m => {
-                            m.metalness = 0.25;
-                            if (m.userData && m.userData.hexColor) {
-                                m.color.set(m.userData.hexColor).convertSRGBToLinear();
-                                m.name = m.userData.hexColor;
-                            }
+                            // Il token e' stato messo in userData da buildSkinnedMesh
+                            // (il gruppo e' per token, non per colore) e `hexColor` e'
+                            // il colore VERO del gruppo: serve da fallback se il token
+                            // e' un materiale orfano. Da qui arrivano anche texture,
+                            // ruvidita', metallicita', emissione e FrontSide.
+                            applyExportMaterial(m, (m.userData && m.userData.token) || (m.userData && m.userData.hexColor),
+                                m.userData && m.userData.hexColor);
+                            // L'anteprima disegna i colori dai vertici; in export il
+                            // colore viaggia solo sul materiale (vedi il commento sul
+                            // COLOR_0 qui sopra).
                             m.vertexColors = false;
                             // Guscio chiuso con normali verso l'esterno: il backface
                             // culling e' corretto e fa da seconda difesa: se una faccia
@@ -11135,7 +11719,7 @@
                         // mai stata toccata, quindi qui si libera solo la temporanea.
                         outMesh.geometry.dispose();
                         (Array.isArray(outMesh.material) ? outMesh.material : [outMesh.material])
-                            .forEach(m => m.dispose());
+                            .forEach(disposeExportMaterial);
                     };
                 } else {
                     // Statico: la scala e' cotta nei vertici (vedi buildStaticExportMesh),
@@ -11145,18 +11729,60 @@
                     exportRoot = buildStaticExportMesh(doScale ? 0.01 : 1);
                     exportRoot.name = name;
                     exportRoot.updateMatrixWorld(true);
+                    restore = () => {
+                        // Anche qui i materiali (e le loro texture) sono nati per
+                        // l'export e non li usa nessun altro: si liberano.
+                        exportRoot.children.forEach(mesh => {
+                            if (mesh.geometry) mesh.geometry.dispose();
+                            (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+                                .forEach(disposeExportMaterial);
+                        });
+                    };
                 }
 
-                const exporter = new THREE.GLTFExporter();
-                exporter.parse(exportRoot, (result) => {
-                    const blob = new Blob([result], { type: 'model/gltf-binary' });
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `${name}.glb`;
-                    a.click();
-                    URL.revokeObjectURL(a.href);
+                // Le texture arrivano da una data URL e si decodificano in modo
+                // asincrono: il GLTFExporter r128 incorpora l'immagine disegnandola su
+                // un canvas dimensionato su image.width, quindi chiamato prima del
+                // decode scriverebbe un canvas 0x0 (texture vuota nel GLB). Si aspetta.
+                // Senza texture la lista e' vuota e Promise.all risolve subito, ma
+                // resta comunque un tick asincrono: nessun percorso dell'export dipende
+                // dal fatto che parse() sia sincrono.
+                //
+                // La lista si azzera QUI e non a fine export: e' `applyExportMaterial`
+                // a riempirla mentre si costruisce il modello, quindi svuotarla dopo
+                // butterebbe via le promesse dell'export in corso. Cosi' un export non
+                // eredita le texture del precedente, ne' aspetta le sue.
+                const pending = exportTexturePending;
+                const textured = exportTexturedMaterials;
+                exportTexturePending = [];
+                exportTexturedMaterials = [];
+                // Qualunque cosa vada storta da qui in poi deve comunque rimettere in
+                // piedi la scena e liberare i materiali usa e getta: senza questo
+                // `restore()` il modello resta invisibile a schermo dopo un export
+                // riggato fallito, e le texture d'export non vengono mai disposte.
+                const finish = (err) => {
                     if (restore) restore();
-                }, { binary: true, animations, onlyVisible: false });
+                    if (err) {
+                        console.error('[export GLB]', err);
+                        alert(t('export.glb.failed'));
+                    }
+                };
+                Promise.all(pending).then(() => {
+                    const dropped = dropFailedExportTextures(textured);
+                    const exporter = new THREE.GLTFExporter();
+                    exporter.parse(exportRoot, (result) => {
+                        const blob = new Blob([result], { type: 'model/gltf-binary' });
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `${name}.glb`;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                        finish();
+                        // Dopo il download: il file c'e', l'avviso spiega solo perche'
+                        // e' a tinte piatte.
+                        if (dropped) alert(t('export.glb.texturesDropped', { n: dropped }));
+                    }, { binary: true, animations, onlyVisible: false });
+                }).catch(finish);
             }
             document.getElementById('exportGlbBtn').addEventListener('click', exportGLB);
 
@@ -14070,8 +14696,8 @@
             //   - l'array `currentModelData.voxels` si aggiorna in O(1) per cella grazie
             //     a un indice chiave -> posizione (`voxelIndex`), con rimozione
             //     swap-with-last invece della ricostruzione integrale;
-            //   - si ricreano solo gli InstancedMesh dei COLORI toccati;
-            //   - la palette DOM si riscrive solo se l'insieme dei colori e' cambiato
+            //   - si ricreano solo gli InstancedMesh dei TOKEN toccati;
+            //   - la palette DOM si riscrive solo se l'insieme dei token e' cambiato
             //     (altrimenti le swatch lampeggiano a ogni tratto).
             //
             // SICUREZZA. `buildModel()` resta il percorso completo e autorevole per
@@ -14080,17 +14706,22 @@
 
             // Stato del renderer incrementale (valido per l'OGGETTO ATTIVO).
             //
-            // NOTA sulle strutture dati: `visibleByColor` mappa colore -> Map(chiave ->
-            // voxel), NON colore -> array. Con un array servirebbe un findIndex per
-            // togliere una cella, cioe' O(colori x lunghezza_lista) per ogni cella
+            // I nomi dicono "color" per continuita' storica, ma la CHIAVE e' il TOKEN
+            // di 36-materials.js: '#RRGGBB' per un colore, '@id' per un materiale. Due
+            // voxel dello stesso colore con materiali diversi sono percio' due gruppi e
+            // due InstancedMesh, che e' l'unico modo di dargli due materiali THREE.
+            //
+            // NOTA sulle strutture dati: `visibleByColor` mappa token -> Map(chiave ->
+            // voxel), NON token -> array. Con un array servirebbe un findIndex per
+            // togliere una cella, cioe' O(token x lunghezza_lista) per ogni cella
             // toccata: su un modello grande sarebbe piu' LENTO del rebuild completo che
             // stiamo cercando di evitare. Con le Map ogni rimozione e' O(1).
-            // `visibleColorByKey` completa il quadro: dice a quale colore appartiene una
+            // `visibleColorByKey` completa il quadro: dice a quale token appartiene una
             // cella visibile, senza doverlo cercare fra le liste.
             let voxelIndex = null;         // "x,y,z" -> indice in currentModelData.voxels
-            let visibleColorByKey = null;  // "x,y,z" -> "#RRGGBB" (solo celle visibili)
-            let meshByColor = null;        // "#RRGGBB" -> InstancedMesh
-            let visibleByColor = null;     // "#RRGGBB" -> Map("x,y,z" -> voxel)
+            let visibleColorByKey = null;  // "x,y,z" -> token (solo celle visibili)
+            let meshByColor = null;        // token -> InstancedMesh
+            let visibleByColor = null;     // token -> Map("x,y,z" -> voxel)
             let paletteSignature = '';     // per non riscrivere il DOM della palette invano
             let incrementalReady = false;  // false = usa sempre il percorso completo
             let visibleVoxelsDirty = false; // visibleVoxels da ricostruire alla prossima lettura
@@ -14145,7 +14776,10 @@
                     for (let i = 0; i < visible.length; i++) {
                         const v = visible[i];
                         const k = vkey(v.x, v.y, v.z);
-                        const hex = (v.color || '').toUpperCase();
+                        // tokenOf, non v.color: senza di lui due voxel dello stesso
+                        // colore con materiali diversi finirebbero nello stesso mesh e
+                        // uno dei due materiali non si vedrebbe mai.
+                        const hex = tokenOf(v);
                         visibleColorByKey.set(k, hex);
                         let m = visibleByColor.get(hex);
                         if (!m) { m = new Map(); visibleByColor.set(hex, m); }
@@ -14162,10 +14796,23 @@
             }
 
             function computePaletteSignature() {
-                // Firma dell'insieme dei colori presenti. Se non cambia, il DOM della
-                // palette non va toccato.
+                // Firma dell'insieme dei TOKEN presenti. Se non cambia, il DOM della
+                // palette non va toccato. Deve essere per token e non per colore:
+                // assegnare un materiale a un voxel non cambia il suo colore, quindi
+                // una firma sui soli colori non si accorgerebbe mai della differenza e
+                // la palette non mostrerebbe la nuova voce.
                 if (!visibleByColor) return '';
                 return Array.from(visibleByColor.keys()).sort().join('|');
+            }
+
+            // Normalizza un valore letto dalla voxelMap in un TOKEN canonico, con le
+            // stesse regole di tokenOf: un colore va MAIUSCOLO, un id di materiale NO.
+            // Maiuscolizzare tutto (com'era) trasformava '@m1' in '@M1', cioe' in un id
+            // diverso: il gruppo non combaciava piu' con quello di primeIncrementalState
+            // e il materiale risultava orfano.
+            function tokenNormalized(tok) {
+                if (typeof tok !== 'string' || tok === '') return undefined;
+                return isMaterialToken(tok) ? tok : tok.toUpperCase();
             }
 
             function getTargetPartForVoxel(x, y, z) {
@@ -14187,17 +14834,46 @@
                 return nearestPart;
             }
 
-            function voxelArrayAdd(x, y, z, color) {
+            // `decodeToken` risolve un id di materiale con una SCANSIONE LINEARE della
+            // lista (materialById): su una pennellata da 4000 celle sarebbe una
+            // scansione per cella. I token distinti in una pennellata sono di norma uno,
+            // quindi si memoizza per (token, colore di ripiego) e la scansione si paga
+            // una volta sola. La cache vive quanto la singola applyVoxelEdits: piu' a
+            // lungo e non vedrebbe una definizione appena aggiunta.
+            function decodeTokenMemo(cache, token, fallbackColor) {
+                const ck = token + '|' + (fallbackColor || '');
+                let hit = cache.get(ck);
+                if (hit === undefined) {
+                    hit = decodeToken(token, fallbackColor);
+                    cache.set(ck, hit);
+                }
+                return hit;
+            }
+
+            // `token` e' un token (vedi 36-materials.js), non un colore: va SCOMPOSTO,
+            // altrimenti nel voxel finirebbe color: '@m1' e ogni consumatore che si
+            // aspetta un hex (export, .vox, MTL) leggerebbe spazzatura.
+            function voxelArrayAdd(x, y, z, token, decCache) {
                 const arr = currentModelData.voxels;
                 const k = vkey(x, y, z);
                 const existing = voxelIndex.get(k);
                 const targetPart = getTargetPartForVoxel(x, y, z);
+                // Il colore del voxel che c'e' GIA' e' il ripiego giusto per un id
+                // orfano: assegnare un materiale non ancora caricato non deve
+                // ricolorare di grigio un voxel che aveva il suo colore.
+                const fallback = (existing !== undefined && arr[existing]) ? arr[existing].color : undefined;
+                const dec = decCache
+                    ? decodeTokenMemo(decCache, token, fallback)
+                    : decodeToken(token, fallback);
                 if (existing !== undefined) {          // gia' presente: solo ricolora
-                    arr[existing].color = color;
+                    arr[existing].color = dec.color;
+                    if (dec.material) arr[existing].material = dec.material;
+                    else delete arr[existing].material;
                     if (targetPart) arr[existing].part = targetPart;
                     return;
                 }
-                const newVoxel = { x: x, y: y, z: z, color: color };
+                const newVoxel = { x: x, y: y, z: z, color: dec.color };
+                if (dec.material) newVoxel.material = dec.material;
                 if (targetPart) newVoxel.part = targetPart;
                 arr.push(newVoxel);
                 voxelIndex.set(k, arr.length - 1);
@@ -14219,7 +14895,29 @@
                 voxelIndex.delete(k);
             }
 
-            // --- (ri)costruzione del mesh di UN SOLO colore ----------------------
+            // --- materiale THREE di un token ------------------------------------
+            // Unico punto in cui i due percorsi di rendering (completo e incrementale)
+            // si procurano un materiale, cosi' non possono divergere.
+            //
+            // `sample` e' un voxel QUALSIASI del gruppo e serve solo per il suo colore:
+            // su un id ORFANO threeMaterialFor ricade su quello invece che sul grigio
+            // neutro, e un modello aperto senza le sue definizioni resta a tinte piatte.
+            // Limite noto e inevitabile a questo livello: il token collassa il colore,
+            // quindi due voxel ORFANI dello stesso id ma di colore diverso stanno nello
+            // stesso gruppo e prendono il colore del primo. Vale solo per gli orfani --
+            // con la definizione presente il colore lo decide lei.
+            //
+            // Il materiale arriva dalla cache di 36-materials.js ed e' CONDIVISO fra i
+            // mesh e fra i rebuild; e' threeMaterialFor a marcarlo userData.shared, e
+            // disposeMesh (05-build-model.js) a rispettare il marchio. Qui non si tocca.
+            function voxelMaterialFor(token, sample) {
+                return threeMaterialFor(token, {
+                    wireframe: toggleWireframe.checked,
+                    color: sample ? sample.color : undefined
+                });
+            }
+
+            // --- (ri)costruzione del mesh di UN SOLO token ----------------------
             function rebuildColorMesh(colorHex) {
                 const cellMap = visibleByColor.get(colorHex);
                 const list = cellMap ? Array.from(cellMap.values()) : null;
@@ -14246,12 +14944,7 @@
                 const geometry = (typeof getVoxelGeometry === 'function')
                     ? getVoxelGeometry(boxSize)
                     : new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-                const material = new THREE.MeshStandardMaterial({
-                    color: new THREE.Color(colorHex),
-                    roughness: 0.2,
-                    metalness: 0.1,
-                    wireframe: toggleWireframe.checked
-                });
+                const material = voxelMaterialFor(colorHex, list[0]);
                 const instMesh = new THREE.InstancedMesh(geometry, material, list.length);
                 const dummy = new THREE.Object3D();
                 for (let i = 0; i < list.length; i++) {
@@ -14288,11 +14981,15 @@
                 if (cells.length > 4000) return false;
 
                 try {
+                    // Un solo memo di decodifica per tutta la pennellata: vedi
+                    // decodeTokenMemo. Non va tenuto fra chiamate diverse.
+                    const decCache = new Map();
+
                     // 1. Array dei voxel: O(1) per cella (indice + swap-with-last).
                     for (let i = 0; i < cells.length; i++) {
                         const c = cells[i];
                         if (c.removed) voxelArrayRemove(c.x, c.y, c.z);
-                        else voxelArrayAdd(c.x, c.y, c.z, (c.color || '').toUpperCase());
+                        else voxelArrayAdd(c.x, c.y, c.z, tokenNormalized(c.color), decCache);
                     }
 
                     // 2. Visibilita': solo celle toccate + vicini. Una cella nascosta puo'
@@ -14314,15 +15011,23 @@
                         const x = pos.x, y = pos.y, z = pos.z;
                         const prevColor = visibleColorByKey.get(k);   // undefined = non visibile
                         const nowVisible = isVisibleAt(x, y, z);
-                        const nowColor = nowVisible ? (voxelMap.get(k) || '').toUpperCase() : undefined;
+                        // voxelMap contiene gia' il TOKEN: va normalizzato come fa
+                        // tokenOf (colore maiuscolo, id di materiale intatto), non
+                        // maiuscolizzato in blocco -- '@m1' e '@M1' sono id diversi.
+                        const nowColor = nowVisible ? tokenNormalized(voxelMap.get(k)) : undefined;
 
                         if (prevColor === nowColor) return;           // nulla da fare
 
-                        if (prevColor !== undefined) {                // toglila dal vecchio colore
-                            const m = visibleByColor.get(prevColor);
-                            if (m) {
-                                m.delete(k);
-                                if (m.size === 0) visibleByColor.delete(prevColor);
+                        // Il voxel com'era PRIMA: unico posto in cui questo ramo ha
+                        // ancora in mano il colore vero della cella, e serve piu' sotto
+                        // se l'array non la contiene.
+                        const prevMap = (prevColor !== undefined) ? visibleByColor.get(prevColor) : undefined;
+                        const prevVox = prevMap ? prevMap.get(k) : undefined;
+
+                        if (prevColor !== undefined) {                // toglila dal vecchio token
+                            if (prevMap) {
+                                prevMap.delete(k);
+                                if (prevMap.size === 0) visibleByColor.delete(prevColor);
                             }
                             dirtyColors.add(prevColor);
                             visibleColorByKey.delete(k);
@@ -14331,20 +15036,29 @@
                             let m = visibleByColor.get(nowColor);
                             if (!m) { m = new Map(); visibleByColor.set(nowColor, m); }
                             const idx = voxelIndex ? voxelIndex.get(k) : undefined;
-                            const voxObj = (idx !== undefined && currentModelData.voxels[idx])
+                            let voxObj = (idx !== undefined && currentModelData.voxels[idx])
                                 ? currentModelData.voxels[idx]
-                                : { x: x, y: y, z: z, color: nowColor };
+                                : null;
+                            if (!voxObj) {
+                                // Ripiego difensivo (la cella dovrebbe stare nell'array).
+                                // Anche qui il token va SCOMPOSTO, o il voxel finto
+                                // porterebbe color: '@m1'. Il solo colore vero a
+                                // disposizione e' quello che la cella aveva prima.
+                                const dec = decodeToken(nowColor, prevVox ? prevVox.color : undefined);
+                                voxObj = { x: x, y: y, z: z, color: dec.color };
+                                if (dec.material) voxObj.material = dec.material;
+                            }
                             m.set(k, voxObj);
                             dirtyColors.add(nowColor);
                             visibleColorByKey.set(k, nowColor);
                         }
                     });
 
-                    // 3. Ricrea SOLO i mesh dei colori toccati (non tutti).
+                    // 3. Ricrea SOLO i mesh dei token toccati (non tutti).
                     dirtyColors.forEach(hex => rebuildColorMesh(hex));
 
                     // 4. Contatori e palette. La palette si riscrive solo se l'insieme dei
-                    //    colori e' cambiato davvero: altrimenti le swatch lampeggiano a
+                    //    token e' cambiato davvero: altrimenti le swatch lampeggiano a
                     //    ogni pennellata.
                     // `visibleVoxels` e' letto da 16-export-glb.js e deve restare
                     // aggiornato. MA ricostruire l'intero array a ogni pennellata era
@@ -14371,18 +15085,42 @@
                 }
             }
 
-            // Disegna le swatch della palette dai colori attualmente visibili.
+            // Disegna le swatch della palette dai TOKEN attualmente visibili.
             // Estratta da buildModel() cosi' il percorso incrementale puo' riusarla.
-            function renderPaletteSwatches(colorsOverride) {
-                const colors = colorsOverride
+            // Un token materiale mostra la miniatura della texture; un token colore il
+            // colore pieno. Il click seleziona l'uno o l'altro, coerentemente con la
+            // mutua esclusione fra colore e materiale.
+            function renderPaletteSwatches(tokensOverride) {
+                const tokens = tokensOverride
                     || (visibleByColor ? Array.from(visibleByColor.keys()) : []);
                 paletteEl.innerHTML = '';
-                colors.forEach(c => {
+                tokens.forEach(tok => {
                     const s = document.createElement('div');
                     s.className = 'swatch';
-                    s.style.backgroundColor = c;
-                    s.title = c + ' — clic per usarlo come colore attivo';
-                    s.addEventListener('click', () => setActiveColor(c));
+                    // decodeToken UNA volta per token (non per voxel): risolve l'id con
+                    // una scansione lineare della lista materiali.
+                    const dec = decodeToken(tok);
+                    // materialById, non `dec.material`: su un id orfano il campo resta
+                    // valorizzato di proposito ma la definizione non c'e'.
+                    const def = dec.material ? materialById(dec.material) : null;
+                    s.style.backgroundColor = dec.color;
+                    if (def && def.texture && def.texture.data) {
+                        s.style.backgroundImage = `url(${def.texture.data})`;
+                        s.style.backgroundSize = 'cover';
+                        s.style.imageRendering = 'pixelated';
+                    }
+                    if (def) {
+                        s.title = t('materials.swatchMaterialTitle', { name: def.name });
+                        // setActiveMaterialAndSync arriva col pannello materiali: finche'
+                        // non c'e' si seleziona comunque il materiale, senza ReferenceError.
+                        s.addEventListener('click', () => {
+                            if (typeof setActiveMaterialAndSync === 'function') setActiveMaterialAndSync(dec.material);
+                            else if (typeof setActiveMaterial === 'function') setActiveMaterial(dec.material);
+                        });
+                    } else {
+                        s.title = t('materials.swatchColorTitle', { color: dec.color });
+                        s.addEventListener('click', () => setActiveColor(dec.color));
+                    }
                     paletteEl.appendChild(s);
                 });
             }
@@ -15805,176 +16543,51 @@ async function voxelizeScene(gltfScene, options) {
 }
 
             /* ===== Modale Aiuto: guide all'uso dell'app ==========================
-             * Il testo vive QUI (un solo posto) e viene tradotto con le chiavi
-             * help.s.<id>.t / help.s.<id>.b: se la lingua attiva non ha la chiave,
-             * t() ricade su it.json e, se manca anche quello, sul testo italiano
-             * scritto in questo file (quindi la guida non è mai vuota).
+             * Il testo NON vive qui: sta in ui/locales/*.json sotto le chiavi
+             * help.s.<id>.t (titolo) e help.s.<id>.b (corpo). Qui restano solo
+             * l'ordine delle sezioni, il loro id e l'icona, cioe' le uniche cose
+             * che non sono testo per l'utente.
+             *
+             * Prima le stringhe italiane erano duplicate anche qui come
+             * "fallback": 85 stringhe morte, perche' le chiavi esistono in tutte
+             * e 6 le lingue e quel ramo non e' mai scattato. Una copia che non
+             * viene mai letta puo' solo divergere in silenzio da quella vera, e
+             * infatti divergeva gia': il titolo di `objects` si portava dietro
+             * uno spazio unificatore che la traduzione non ha. Vedi la regola
+             * "nessun testo per l'utente hardcoded" nel CLAUDE.md.
              *
              * Micro-markup del corpo: una riga per voce di elenco;
              *   *grassetto*   -> <b>
              *   [Ctrl+Z]      -> <kbd>
-             * Nessun HTML nelle stringhe: i nodi sono costruiti a mano, così una
-             * traduzione non può iniettare markup. */
+             * Nessun HTML nelle stringhe: i nodi sono costruiti a mano, cosi' una
+             * traduzione non puo' iniettare markup. */
 
             const HELP_SECTIONS = [
-                {
-                    id: 'start', icon: '\u{1F680}', title: 'Primi passi',
-                    body: [
-                        'La sidebar a sinistra ha quattro schede: *Genera* (AI), *Vista* (aspetto), *Disegna* (strumenti), *Rig* (scheletro e animazioni).',
-                        'Il pannello a destra elenca gli *oggetti* della scena e ne mostra le *proprietà*.',
-                        'La barra in alto raccoglie *File* (progetti .voxai), *Importa*, *Esporta*, *Aiuto* e *Impostazioni*.',
-                        'Per partire da zero: *Genera > Nuovo progetto*, dai un nome e una griglia (es. 32,32,32).',
-                        'Il salvataggio automatico è attivo: *File > Cronologia salvataggi* recupera le versioni recenti.'
-                    ].join('\n')
-                },
-                {
-                    id: 'nav', icon: '\u{1F9ED}', title: 'Muoversi nella vista',
-                    body: [
-                        '*Rotella premuta* ruota la vista attorno al modello (come in Blender).',
-                        '*Shift + rotella premuta* sposta la vista (pan); la *rotella* fa zoom.',
-                        'Il tasto sinistro resta libero per gli strumenti: per disegnare non devi tenere premuto altro.',
-                        'In *Vista* accendi griglia, wireframe, spazio fra i voxel e la rotazione automatica (oggetto o camera).',
-                        'La scena viene ridisegnata solo quando cambia qualcosa: è normale che il contatore di frame resti fermo.'
-                    ].join('\n')
-                },
-                {
-                    id: 'draw', icon: '\u{270F}', title: 'Disegnare voxel',
-                    body: [
-                        'Strumenti: [1] Vista, [2] Piazza, [3] Rompi, [4] Disegna (traccia continua), [5] Preleva colore.',
-                        'Il colore attivo si sceglie dalla palette o dal selettore; *Preleva* copia il colore di un voxel esistente.',
-                        'Il pennello va da 1 a 6 voxel: [ e ] lo rimpiccioliscono o lo ingrandiscono.',
-                        'Anteprima verde = dove nascerà il voxel; contorno rosso = cosa verrà rimosso.',
-                        '[Ctrl+Z] annulla, [Ctrl+Y] (oppure [Ctrl+Shift+Z]) ripristina.',
-                        '*Svuota tutto* azzera i voxel dell\'oggetto attivo (e il suo scheletro), chiedendo conferma.'
-                    ].join('\n')
-                },
-                {
-                    id: 'sym', icon: '\u{1FA9E}', title: 'Simmetria, aree, estrusione',
-                    body: [
-                        'La *simmetria* X/Y/Z specchia ogni modifica rispetto al centro della griglia; il piano translucido mostra dove.',
-                        'Trascinando col tasto sinistro selezioni un *rettangolo* di voxel: al rilascio l\'operazione si applica a tutta l\'area.',
-                        '[Q] cambia l\'asse di vincolo del trascinamento: auto (normale alla faccia), X, Y, Z.',
-                        '[E] arma l\'*estrusione* della faccia sotto il cursore: muovi il mouse per lo spessore, [E] di nuovo cicla l\'asse, [Esc] annulla.',
-                        'Durante un trascinamento rettangolare, [E] dà profondità alla selezione: da rettangolo a blocco.'
-                    ].join('\n')
-                },
-                {
-                    id: 'objects', icon: '\u{1F9E9}', title: 'Oggetti, scena e proprietà',
-                    body: [
-                        '[Tab] alterna *Modalità Oggetto* (sposti e selezioni interi oggetti) e *Modalità Modifica* (lavori sui voxel).',
-                        'Nel pannello Oggetti: *Nuovo*, *Duplica*, *Elimina*, *Unisci*; l\'occhio nasconde, il doppio clic rinomina.',
-                        '*Proprietà* applica posizione, rotazione (a passi di 90°) e scala dal vivo: il valore viene cotto nei voxel quando lasci il campo.',
-                        'Ogni oggetto porta il *proprio* rig: importare un file in una scena non vuota aggiunge un oggetto invece di sostituire la scena.',
-                        'Attenzione: Nuovo / Duplica / Elimina / Unisci non si annullano con [Ctrl+Z].'
-                    ].join('\n')
-                },
-                {
-                    id: 'ai', icon: '\u{1F916}', title: 'Generazione con l\'AI',
-                    body: [
-                        'In *Genera* descrivi il modello ("un drago rosso in una griglia 32") e premi Genera.',
-                        'In modalità *Modifica* viene inviato il modello corrente insieme alla richiesta ("aggiungi le ali") e torna la versione modificata.',
-                        'La griglia arriva a 512 per lato; l\'opzione *struttura grande* spinge l\'AI a usare tutto lo spazio con facciate, interni, tetti e scale.',
-                        'L\'opzione *Personaggio umanoide* impone T-pose, gambe staccate e una parte per arto, così il modello è animabile appena generato (vedi la sezione dedicata).',
-                        'Serve un accesso valido a Gemini: i cookie si incollano in *Impostazioni* e restano solo sul tuo computer.',
-                        'Se la risposta è malformata viene riparata automaticamente; se resta invalida riprova o riformula la richiesta.',
-                        'Un tetto automatico sui voxel evita che una singola istruzione sbagliata riempia milioni di celle e blocchi l\'app.'
-                    ].join('\n')
-                },
-                {
-                    id: 'humanoid', icon: '\u{1F9CD}', title: 'Personaggi umanoidi (rig-ready)',
-                    body: [
-                        'In *Genera* c\'è l\'opzione *Personaggio umanoide*: accendila quando il soggetto è una persona, un robot antropomorfo o una creatura bipede.',
-                        'Con l\'opzione accesa l\'AI riceve regole aggiuntive: *T-pose*, braccia orizzontali, gambe dritte e parallele, piedi a terra e modello centrato sull\'asse X.',
-                        'Fra le due gambe viene lasciato un *vuoto di almeno 2 voxel* fino a terra, e almeno 1 voxel sotto l\'ascella: senza stacco il rig non distingue gli arti.',
-                        'La regola più importante è la *suddivisione per arto*: il modello arriva diviso in testa, collo, torso, bacino, braccio_R, mano_R, braccio_L, mano_L, gamba_R, piede_R, gamba_L, piede_L.',
-                        'Il suffisso *_R* indica il lato a X maggiore, *_L* quello a X minore: è la stessa convenzione dello scheletro generato dall\'app.',
-                        'Vestiti e accessori seguono l\'arto che coprono: i pantaloni della gamba destra stanno dentro *gamba_R*, lo stivale destro dentro *piede_R*, capelli e caschi dentro *testa*.',
-                        'Sono vietate parti come *pantaloni*, *stivali*, *guanti* o *vestito*: coprono due arti, e il rig assegna ogni parte a una sola catena di ossa. Il risultato sarebbe una gamba sola con l\'altra saldata addosso.',
-                        'Accessori che non seguono un arto (mantello, zaino, coda, ali) restano in parti a sé.',
-                        'Nessuna parte del corpo è spessa 1 voxel: braccia e gambe almeno 3x3 di sezione, collo almeno 2x2, così il rig ha volume da deformare.',
-                        'L\'opzione *accende da sola* la suddivisione in parti (spegne "oggetto unico"): senza il formato a parti i nomi degli arti non avrebbero dove stare.',
-                        'Nella scheda *Pack* esiste la stessa opzione, per generare un\'intera serie di personaggi coerenti e già pronti per il rig.',
-                        'Vale anche per i modelli che importi: se dividi tu le parti con questi nomi, *Genera scheletro* aggancia ogni arto alla catena giusta.'
-                    ].join('\n')
-                },
-                {
-                    id: 'pack', icon: '\u{1F4E6}', title: 'Pack di asset',
-                    body: [
-                        'Un *pack* genera più oggetti (con varianti) in un\'unica sessione, tenendo lo stesso stile.',
-                        'La coda vive nel processo Python: puoi ricaricare la finestra senza perdere una generazione lunga.',
-                        'Lo stile è *imposto*, non chiesto: la palette dei riferimenti (o del primo asset riuscito) viene riapplicata a tutti gli altri.',
-                        'Una richiesta per volta, di proposito: il client Gemini usa i cookie del browser e in parallelo verrebbe limitato.',
-                        'I pack completati restano su disco e si esportano in un unico file ZIP.'
-                    ].join('\n')
-                },
-                {
-                    id: 'rig', icon: '\u{1F9B4}', title: 'Rig: scheletro e posa',
-                    body: [
-                        '*Genera scheletro* costruisce le ossa in proporzione al modello e assegna ogni voxel a un osso.',
-                        'Se il modello è diviso in parti, ogni parte finisce su *una sola catena di ossa*: una parte che copre due arti (tipo "pantaloni") li fonde insieme. Genera i personaggi con l\'opzione *Personaggio umanoide* o dividi le parti per arto.',
-                        'Per selezionare un\'articolazione clicca il suo *pallino chiaro*: la ricerca avviene in pixel sullo schermo, quindi non serve mirare preciso.',
-                        'Gizmo: [R] ruota l\'osso (posa), [G] sposta l\'articolazione (per correggere lo scheletro).',
-                        'Le ossa-punta di mani, piedi e testa sono nascoste: danno solo l\'orientamento in Blender e non prendono voxel.',
-                        '*Mostra rig* rientra nell\'anteprima del rig già salvato sull\'oggetto, senza rigenerarlo (rigenerare perderebbe posa e pesi).',
-                        'Il rig sopravvive a rebuild, cambio oggetto e salvataggio: non serve tenere aperta la scheda Rig per esportarlo.',
-                        'Ossa: *+ Osso* aggiunge un figlio a quello selezionato, *doppio clic sul nome* lo rinomina, *Elimina* riattacca i figli al genitore. Il nome è l\'identità: posa, pesi dipinti e clip lo seguono.',
-                        '*Simmetria X* specchia la posa con un click (L>R, R>L o scambio dei due lati) e, se hai dipinto i pesi, anche le correzioni: il voxel gemello è minX+maxX-x.',
-                        '*Simmetrizza scheletro* rimette L e R a combaciare dopo le correzioni con [G]: copia un lato sull\'altro (o fa la media) e riaggancia le ossa centrali all\'asse.',
-                        '*Punta arto (IK)*: attivalo e trascina una mano o un piede; le due ossa a monte (spalla+gomito, anca+ginocchio) si orientano da sole e un trascinamento intero si annulla con un solo [Ctrl+Z].',
-                        '*Libreria pose*: salva la posa corrente e riapplicala anche su un altro oggetto; entra sulle ossa con lo stesso nome, le altre vengono ignorate.'
-                    ].join('\n')
-                },
-                {
-                    id: 'weights', icon: '\u{1F3A8}', title: 'Pittura pesi',
-                    body: [
-                        'Il legame è *rigido*: ogni voxel appartiene a un osso solo. Se un pezzo si muove con l\'osso sbagliato, ridipingilo.',
-                        'Attivando *Pittura pesi* la posa viene azzerata (serve la posa di riposo) e il gizmo si disattiva.',
-                        'Scegli l\'osso di destinazione, poi trascina sul modello col tasto sinistro: i colori mostrano l\'osso di ogni voxel.',
-                        'Modalità: *Pennello* (sfera di raggio regolabile), *Riempi* (tutti i voxel collegati che appartengono allo stesso osso), *Cancella* (torna all\'automatico).',
-                        '*Azzera correzioni* rifà il binding automatico; ogni pennellata si annulla con [Ctrl+Z].',
-                        'Le correzioni sono salvate nel progetto e finiscono nell\'export GLB.'
-                    ].join('\n')
-                },
-                {
-                    id: 'anim', icon: '\u{1F3AC}', title: 'Animazioni',
-                    body: [
-                        'Le clip pronte (idle, camminata, saluto...) si scelgono dal menu e partono subito nell\'anteprima.',
-                        'Puoi chiedere un\'animazione all\'AI: le clip generate restano nel rig e vengono salvate col progetto.',
-                        'I cursori di posa muovono l\'osso selezionato; la posa corrente entra nell\'export GLB.',
-                        'L\'animazione si ferma da sola quando entri in pittura pesi, perché serve la posa di riposo.'
-                    ].join('\n')
-                },
-                {
-                    id: 'export', icon: '\u{1F4BE}', title: 'Salvare ed esportare',
-                    body: [
-                        '*GLB* è il formato per Blender / Unity / Godot: porta scheletro, pesi rigidi e clip. L\'autoscale 1/100 evita modelli giganteschi.',
-                        '*OBJ + MTL*: le facce complanari vengono unite in quadrilateri grandi; tieni i due file nella stessa cartella o i materiali risultano bianchi.',
-                        '*.vox* per MagicaVoxel, *.schem* per Minecraft (WorldEdit / Litematica).',
-                        '*.voxelai* (offuscato) e *.json* (in chiaro) conservano tutto: voxel, oggetti, trasformazioni e un rig per oggetto.',
-                        'Il rig salvato contiene tipo, ossa, posa, pesi dipinti e animazioni AI: riaprendo il file ritrovi lo stesso stato.',
-                        '*File > Salva progetto* (.voxai) è la via più comoda per riprendere il lavoro più tardi.'
-                    ].join('\n')
-                },
-                {
-                    id: 'keys', icon: '\u{2328}', title: 'Scorciatoie',
-                    body: [
-                        '[1] [2] [3] [4] [5] strumenti — [ e ] dimensione del pennello.',
-                        '[Tab] Modalità Oggetto / Modifica — [Q] asse di vincolo — [E] estrusione — [Esc] annulla il gesto in corso.',
-                        '[Ctrl+Z] annulla — [Ctrl+Y] ripristina — [Canc] elimina l\'oggetto selezionato.',
-                        '[R] e [G] cambiano il gizmo del rig: ruota la posa / sposta l\'articolazione.',
-                        '[F1] apre questa guida. I tasti si possono riassegnare in *Impostazioni > Scorciatoie*.'
-                    ].join('\n')
-                }
+                { id: 'start', icon: '\u{1F680}' },
+                { id: 'nav', icon: '\u{1F9ED}' },
+                { id: 'draw', icon: '\u{270F}' },
+                { id: 'sym', icon: '\u{1FA9E}' },
+                { id: 'objects', icon: '\u{1F9E9}' },
+                { id: 'ai', icon: '\u{1F916}' },
+                { id: 'humanoid', icon: '\u{1F9CD}' },
+                { id: 'pack', icon: '\u{1F4E6}' },
+                { id: 'rig', icon: '\u{1F9B4}' },
+                { id: 'weights', icon: '\u{1F3A8}' },
+                { id: 'anim', icon: '\u{1F3AC}' },
+                { id: 'export', icon: '\u{1F4BE}' },
+                { id: 'keys', icon: '\u{2328}' }
             ];
 
-            // Testo di una sezione: traduzione se disponibile, altrimenti l'italiano
-            // scritto sopra. t() restituisce la CHIAVE quando manca, ed è il segnale
-            // che usiamo per ricadere sul fallback.
-            function helpText(id, field, fallback) {
-                if (typeof t !== 'function') return fallback;
+            // Testo di una sezione, sempre dal dizionario. t() torna la CHIAVE
+            // quando il dizionario non e' ancora carico (vedi 23-i18n.js): in quel
+            // caso si mostra il vuoto invece della chiave nuda. Non e' un caso che
+            // si veda, perche' la guida si ricostruisce a ogni apertura e li' i
+            // dizionari ci sono sempre.
+            function helpText(id, field) {
+                if (typeof t !== 'function') return '';
                 const key = 'help.s.' + id + '.' + field;
                 const v = t(key);
-                return (v === key || v === undefined) ? fallback : v;
+                return (v === key || v === undefined) ? '' : v;
             }
 
             // Micro-markup -> nodi DOM (niente innerHTML: le stringhe arrivano dai
@@ -16010,8 +16623,8 @@ async function voxelizeScene(gltfScene, options) {
                 let shown = 0;
 
                 HELP_SECTIONS.forEach(sec => {
-                    const title = helpText(sec.id, 't', sec.title);
-                    const body = helpText(sec.id, 'b', sec.body);
+                    const title = helpText(sec.id, 't');
+                    const body = helpText(sec.id, 'b');
                     const lines = String(body).split('\n').filter(l => l.trim());
                     if (q && (title + ' ' + body).toLowerCase().indexOf(q) === -1) return;
                     shown++;
@@ -16050,9 +16663,7 @@ async function voxelizeScene(gltfScene, options) {
                 if (!shown) {
                     const empty = document.createElement('div');
                     empty.className = 'help-empty';
-                    empty.textContent = (typeof t === 'function' && t('help.noResults') !== 'help.noResults')
-                        ? t('help.noResults')
-                        : 'Nessun risultato nella guida.';
+                    empty.textContent = (typeof t === 'function') ? t('help.noResults') : '';
                     bodyHost.appendChild(empty);
                 }
                 const first = idxHost.querySelector('.help-nav-item');
@@ -16069,7 +16680,7 @@ async function voxelizeScene(gltfScene, options) {
 
                 function isOpen() { return overlay.style.display === 'flex'; }
                 function open() {
-                    // Ricostruita a ogni apertura: così prende la lingua attiva senza
+                    // Ricostruita a ogni apertura: cosi' prende la lingua attiva senza
                     // dover ri-agganciare le traduzioni a mano.
                     renderHelp(search ? search.value : '');
                     overlay.style.display = 'flex';
@@ -16338,10 +16949,10 @@ async function voxelizeScene(gltfScene, options) {
                 if (!rigData || !rigData.bones || !rigData.bones[index]) return 'Osso inesistente.';
                 const bd = rigData.bones[index];
                 const name = String(newName == null ? '' : newName).trim().replace(/\s+/g, '_');
-                if (!name) return 'Il nome non puo\' essere vuoto.';
+                if (!name) return t('rigTools.nameEmpty');
                 if (!/^[A-Za-z0-9_.\-]+$/.test(name)) return 'Usa solo lettere, numeri, _ . e -';
                 if (name === bd.name) return null;
-                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return 'Nome gia\' usato da un altro osso.';
+                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return t('rigTools.nameTaken');
                 const old = bd.name;
                 bd.name = name;
                 if (rigData.pose && rigData.pose[old] !== undefined) {
@@ -16517,7 +17128,7 @@ async function voxelizeScene(gltfScene, options) {
             // Le ossa _L stanno a x BASSA e le _R a x alta (vedi buildHumanoidSkeleton).
             let mirrorDir = 'LtoR';          // 'LtoR' | 'RtoL' | 'both'
             function mirrorDirLabel() {
-                return mirrorDir === 'RtoL' ? 'R -> L' : mirrorDir === 'both' ? 'scambio dei lati' : 'L -> R';
+                return mirrorDir === 'RtoL' ? 'R -> L' : mirrorDir === 'both' ? t('rigTools.mirrorSwap') : 'L -> R';
             }
 
             function rigToolsReady() {
@@ -16587,13 +17198,13 @@ async function voxelizeScene(gltfScene, options) {
                 const res = mirrorPoseData(rig.bones, rigEffectivePose(), mirrorDir);
                 if (!res.changed) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Nessuna posa da specchiare (' + mirrorDirLabel() + '): le ossa gemelle non esistono o sono a zero.';
+                    if (rigHint) rigHint.textContent = t('rigTools.mirrorPoseNone', { dir: mirrorDirLabel() });
                     return;
                 }
                 rigSetEffectivePose(res.pose);
                 stashRigToActiveObject();
                 refreshPoseUI();
-                if (rigHint) rigHint.textContent = 'Posa specchiata su X (' + mirrorDirLabel() + '): ' + res.changed + ' ossa aggiornate.';
+                if (rigHint) rigHint.textContent = t('rigTools.mirrorPoseOk', { dir: mirrorDirLabel(), n: res.changed });
             });
 
             // --- Idea 1: specchia pesi dipinti ---
@@ -16604,13 +17215,13 @@ async function voxelizeScene(gltfScene, options) {
                 const res = mirrorWeightsData(voxels, rig.bones, rig.weights, mirrorDir);
                 if (!res.copied) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Nessuna correzione da specchiare (' + mirrorDirLabel() + '): dipingi prima un lato.';
+                    if (rigHint) rigHint.textContent = t('rigTools.mirrorWeightsNone', { dir: mirrorDirLabel() });
                     return;
                 }
                 rig.weights = res.weights;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Pesi specchiati (' + mirrorDirLabel() + '): ' + res.copied + ' voxel'
-                    + (res.skipped ? ', ' + res.skipped + ' senza gemello' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.mirrorWeightsOk', { dir: mirrorDirLabel(), n: res.copied })
+                    + (res.skipped ? t('rigTools.mirrorWeightsSkipped', { n: res.skipped }) : '') + '.';
             });
 
             // --- Idea 2: simmetrizza lo scheletro ---
@@ -16621,14 +17232,13 @@ async function voxelizeScene(gltfScene, options) {
                 const res = symmetrizeBonesData(rig.bones, voxels, mirrorDir);
                 if (!res.moved && !res.centred) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Scheletro gia\' simmetrico su X.';
+                    if (rigHint) rigHint.textContent = t('rigTools.symAlready');
                     return;
                 }
                 rig.bones = res.bones;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Scheletro simmetrizzato (' + mirrorDirLabel() + '): ' + res.moved
-                    + ' ossa spostate, ' + res.pairs + ' coppie L/R'
-                    + (res.centred ? ', ' + res.centred + ' ossa centrali riallineate' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.symOk', { dir: mirrorDirLabel(), n: res.moved, pairs: res.pairs })
+                    + (res.centred ? t('rigTools.symCentred', { n: res.centred }) : '') + '.';
             });
 
             // --- Idea 4: aggiungi / rinomina / elimina ossa (sopra lo scheletro automatico) ---
@@ -16640,21 +17250,20 @@ async function voxelizeScene(gltfScene, options) {
             function rigAddBonePrompt() {
                 if (!rigToolsReady()) return;
                 const pi = rigSelectedIndex();
-                if (pi < 0) { alert('Seleziona prima l\'osso genitore nella lista.'); return; }
+                if (pi < 0) { alert(t('rigTools.pickParentFirst')); return; }
                 const parentName = rig.bones[pi].name;
                 const suggested = uniqueBoneName(rig.bones, parentName + '_extra');
-                const answer = prompt('Nome del nuovo osso (figlio di ' + parentName + '):', suggested);
+                const answer = prompt(t('rigTools.newBonePrompt', { parent: parentName }), suggested);
                 if (answer === null) return;
                 const name = String(answer).trim().replace(/\s+/g, '_');
                 if (!name) return;
-                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) { alert('Usa solo lettere, numeri, _ . e -'); return; }
-                if (rig.bones.some(o => o.name === name)) { alert('Nome gia\' usato da un altro osso.'); return; }
+                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) { alert(t('rigTools.nameCharset')); return; }
+                if (rig.bones.some(o => o.name === name)) { alert(t('rigTools.nameTaken')); return; }
                 pushHistory();
                 const idx = rigAddChildBone(rig, pi, name);
                 if (idx < 0) { dropLastHistory(); return; }
                 rebuildRigPreserving(idx);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" aggiunto sotto ' + parentName
-                    + '. Con [G] sposti la sua articolazione, poi assegnagli i voxel con la pittura pesi.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneAdded', { name: name, parent: parentName });
             }
 
             function rigRenameBonePrompt(index) {
@@ -16662,7 +17271,7 @@ async function voxelizeScene(gltfScene, options) {
                 const i = (index === undefined || index < 0) ? rigSelectedIndex() : index;
                 const bd = rig.bones[i];
                 if (!bd) return;
-                const answer = prompt('Nuovo nome per "' + bd.name + '":', bd.name);
+                const answer = prompt(t('rigTools.renamePrompt', { name: bd.name }), bd.name);
                 if (answer === null) return;
                 const before = bd.name;
                 pushHistory();
@@ -16670,8 +17279,7 @@ async function voxelizeScene(gltfScene, options) {
                 if (err) { dropLastHistory(); alert(err); return; }
                 if (rig.bones[i].name === before) { dropLastHistory(); return; }
                 rebuildRigPreserving(i);
-                if (rigHint) rigHint.textContent = 'Osso rinominato: ' + before + ' -> ' + rig.bones[i].name
-                    + ' (posa, pesi e animazioni aggiornati).';
+                if (rigHint) rigHint.textContent = t('rigTools.boneRenamed', { before: before, after: rig.bones[i].name });
             }
 
             function rigDeleteBonePrompt() {
@@ -16680,17 +17288,17 @@ async function voxelizeScene(gltfScene, options) {
                 const bd = rig.bones[i];
                 if (!bd) return;
                 const children = rig.bones.filter(o => o.parent === i && !o.helper).length;
-                let msg = 'Eliminare l\'osso "' + bd.name + '"?';
-                if (children) msg += '\n' + children + ' ossa figlie passeranno al suo genitore.';
-                msg += '\nI voxel che gli erano assegnati torneranno all\'osso piu\' vicino.';
+                let msg = t('rigTools.deleteConfirm', { name: bd.name });
+                if (children) msg += '\n' + t('rigTools.deleteChildren', { n: children });
+                msg += '\n' + t('rigTools.deleteVoxels');
                 if (!confirm(msg)) return;
                 pushHistory();
                 const res = rigDeleteBone(rig, i);
                 if (res.error) { dropLastHistory(); alert(res.error); return; }
                 const name = bd.name;
                 rebuildRigPreserving(res.select);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" eliminato'
-                    + (res.removed > 1 ? ' (con ' + (res.removed - 1) + ' punta/e helper)' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneDeleted', { name: name })
+                    + (res.removed > 1 ? t('rigTools.boneDeletedTips', { n: res.removed - 1 }) : '') + '.';
             }
 
             if (boneAddBtn) boneAddBtn.addEventListener('click', rigAddBonePrompt);
@@ -16827,7 +17435,7 @@ async function voxelizeScene(gltfScene, options) {
             if (ikToggleBtn) ikToggleBtn.addEventListener('click', () => {
                 if (!ikActive) {
                     if (!rigToolsReady()) return;
-                    if (!skeleton || !rigPreviewActive) { alert('Attiva prima l\'anteprima del rig (Mostra rig).'); return; }
+                    if (!skeleton || !rigPreviewActive) { alert(t('rigTools.needPreview')); return; }
                     if (weightPaintActive) setWeightPaint(false);
                     if (selectedBoneIndex < 0) {
                         const f = firstSelectableBone();
@@ -16835,13 +17443,13 @@ async function voxelizeScene(gltfScene, options) {
                     }
                     ikActive = true;
                     ikToggleBtn.classList.add('active');
-                    if (ikHintEl) ikHintEl.textContent = 'Trascina la mano, il piede o l\'osso che vuoi puntare: la catena lo segue.';
-                    if (rigHint) rigHint.textContent = 'IK attiva: trascina con il tasto sinistro l\'estremita\' dell\'arto verso il punto voluto. '
+                    if (ikHintEl) ikHintEl.textContent = t('rigTools.ikDragHint');
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOn') + ' '
                         + 'Ogni trascinamento e\' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire.';
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
-                    if (rigHint) rigHint.textContent = 'IK disattivata: [R] ruota, [G] sposta l\'articolazione.';
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOff');
                 }
                 if (typeof requestRender === 'function') requestRender();
             });
@@ -16927,7 +17535,7 @@ async function voxelizeScene(gltfScene, options) {
                 const res = poseForBones(entry.pose, rig.bones);
                 if (!res.applied) {
                     dropLastHistory();
-                    alert('Nessun osso in comune con la posa "' + entry.name + '": serve uno scheletro con gli stessi nomi.');
+                    alert(t('rigTools.poseNoCommonBones', { name: entry.name }));
                     return;
                 }
                 rigSetEffectivePose(res.pose);
@@ -16941,7 +17549,7 @@ async function voxelizeScene(gltfScene, options) {
                 const list = poseLibLoad();
                 const entry = list[idx];
                 if (!entry) return;
-                if (!confirm('Eliminare la posa "' + entry.name + '" dalla libreria?')) return;
+                if (!confirm(t('rigTools.poseDeleteConfirm', { name: entry.name }))) return;
                 list.splice(idx, 1);
                 poseLibSave(list);
                 renderPoseLib();
@@ -16960,17 +17568,17 @@ async function voxelizeScene(gltfScene, options) {
                     label.className = 'pose-lib-name';
                     label.style.cssText = 'flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
                     label.textContent = entry.name;
-                    label.title = Object.keys(entry.pose || {}).length + ' ossa nella posa';
+                    label.title = t('rigTools.poseBoneCount', { n: Object.keys(entry.pose || {}).length });
                     const use = document.createElement('button');
                     use.className = 'btn btn-secondary';
                     use.style.cssText = 'padding:5px 10px; font-size:11px;';
-                    use.textContent = 'Applica';
+                    use.textContent = t('rigTools.poseApply');
                     use.addEventListener('click', () => applyPoseFromLib(idx));
                     const del = document.createElement('button');
                     del.className = 'btn btn-secondary';
                     del.style.cssText = 'padding:5px 9px; font-size:12px; line-height:1;';
                     del.textContent = '×';
-                    del.title = 'Elimina questa posa';
+                    del.title = t('rigTools.poseDelete');
                     del.addEventListener('click', () => deletePoseFromLib(idx));
                     row.appendChild(label);
                     row.appendChild(use);
@@ -16984,8 +17592,8 @@ async function voxelizeScene(gltfScene, options) {
                 const pose = rigEffectivePose();
                 const names = Object.keys(pose || {}).filter(k => Array.isArray(pose[k])
                     && pose[k].some(v => Math.abs(Number(v) || 0) > 1e-4));
-                if (!names.length) { alert('La posa e\' a zero: muovi qualche osso prima di salvarla.'); return; }
-                const answer = prompt('Nome della posa da salvare:', 'Posa ' + (poseLibLoad().length + 1));
+                if (!names.length) { alert(t('rigTools.poseIsZero')); return; }
+                const answer = prompt(t('rigTools.poseSavePrompt'), t('rigTools.poseDefaultName', { n: poseLibLoad().length + 1 }));
                 if (answer === null) return;
                 const name = String(answer).trim();
                 if (!name) return;
@@ -19223,6 +19831,49 @@ async function voxelizeScene(gltfScene, options) {
                 activeMaterialId = id || null;
             }
 
+            // Cosa si sta posando adesso. Unico punto da cui l'editing lo legge:
+            // finche' passa da qui, la mutua esclusione non puo' essere aggirata.
+            //
+            // `materialById` e non il solo id: se la definizione e' stata cancellata
+            // sotto i piedi, posare '@m9' creerebbe voxel orfani a tavolino invece
+            // che per un incidente di caricamento.
+            function activeToken() {
+                if (activeMaterialId && materialById(activeMaterialId)) return '@' + activeMaterialId;
+                return (typeof activeColorHex === 'string' && activeColorHex)
+                    ? activeColorHex.toUpperCase() : MATERIAL_FALLBACK_COLOR;
+            }
+
+            // Evidenza sulla scheda del materiale attivo e colore "smorzato" quando un
+            // materiale ha la precedenza. Smorzato con una classe, NON disabled: l'input
+            // deve restare cliccabile, perche' cliccarlo e' proprio il modo per tornare
+            // al colore.
+            function refreshMaterialSelectionUI() {
+                const panel = document.getElementById('materialsPanel');
+                if (panel) {
+                    panel.querySelectorAll('.material-card').forEach(el => {
+                        el.classList.toggle('active', el.dataset.materialId === activeMaterialId);
+                    });
+                }
+                const swatchRow = document.getElementById('activeColorRow');
+                if (swatchRow) swatchRow.classList.toggle('muted-by-material', !!activeMaterialId);
+                const label = document.getElementById('activeMaterialName');
+                if (label) {
+                    const def = activeMaterialId ? materialById(activeMaterialId) : null;
+                    label.textContent = def ? def.name : '';
+                }
+            }
+
+            // Contraltare della mutua esclusione che setActiveColor (11-symmetry-tools.js)
+            // applica dall'altro lato: seleziona il materiale e riallinea l'interfaccia.
+            // `activeColorHex` NON viene toccato di proposito -- il colore resta quello
+            // che era, solo scavalcato da activeToken(). E' questo che rende il clic
+            // sulla swatch del colore una via di ritorno funzionante invece di un valore
+            // da reinventare.
+            function setActiveMaterialAndSync(id) {
+                setActiveMaterial(id);
+                if (typeof refreshMaterialSelectionUI === 'function') refreshMaterialSelectionUI();
+            }
+
             // --- import della texture --------------------------------------------
 
             // Il lato lungo comanda, l'altro segue in proporzione, minimo 1 pixel.
@@ -19280,6 +19931,11 @@ async function voxelizeScene(gltfScene, options) {
             // sulla GPU a ogni tratto) invece di riusarla.
             let _materialCache = new Map();
 
+            // QUANDO va chiamata (il contratto, altrimenti si vede una texture
+            // vecchia): dopo aver modificato o eliminato un materiale, e a ogni
+            // cambio di oggetto/progetto. La chiave contiene il token, non
+            // l'identita' dell'oggetto: due oggetti diversi che usano '@m1' con
+            // definizioni diverse si spartirebbero la prima istanza costruita.
             function clearMaterialCache() {
                 _materialCache.forEach(m => {
                     if (m.map && m.map.dispose) m.map.dispose();
@@ -19291,17 +19947,29 @@ async function voxelizeScene(gltfScene, options) {
             // `opts.color` e' il colore PROPRIO del voxel, usato solo quando il token
             // e' un materiale che non esiste (piu'). Serve perche' decodeToken senza
             // secondo argomento degrada al grigio neutro: un .voxai aperto senza le
-            // sue definizioni uscirebbe tutto grigio invece che a tinte piatte. Entra
-            // anche nella chiave di cache, o due orfani di colore diverso si
-            // spartirebbero lo stesso materiale (il primo vincerebbe per sempre).
+            // sue definizioni uscirebbe tutto grigio invece che a tinte piatte.
+            //
+            // La CHIAVE di cache si costruisce sul colore RISOLTO (dec.color), non su
+            // opts.color grezzo. Tre ragioni, tutte misurate:
+            //   - opts.color e' arbitrario e non validato, quindi puo' contenere il
+            //     separatore: threeMaterialFor('#AABBCC', {color: '#AABBCC|w'})
+            //     produceva la stessa chiave della variante wireframe e restituiva un
+            //     materiale WIREFRAME a chi ne chiedeva uno pieno;
+            //   - su un materiale che esiste il fallback e' irrilevante per l'aspetto,
+            //     quindi tenerlo nella chiave moltiplicava le istanze (una per tinta
+            //     dei voxel) di un materiale visivamente identico;
+            //   - dec.color e' gia' hex maiuscolo validato, quindi '#aabbcc' e
+            //     '#AABBCC' non spaccano piu' la cache in due.
+            // Sull'ORFANO dec.color vale il fallback, quindi resta la distinzione che
+            // serve davvero: due orfani di colore diverso NON si spartiscono un
+            // materiale (il primo vincerebbe per sempre).
             function threeMaterialFor(token, opts) {
                 const wire = !!(opts && opts.wireframe);
-                const fallback = (opts && opts.color) || '';
-                const key = token + '|' + fallback + (wire ? '|w' : '');
+                const dec = decodeToken(token, (opts && opts.color) || '');
+                const key = token + '|' + dec.color + (wire ? '|w' : '');
                 const hit = _materialCache.get(key);
                 if (hit) return hit;
 
-                const dec = decodeToken(token, fallback);
                 // materialById, non `dec.material` : su un orfano l'id resta valorizzato
                 // (e' voluto, vedi decodeToken) ma la definizione non c'e'.
                 const def = materialById(dec.material);
@@ -19329,9 +19997,191 @@ async function voxelizeScene(gltfScene, options) {
                     // Col map, `color` moltiplica la texture: bianco = texture pura.
                     mat.color = new THREE.Color(0xffffff);
                 }
+                // `shared`: questo materiale e' CACHATO e vive in piu' mesh. Chi
+                // distrugge un mesh (disposeMesh) deve saltarlo, altrimenti il primo
+                // colore ripulito porta con se' la texture di tutti gli altri.
+                // Liberarli e' compito di clearMaterialCache, l'unico proprietario.
+                mat.userData.shared = true;
                 _materialCache.set(key, mat);
                 return mat;
             }
+
+            // --- UI del pannello ---------------------------------------------------
+            // Il modulo viene caricato anche FUORI da una pagina: i test lo eseguono
+            // con new Function per provare lo store e i token, passando un `document`
+            // ridotto o nessuno. Si controllano i METODI che servono davvero, non
+            // l'esistenza dell'oggetto.
+            function hasPanelDom() {
+                return typeof document !== 'undefined' && !!document
+                    && typeof document.getElementById === 'function'
+                    && typeof document.createElement === 'function';
+            }
+
+            // La scheda mostra la texture (o la tinta piatta se non c'e'), il nome e,
+            // sui materiali del progetto, una X per eliminarlo. Il click destro fa lo
+            // stesso, ma da solo non basterebbe: su un pannello non si scopre.
+            function materialCardEl(def, onClick) {
+                const el = document.createElement('div');
+                el.className = 'material-card';
+                el.dataset.materialId = def.id;
+                el.style.backgroundColor = def.color;
+                if (def.texture && def.texture.data) el.style.backgroundImage = `url(${def.texture.data})`;
+                const nm = document.createElement('div');
+                nm.className = 'material-card-name';
+                nm.textContent = def.name;
+                el.appendChild(nm);
+                el.addEventListener('click', onClick);
+                return el;
+            }
+
+            // Elimina chiedendo conferma, poi svuota la cache e ridisegna: i voxel che
+            // citavano l'id restano, diventano orfani e tornano da soli a tinta unita
+            // (vedi decodeToken). Senza clearMaterialCache continuerebbero a mostrare
+            // la texture del materiale appena eliminato.
+            function deleteMaterialFromPanel(def) {
+                if (!confirm(t('materials.confirmDelete', { name: def.name }))) return;
+                removeMaterial(def.id);
+                clearMaterialCache();
+                renderMaterialsPanel();
+                if (typeof buildModel === 'function') buildModel(false);
+            }
+
+            function renderMaterialsPanel() {
+                if (!hasPanelDom()) return;
+                const grid = document.getElementById('materialsGrid');
+                if (!grid) return;
+                const list = materialsOfProject();
+                grid.innerHTML = '';
+                list.forEach(def => {
+                    const el = materialCardEl(def, () => setActiveMaterialAndSync(def.id));
+                    el.title = def.name;
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'material-card-del';
+                    del.textContent = '×';
+                    del.title = t('materials.deleteTitle');
+                    // stopPropagation: il bottone sta DENTRO la scheda, quindi senza
+                    // questo il click selezionerebbe anche il materiale che si sta
+                    // eliminando.
+                    del.addEventListener('click', ev => { ev.stopPropagation(); deleteMaterialFromPanel(def); });
+                    el.appendChild(del);
+                    el.addEventListener('contextmenu', ev => { ev.preventDefault(); deleteMaterialFromPanel(def); });
+                    grid.appendChild(el);
+                });
+                const empty = document.getElementById('materialsEmpty');
+                if (empty) empty.style.display = list.length ? 'none' : '';
+                renderMaterialLibrary();
+                refreshMaterialSelectionUI();
+            }
+
+            // --- libreria personale -------------------------------------------------
+            // Vive in localStorage, non nel progetto: serve a riusare un materiale FRA
+            // progetti diversi. E' un comfort, non un dato critico - se il browser la
+            // rifiuta si va avanti in silenzio.
+            function loadMaterialLibrary() {
+                try {
+                    const raw = localStorage.getItem(MATERIAL_LIB_KEY);
+                    const arr = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(arr) ? arr : [];
+                } catch (e) { return []; }
+            }
+
+            function saveMaterialLibrary(arr) {
+                try { localStorage.setItem(MATERIAL_LIB_KEY, JSON.stringify(arr.slice(0, MATERIAL_LIB_MAX))); }
+                catch (e) { /* quota piena: la libreria e' un comfort, non un dato critico */ }
+            }
+
+            function renderMaterialLibrary() {
+                if (!hasPanelDom()) return;
+                const grid = document.getElementById('materialLibraryGrid');
+                if (!grid) return;
+                const lib = loadMaterialLibrary();
+                grid.innerHTML = '';
+                lib.forEach((def, i) => {
+                    const el = materialCardEl(def, () => {
+                        // Importare RINUMERA: due progetti diversi possono aver usato m1
+                        // per materiali diversi, e tenere l'id di origine legherebbe la
+                        // copia al materiale gia' presente invece di aggiungerne uno.
+                        const copia = addMaterial(Object.assign({}, def, { id: null }));
+                        clearMaterialCache();
+                        renderMaterialsPanel();
+                        setActiveMaterialAndSync(copia.id);
+                    });
+                    el.title = t('materials.importFromLibrary') + ': ' + def.name;
+                    const del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'material-card-del';
+                    del.textContent = '×';
+                    del.title = t('materials.deleteTitle');
+                    del.addEventListener('click', ev => {
+                        ev.stopPropagation();
+                        const cur = loadMaterialLibrary();
+                        cur.splice(i, 1);
+                        saveMaterialLibrary(cur);
+                        renderMaterialLibrary();
+                    });
+                    el.appendChild(del);
+                    grid.appendChild(el);
+                });
+                const empty = document.getElementById('materialLibraryEmpty');
+                if (empty) empty.style.display = lib.length ? 'none' : '';
+            }
+
+            (function initMaterialsPanel() {
+                // Fuori da una pagina non c'e' niente da agganciare: vedi hasPanelDom.
+                if (!hasPanelDom()) return;
+                const newBtn = document.getElementById('newMaterialBtn');
+                const form = document.getElementById('materialForm');
+                if (!newBtn || !form) return;   // pagina senza il pannello (es. settings.html)
+                let pendingTexture = null;
+
+                newBtn.addEventListener('click', () => {
+                    form.style.display = (form.style.display === 'none') ? 'flex' : 'none';
+                });
+                document.getElementById('materialCancelBtn').addEventListener('click', () => {
+                    form.style.display = 'none';
+                    pendingTexture = null;
+                });
+                document.getElementById('materialTextureInput').addEventListener('change', async e => {
+                    const f = e.target.files && e.target.files[0];
+                    if (!f) { pendingTexture = null; return; }
+                    // Il messaggio di importTextureFile e' tecnico e in inglese: si
+                    // mostra il nostro, tradotto.
+                    try { pendingTexture = await importTextureFile(f); }
+                    catch (err) { pendingTexture = null; alert(t('materials.textureError')); }
+                });
+                document.getElementById('materialCreateBtn').addEventListener('click', () => {
+                    const name = (document.getElementById('materialName').value || '').trim();
+                    if (!name) { alert(t('materials.nameRequired')); return; }
+                    const def = addMaterial({
+                        name: name,
+                        texture: pendingTexture ? { data: pendingTexture.data, w: pendingTexture.w, h: pendingTexture.h } : null,
+                        // Senza texture il materiale e' una tinta unita col colore
+                        // attivo: e' comunque utile per ruvidita'/metallicita'/emissivo.
+                        color: pendingTexture ? pendingTexture.color
+                            : (typeof activeColorHex === 'string' ? activeColorHex : MATERIAL_FALLBACK_COLOR),
+                        roughness: parseFloat(document.getElementById('materialRoughness').value),
+                        metalness: parseFloat(document.getElementById('materialMetalness').value),
+                        emissive: parseFloat(document.getElementById('materialEmissive').value)
+                    });
+                    const lib = loadMaterialLibrary();
+                    if (lib.length < MATERIAL_LIB_MAX) {
+                        // Copia, non l'oggetto vivo: il materiale del progetto puo'
+                        // essere modificato o eliminato, la voce in libreria no.
+                        lib.push(JSON.parse(JSON.stringify(def)));
+                        saveMaterialLibrary(lib);
+                    } else {
+                        alert(t('materials.libraryFull', { max: MATERIAL_LIB_MAX }));
+                    }
+                    form.style.display = 'none';
+                    document.getElementById('materialName').value = '';
+                    document.getElementById('materialTextureInput').value = '';
+                    pendingTexture = null;
+                    renderMaterialsPanel();
+                    setActiveMaterialAndSync(def.id);
+                });
+                renderMaterialsPanel();
+            })();
 
             const clock = new THREE.Clock();
 

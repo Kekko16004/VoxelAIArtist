@@ -920,6 +920,67 @@
             box-shadow: var(--shadow-soft);
         }
 
+        /* Scheda di un materiale. image-rendering: pixelated perche' una texture
+           voxel e' piccola e va vista a pixel netti, come nel viewer (NearestFilter). */
+        .material-card {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: var(--radius-sm);
+            border: 2px solid transparent;
+            background-size: cover;
+            image-rendering: pixelated;
+            cursor: pointer;
+        }
+
+        .material-card.active {
+            border-color: var(--accent-primary);
+        }
+
+        .material-card .material-card-name {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            font-size: 9px;
+            text-align: center;
+            background: rgba(0, 0, 0, .55);
+            border-radius: 0 0 4px 4px;
+            padding: 1px 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* La X di eliminazione, in alto a destra sulla scheda. */
+        .material-card .material-card-del {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 16px;
+            height: 16px;
+            line-height: 14px;
+            padding: 0;
+            font-size: 12px;
+            color: #fff;
+            background: rgba(0, 0, 0, .55);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .material-card:hover .material-card-del,
+        .material-card .material-card-del:focus {
+            opacity: 1;
+        }
+
+        /* Colore attivo scavalcato da un materiale: SMORZATO, non disabilitato.
+           Cliccarlo e' proprio il modo per tornare al colore. */
+        .muted-by-material {
+            opacity: .45;
+        }
+
         /* Tool selector (Edit modes) */
         .tool-grid {
             display: grid;
@@ -2518,6 +2579,50 @@
                             <button class="btn btn-secondary" id="redoBtn" disabled
                                 style="padding:8px; font-size:12px;">↷ Ripeti</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ===== Materiali (texture su tutte e 6 le facce) ===== -->
+                <div>
+                    <div class="section-title" data-i18n="materials.sectionTitle">Materiali</div>
+                    <div class="controls-group glass" id="materialsPanel" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+                        <div style="font-size:11px; color:var(--text-muted, #9ca3af); line-height:1.4;"
+                            data-i18n="materials.hint">
+                            Un materiale applica la stessa texture a tutte e 6 le facce del voxel. Selezionarne uno disattiva il colore attivo.
+                        </div>
+                        <div id="materialsGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
+                        <p id="materialsEmpty" style="font-size:11px; color:var(--text-secondary); margin:0;"
+                            data-i18n="materials.empty">Nessun materiale. Creane uno per usare le texture.</p>
+                        <button class="btn btn-secondary" id="newMaterialBtn" style="padding:8px; font-size:12px;"
+                            data-i18n="materials.new">+ Nuovo materiale</button>
+                        <div id="materialForm" style="display:none; flex-direction:column; gap:8px;">
+                            <input type="text" id="materialName" class="text-input"
+                                data-i18n-placeholder="materials.namePlaceholder" placeholder="Nome del materiale">
+                            <input type="file" id="materialTextureInput" accept="image/*" style="font-size:11px;"
+                                data-i18n-title="materials.chooseFile" title="Scegli immagine">
+                            <div class="control-row">
+                                <label data-i18n="materials.roughness">Ruvidita</label>
+                                <input type="range" id="materialRoughness" min="0" max="1" step="0.05" value="0.6">
+                            </div>
+                            <div class="control-row">
+                                <label data-i18n="materials.metalness">Metallicita</label>
+                                <input type="range" id="materialMetalness" min="0" max="1" step="0.05" value="0">
+                            </div>
+                            <div class="control-row">
+                                <label data-i18n="materials.emissive">Emissivo</label>
+                                <input type="range" id="materialEmissive" min="0" max="1" step="0.05" value="0">
+                            </div>
+                            <div class="btn-group" style="grid-template-columns:1fr 1fr;">
+                                <button class="btn btn-primary" id="materialCreateBtn" style="padding:8px; font-size:12px;"
+                                    data-i18n="materials.create">Crea</button>
+                                <button class="btn btn-secondary" id="materialCancelBtn" style="padding:8px; font-size:12px;"
+                                    data-i18n="materials.cancel">Annulla</button>
+                            </div>
+                        </div>
+                        <div class="section-title" style="font-size:11px; margin-top:4px;" data-i18n="materials.library">Libreria personale</div>
+                        <div id="materialLibraryGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px;"></div>
+                        <p id="materialLibraryEmpty" style="font-size:11px; color:var(--text-secondary); margin:0;"
+                            data-i18n="materials.libraryEmpty">La libreria e vuota.</p>
                     </div>
                 </div>
 

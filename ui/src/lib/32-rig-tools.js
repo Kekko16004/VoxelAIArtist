@@ -236,10 +236,10 @@
                 if (!rigData || !rigData.bones || !rigData.bones[index]) return 'Osso inesistente.';
                 const bd = rigData.bones[index];
                 const name = String(newName == null ? '' : newName).trim().replace(/\s+/g, '_');
-                if (!name) return 'Il nome non puo\' essere vuoto.';
+                if (!name) return t('rigTools.nameEmpty');
                 if (!/^[A-Za-z0-9_.\-]+$/.test(name)) return 'Usa solo lettere, numeri, _ . e -';
                 if (name === bd.name) return null;
-                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return 'Nome gia\' usato da un altro osso.';
+                if (rigData.bones.some((o, i) => i !== index && o.name === name)) return t('rigTools.nameTaken');
                 const old = bd.name;
                 bd.name = name;
                 if (rigData.pose && rigData.pose[old] !== undefined) {
@@ -415,7 +415,7 @@
             // Le ossa _L stanno a x BASSA e le _R a x alta (vedi buildHumanoidSkeleton).
             let mirrorDir = 'LtoR';          // 'LtoR' | 'RtoL' | 'both'
             function mirrorDirLabel() {
-                return mirrorDir === 'RtoL' ? 'R -> L' : mirrorDir === 'both' ? 'scambio dei lati' : 'L -> R';
+                return mirrorDir === 'RtoL' ? 'R -> L' : mirrorDir === 'both' ? t('rigTools.mirrorSwap') : 'L -> R';
             }
 
             function rigToolsReady() {
@@ -485,13 +485,13 @@
                 const res = mirrorPoseData(rig.bones, rigEffectivePose(), mirrorDir);
                 if (!res.changed) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Nessuna posa da specchiare (' + mirrorDirLabel() + '): le ossa gemelle non esistono o sono a zero.';
+                    if (rigHint) rigHint.textContent = t('rigTools.mirrorPoseNone', { dir: mirrorDirLabel() });
                     return;
                 }
                 rigSetEffectivePose(res.pose);
                 stashRigToActiveObject();
                 refreshPoseUI();
-                if (rigHint) rigHint.textContent = 'Posa specchiata su X (' + mirrorDirLabel() + '): ' + res.changed + ' ossa aggiornate.';
+                if (rigHint) rigHint.textContent = t('rigTools.mirrorPoseOk', { dir: mirrorDirLabel(), n: res.changed });
             });
 
             // --- Idea 1: specchia pesi dipinti ---
@@ -502,13 +502,13 @@
                 const res = mirrorWeightsData(voxels, rig.bones, rig.weights, mirrorDir);
                 if (!res.copied) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Nessuna correzione da specchiare (' + mirrorDirLabel() + '): dipingi prima un lato.';
+                    if (rigHint) rigHint.textContent = t('rigTools.mirrorWeightsNone', { dir: mirrorDirLabel() });
                     return;
                 }
                 rig.weights = res.weights;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Pesi specchiati (' + mirrorDirLabel() + '): ' + res.copied + ' voxel'
-                    + (res.skipped ? ', ' + res.skipped + ' senza gemello' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.mirrorWeightsOk', { dir: mirrorDirLabel(), n: res.copied })
+                    + (res.skipped ? t('rigTools.mirrorWeightsSkipped', { n: res.skipped }) : '') + '.';
             });
 
             // --- Idea 2: simmetrizza lo scheletro ---
@@ -519,14 +519,13 @@
                 const res = symmetrizeBonesData(rig.bones, voxels, mirrorDir);
                 if (!res.moved && !res.centred) {
                     dropLastHistory();
-                    if (rigHint) rigHint.textContent = 'Scheletro gia\' simmetrico su X.';
+                    if (rigHint) rigHint.textContent = t('rigTools.symAlready');
                     return;
                 }
                 rig.bones = res.bones;
                 rebuildRigPreserving(selectedBoneIndex);
-                if (rigHint) rigHint.textContent = 'Scheletro simmetrizzato (' + mirrorDirLabel() + '): ' + res.moved
-                    + ' ossa spostate, ' + res.pairs + ' coppie L/R'
-                    + (res.centred ? ', ' + res.centred + ' ossa centrali riallineate' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.symOk', { dir: mirrorDirLabel(), n: res.moved, pairs: res.pairs })
+                    + (res.centred ? t('rigTools.symCentred', { n: res.centred }) : '') + '.';
             });
 
             // --- Idea 4: aggiungi / rinomina / elimina ossa (sopra lo scheletro automatico) ---
@@ -538,21 +537,20 @@
             function rigAddBonePrompt() {
                 if (!rigToolsReady()) return;
                 const pi = rigSelectedIndex();
-                if (pi < 0) { alert('Seleziona prima l\'osso genitore nella lista.'); return; }
+                if (pi < 0) { alert(t('rigTools.pickParentFirst')); return; }
                 const parentName = rig.bones[pi].name;
                 const suggested = uniqueBoneName(rig.bones, parentName + '_extra');
-                const answer = prompt('Nome del nuovo osso (figlio di ' + parentName + '):', suggested);
+                const answer = prompt(t('rigTools.newBonePrompt', { parent: parentName }), suggested);
                 if (answer === null) return;
                 const name = String(answer).trim().replace(/\s+/g, '_');
                 if (!name) return;
-                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) { alert('Usa solo lettere, numeri, _ . e -'); return; }
-                if (rig.bones.some(o => o.name === name)) { alert('Nome gia\' usato da un altro osso.'); return; }
+                if (!/^[A-Za-z0-9_.\-]+$/.test(name)) { alert(t('rigTools.nameCharset')); return; }
+                if (rig.bones.some(o => o.name === name)) { alert(t('rigTools.nameTaken')); return; }
                 pushHistory();
                 const idx = rigAddChildBone(rig, pi, name);
                 if (idx < 0) { dropLastHistory(); return; }
                 rebuildRigPreserving(idx);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" aggiunto sotto ' + parentName
-                    + '. Con [G] sposti la sua articolazione, poi assegnagli i voxel con la pittura pesi.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneAdded', { name: name, parent: parentName });
             }
 
             function rigRenameBonePrompt(index) {
@@ -560,7 +558,7 @@
                 const i = (index === undefined || index < 0) ? rigSelectedIndex() : index;
                 const bd = rig.bones[i];
                 if (!bd) return;
-                const answer = prompt('Nuovo nome per "' + bd.name + '":', bd.name);
+                const answer = prompt(t('rigTools.renamePrompt', { name: bd.name }), bd.name);
                 if (answer === null) return;
                 const before = bd.name;
                 pushHistory();
@@ -568,8 +566,7 @@
                 if (err) { dropLastHistory(); alert(err); return; }
                 if (rig.bones[i].name === before) { dropLastHistory(); return; }
                 rebuildRigPreserving(i);
-                if (rigHint) rigHint.textContent = 'Osso rinominato: ' + before + ' -> ' + rig.bones[i].name
-                    + ' (posa, pesi e animazioni aggiornati).';
+                if (rigHint) rigHint.textContent = t('rigTools.boneRenamed', { before: before, after: rig.bones[i].name });
             }
 
             function rigDeleteBonePrompt() {
@@ -578,17 +575,17 @@
                 const bd = rig.bones[i];
                 if (!bd) return;
                 const children = rig.bones.filter(o => o.parent === i && !o.helper).length;
-                let msg = 'Eliminare l\'osso "' + bd.name + '"?';
-                if (children) msg += '\n' + children + ' ossa figlie passeranno al suo genitore.';
-                msg += '\nI voxel che gli erano assegnati torneranno all\'osso piu\' vicino.';
+                let msg = t('rigTools.deleteConfirm', { name: bd.name });
+                if (children) msg += '\n' + t('rigTools.deleteChildren', { n: children });
+                msg += '\n' + t('rigTools.deleteVoxels');
                 if (!confirm(msg)) return;
                 pushHistory();
                 const res = rigDeleteBone(rig, i);
                 if (res.error) { dropLastHistory(); alert(res.error); return; }
                 const name = bd.name;
                 rebuildRigPreserving(res.select);
-                if (rigHint) rigHint.textContent = 'Osso "' + name + '" eliminato'
-                    + (res.removed > 1 ? ' (con ' + (res.removed - 1) + ' punta/e helper)' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.boneDeleted', { name: name })
+                    + (res.removed > 1 ? t('rigTools.boneDeletedTips', { n: res.removed - 1 }) : '') + '.';
             }
 
             if (boneAddBtn) boneAddBtn.addEventListener('click', rigAddBonePrompt);
@@ -725,7 +722,7 @@
             if (ikToggleBtn) ikToggleBtn.addEventListener('click', () => {
                 if (!ikActive) {
                     if (!rigToolsReady()) return;
-                    if (!skeleton || !rigPreviewActive) { alert('Attiva prima l\'anteprima del rig (Mostra rig).'); return; }
+                    if (!skeleton || !rigPreviewActive) { alert(t('rigTools.needPreview')); return; }
                     if (weightPaintActive) setWeightPaint(false);
                     if (selectedBoneIndex < 0) {
                         const f = firstSelectableBone();
@@ -733,13 +730,13 @@
                     }
                     ikActive = true;
                     ikToggleBtn.classList.add('active');
-                    if (ikHintEl) ikHintEl.textContent = 'Trascina la mano, il piede o l\'osso che vuoi puntare: la catena lo segue.';
-                    if (rigHint) rigHint.textContent = 'IK attiva: trascina con il tasto sinistro l\'estremita\' dell\'arto verso il punto voluto. '
+                    if (ikHintEl) ikHintEl.textContent = t('rigTools.ikDragHint');
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOn') + ' '
                         + 'Ogni trascinamento e\' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire.';
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
-                    if (rigHint) rigHint.textContent = 'IK disattivata: [R] ruota, [G] sposta l\'articolazione.';
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOff');
                 }
                 if (typeof requestRender === 'function') requestRender();
             });
@@ -825,7 +822,7 @@
                 const res = poseForBones(entry.pose, rig.bones);
                 if (!res.applied) {
                     dropLastHistory();
-                    alert('Nessun osso in comune con la posa "' + entry.name + '": serve uno scheletro con gli stessi nomi.');
+                    alert(t('rigTools.poseNoCommonBones', { name: entry.name }));
                     return;
                 }
                 rigSetEffectivePose(res.pose);
@@ -839,7 +836,7 @@
                 const list = poseLibLoad();
                 const entry = list[idx];
                 if (!entry) return;
-                if (!confirm('Eliminare la posa "' + entry.name + '" dalla libreria?')) return;
+                if (!confirm(t('rigTools.poseDeleteConfirm', { name: entry.name }))) return;
                 list.splice(idx, 1);
                 poseLibSave(list);
                 renderPoseLib();
@@ -858,17 +855,17 @@
                     label.className = 'pose-lib-name';
                     label.style.cssText = 'flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
                     label.textContent = entry.name;
-                    label.title = Object.keys(entry.pose || {}).length + ' ossa nella posa';
+                    label.title = t('rigTools.poseBoneCount', { n: Object.keys(entry.pose || {}).length });
                     const use = document.createElement('button');
                     use.className = 'btn btn-secondary';
                     use.style.cssText = 'padding:5px 10px; font-size:11px;';
-                    use.textContent = 'Applica';
+                    use.textContent = t('rigTools.poseApply');
                     use.addEventListener('click', () => applyPoseFromLib(idx));
                     const del = document.createElement('button');
                     del.className = 'btn btn-secondary';
                     del.style.cssText = 'padding:5px 9px; font-size:12px; line-height:1;';
                     del.textContent = '×';
-                    del.title = 'Elimina questa posa';
+                    del.title = t('rigTools.poseDelete');
                     del.addEventListener('click', () => deletePoseFromLib(idx));
                     row.appendChild(label);
                     row.appendChild(use);
@@ -882,8 +879,8 @@
                 const pose = rigEffectivePose();
                 const names = Object.keys(pose || {}).filter(k => Array.isArray(pose[k])
                     && pose[k].some(v => Math.abs(Number(v) || 0) > 1e-4));
-                if (!names.length) { alert('La posa e\' a zero: muovi qualche osso prima di salvarla.'); return; }
-                const answer = prompt('Nome della posa da salvare:', 'Posa ' + (poseLibLoad().length + 1));
+                if (!names.length) { alert(t('rigTools.poseIsZero')); return; }
+                const answer = prompt(t('rigTools.poseSavePrompt'), t('rigTools.poseDefaultName', { n: poseLibLoad().length + 1 }));
                 if (answer === null) return;
                 const name = String(answer).trim();
                 if (!name) return;
