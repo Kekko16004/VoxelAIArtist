@@ -143,6 +143,14 @@
                                 throw new Error("Il file non è in formato JSON in chiaro né in formato crittografato .voxelai valido.");
                             }
                         }
+                        // Un .voxai e' una BUSTA: {format:"voxai",version,savedAt,data}.
+                        // La scena vera sta in `data`, quindi senza scartarla qui il
+                        // controllo qui sotto non trova ne' objects ne' voxels e il file
+                        // viene rifiutato come "non valido" - cioe' un progetto salvato
+                        // non si riapriva da questa via (openProject senza dialoghi
+                        // nativi passa proprio di qui). 21-project.js scarta gia' la
+                        // busta sui suoi due percorsi.
+                        if (parsed && parsed.format === 'voxai' && parsed.data) parsed = parsed.data;
                         if (parsed && (Array.isArray(parsed.objects) || Array.isArray(parsed.ops) || Array.isArray(parsed.voxels) || (parsed.parts && typeof parsed.parts === 'object'))) {
                             if (!parsed.metadata) parsed.metadata = {};
                             if (!parsed.metadata.name) {

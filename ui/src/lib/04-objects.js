@@ -213,19 +213,39 @@
                     g.scale.set(s, s, s);
 
                     const visible = computeVisibility(voxels);
+                    // Per TOKEN, non per colore: due voxel dello stesso colore ma di
+                    // materiale diverso vogliono due materiali distinti, e senza questo
+                    // un oggetto INATTIVO perdeva le texture (si rivedevano solo
+                    // rendendolo attivo). Si tiene un voxel campione per gruppo, perche'
+                    // su un id orfano serve il suo colore vero.
                     const colorGroups = {};
+                    const sample = {};
                     visible.forEach(v => {
-                        const col = v.color.toUpperCase();
-                        (colorGroups[col] = colorGroups[col] || []).push(v);
+                        const tok = (typeof tokenOf === 'function') ? tokenOf(v) : v.color.toUpperCase();
+                        (colorGroups[tok] = colorGroups[tok] || []).push(v);
+                        if (!sample[tok]) sample[tok] = v;
                     });
                     const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-                    Object.keys(colorGroups).forEach(colorHex => {
-                        const list = colorGroups[colorHex];
-                        const material = new THREE.MeshStandardMaterial({
-                            color: new THREE.Color(colorHex), roughness: 0.2, metalness: 0.1,
-                            wireframe: toggleWireframe.checked,
-                            transparent: true, opacity: 0.9
-                        });
+                    Object.keys(colorGroups).forEach(token => {
+                        const list = colorGroups[token];
+                        // clone(): l'istanza della cache e' CONDIVISA con l'oggetto
+                        // attivo (userData.shared), e qui va resa semitrasparente.
+                        // Mutare quella originale smorzerebbe anche il modello attivo.
+                        let material;
+                        if (typeof threeMaterialFor === 'function') {
+                            material = threeMaterialFor(token, {
+                                wireframe: toggleWireframe.checked,
+                                color: (sample[token] || {}).color
+                            }).clone();
+                            material.userData = {};   // la copia NON e' della cache
+                        } else {
+                            material = new THREE.MeshStandardMaterial({
+                                color: new THREE.Color(token), roughness: 0.2, metalness: 0.1,
+                                wireframe: toggleWireframe.checked
+                            });
+                        }
+                        material.transparent = true;
+                        material.opacity = 0.9;
                         const instMesh = new THREE.InstancedMesh(geometry, material, list.length);
                         const dummy = new THREE.Object3D();
                         list.forEach((v, i) => {
