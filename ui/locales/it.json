@@ -664,5 +664,7 @@
   "prim.info": "{n} voxel, griglia {g}",
   "prim.tooBig": "Troppi voxel ({n}): riduci la dimensione",
   "materials.swatchMaterialTitle": "{name} — clic per usare questo materiale",
-  "materials.swatchColorTitle": "{color} — clic per usarlo come colore attivo"
+  "materials.swatchColorTitle": "{color} — clic per usarlo come colore attivo",
+  "export.glb.failed": "Export GLB non riuscito. I dettagli sono nella console del browser.",
+  "export.glb.texturesDropped": "{n} texture non si sono caricate: il GLB e' stato esportato a tinte piatte."
 }

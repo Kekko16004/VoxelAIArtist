@@ -664,5 +664,7 @@
   "prim.info": "{n} Voxel, Raster {g}",
   "prim.tooBig": "Zu viele Voxel ({n}): Größe verringern",
   "materials.swatchMaterialTitle": "{name} — klicken, um dieses Material zu verwenden",
-  "materials.swatchColorTitle": "{color} — klicken, um es als aktive Farbe zu verwenden"
+  "materials.swatchColorTitle": "{color} — klicken, um es als aktive Farbe zu verwenden",
+  "export.glb.failed": "GLB-Export fehlgeschlagen. Details stehen in der Browser-Konsole.",
+  "export.glb.texturesDropped": "{n} Texturen konnten nicht geladen werden: das GLB wurde mit einfarbigen Flächen exportiert."
 }

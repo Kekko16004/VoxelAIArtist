@@ -51,15 +51,29 @@
             // canvas dimensionato su image.width: chiamato prima del decode scrive un
             // canvas 0x0, cioe' una texture VUOTA. Ogni texture registra qui la sua
             // promessa e `exportGLB` aspetta prima di chiamare l'exporter.
-            const exportTexturePending = [];
+            let exportTexturePending = [];
+            // I materiali d'export a cui e' stata attaccata una texture. Si tiene la
+            // lista invece di ri-attraversare la scena: il root dell'export riggato e'
+            // una SkinnedMesh e quello statico un Group, quindi un traverse dovrebbe
+            // sapere di che forma e' l'albero. Qui i materiali sono nostri per
+            // costruzione, li abbiamo appena creati.
+            let exportTexturedMaterials = [];
 
             function exportTextureFor(def) {
                 if (!def || !def.texture || !def.texture.data) return null;
                 let settle;
                 exportTexturePending.push(new Promise(res => { settle = res; }));
                 // Anche l'errore risolve: un'immagine illeggibile non deve appendere
-                // l'export per sempre, il GLB esce senza quella texture.
-                const tex = new THREE.TextureLoader().load(def.texture.data, settle, undefined, settle);
+                // l'export per sempre, il GLB esce senza quella texture. Ma va anche
+                // MARCATA: risolvere e basta lascia `tex.image` undefined, e a quel
+                // punto il GLTFExporter r128 solleva mentre disegna sul canvas, dentro
+                // un .then() senza .catch(). Misurato: zero download, zero dispose,
+                // `restore()` mai eseguito e nessun errore all'utente - l'export
+                // spariva in silenzio. Vedi dropFailedExportTextures.
+                const tex = new THREE.TextureLoader().load(def.texture.data, settle, undefined, () => {
+                    tex.userData.exportFailed = true;
+                    settle();
+                });
                 // Voxel art: nessuna interpolazione fra i pixel.
                 tex.magFilter = THREE.NearestFilter;
                 tex.minFilter = THREE.NearestFilter;
@@ -99,9 +113,32 @@
                     // deve restare BIANCO, altrimenti la tinta si moltiplica due volte
                     // (stessa trappola dell'invariante 6 sul COLOR_0, vedi CLAUDE.md).
                     m.color = new THREE.Color(0xffffff);
+                    // Se la texture non si decodifica il bianco va disfatto, o il
+                    // modello esce slavato: qui teniamo la tinta vera da rimettere.
+                    m.userData.exportBaseColor = dec.color;
+                    exportTexturedMaterials.push(m);
                 }
                 m.name = token;
                 return m;
+            }
+
+            // Stacca le texture che non si sono decodificate. Senza `image` il
+            // GLTFExporter r128 le disegna su un canvas dimensionato su `image.width`
+            // e SOLLEVA, dentro una catena di promise senza .catch: l'export moriva
+            // muto. Meglio un GLB a tinte piatte che nessun GLB.
+            // Ritorna quante ne ha scartate, cosi' il chiamante puo' avvisare.
+            function dropFailedExportTextures(mats) {
+                let dropped = 0;
+                (mats || []).forEach(m => {
+                    if (!m || !m.map || !m.map.userData || !m.map.userData.exportFailed) return;
+                    if (m.map.dispose) m.map.dispose();
+                    m.map = null;
+                    if (m.userData && m.userData.exportBaseColor) {
+                        m.color = new THREE.Color(m.userData.exportBaseColor).convertSRGBToLinear();
+                    }
+                    dropped++;
+                });
+                return dropped;
             }
 
             function disposeExportMaterial(m) {
@@ -336,7 +373,28 @@
                 // Senza texture la lista e' vuota e Promise.all risolve subito, ma
                 // resta comunque un tick asincrono: nessun percorso dell'export dipende
                 // dal fatto che parse() sia sincrono.
-                Promise.all(exportTexturePending.slice()).then(() => {
+                //
+                // La lista si azzera QUI e non a fine export: e' `applyExportMaterial`
+                // a riempirla mentre si costruisce il modello, quindi svuotarla dopo
+                // butterebbe via le promesse dell'export in corso. Cosi' un export non
+                // eredita le texture del precedente, ne' aspetta le sue.
+                const pending = exportTexturePending;
+                const textured = exportTexturedMaterials;
+                exportTexturePending = [];
+                exportTexturedMaterials = [];
+                // Qualunque cosa vada storta da qui in poi deve comunque rimettere in
+                // piedi la scena e liberare i materiali usa e getta: senza questo
+                // `restore()` il modello resta invisibile a schermo dopo un export
+                // riggato fallito, e le texture d'export non vengono mai disposte.
+                const finish = (err) => {
+                    if (restore) restore();
+                    if (err) {
+                        console.error('[export GLB]', err);
+                        alert(t('export.glb.failed'));
+                    }
+                };
+                Promise.all(pending).then(() => {
+                    const dropped = dropFailedExportTextures(textured);
                     const exporter = new THREE.GLTFExporter();
                     exporter.parse(exportRoot, (result) => {
                         const blob = new Blob([result], { type: 'model/gltf-binary' });
@@ -345,8 +403,11 @@
                         a.download = `${name}.glb`;
                         a.click();
                         URL.revokeObjectURL(a.href);
-                        if (restore) restore();
+                        finish();
+                        // Dopo il download: il file c'e', l'avviso spiega solo perche'
+                        // e' a tinte piatte.
+                        if (dropped) alert(t('export.glb.texturesDropped', { n: dropped }));
                     }, { binary: true, animations, onlyVisible: false });
-                });
+                }).catch(finish);
             }
             document.getElementById('exportGlbBtn').addEventListener('click', exportGLB);

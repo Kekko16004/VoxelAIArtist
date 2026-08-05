@@ -41,16 +41,22 @@ const ok = (c, m) => { if (c) { pass++; console.log('  OK  ' + m); } else { fail
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
 // --- stub DOM ------------------------------------------------------------
+// I download avvenuti: un <a>.click() e' l'unico segno osservabile che il file
+// e' davvero uscito. Serve al gruppo D, dove il difetto era proprio un export
+// che spariva in silenzio.
+const downloads = [];
 const mkEl = () => ({
     textContent: '', innerHTML: '', value: '0', checked: false, disabled: false,
     style: {}, dataset: {}, title: '', children: [], href: '', download: '',
     classList: { add() { }, remove() { }, toggle() { }, contains: () => false },
     addEventListener() { }, appendChild(c) { this.children.push(c); },
-    querySelectorAll: () => [], querySelector: () => null, remove() { }, click() { },
+    querySelectorAll: () => [], querySelector: () => null, remove() { },
+    click() { if (this.download) downloads.push(this.download); },
 });
 global.document = { getElementById: () => mkEl(), createElement: mkEl, addEventListener() { } };
 global.window = { addEventListener() { } };
-global.alert = () => { };
+const alerts = [];
+global.alert = (m) => { alerts.push(m); };
 global.requestRender = () => { };
 global.updateHistoryButtons = () => { };
 global.pushHistory = () => { };
@@ -118,12 +124,21 @@ class Geo {
 // come un canvas 0x0, cioe' una texture vuota).
 const texLoads = [];
 class TextureLoaderStub {
-    load(url, onLoad) {
+    load(url, onLoad, onProgress, onError) {
         const tex = {
             url, magFilter: null, minFilter: null, wrapS: null, wrapT: null,
-            name: '', loaded: false, dispose() { this.disposed = true; },
+            name: '', loaded: false, userData: {}, dispose() { this.disposed = true; },
         };
-        const rec = { tex, settle: () => { tex.loaded = true; if (onLoad) onLoad(tex); } };
+        const rec = {
+            tex,
+            // Il vero loader popola `image` col bitmap decodificato: e' quello che
+            // il GLTFExporter misura per dimensionare il canvas.
+            settle: () => { tex.loaded = true; tex.image = { width: 8, height: 8 }; if (onLoad) onLoad(tex); },
+            // Come il vero TextureLoader su un'immagine illeggibile: `image` resta
+            // undefined e chiama onError. E' il caso che faceva morire l'export in
+            // silenzio.
+            reject: () => { tex.loaded = true; if (onError) onError(new Error('decode fallito')); },
+        };
         texLoads.push(rec);
         return tex;
     }
@@ -167,13 +182,31 @@ global.THREE = {
     AnimationClip: class { constructor(n, d, tr) { this.name = n; this.duration = d; this.tracks = tr; } },
     GLTFExporter: class {
         parse(root, onDone) {
+            // I materiali stanno sul root quando e' una SkinnedMesh (export riggato)
+            // e sui FIGLI quando e' un Group (export statico): guardare solo il root
+            // renderebbe lo stub cieco sul percorso statico.
+            const matsOf = o => !o || !o.material ? []
+                : (Array.isArray(o.material) ? o.material : [o.material]);
+            const mats = matsOf(root);
+            const allMats = mats.concat(...(root.children || []).map(matsOf));
             // Fotografa lo STATO al momento della parse: e' l'unico istante che
             // conta, e le texture non ancora decodificate si vedono solo qui.
             parsedRoots.push({
                 root,
-                mats: (Array.isArray(root.material) ? root.material : (root.material ? [root.material] : [])),
+                mats,
                 hasColorAttr: !!(root.geometry && root.geometry.attributes && root.geometry.attributes.color),
                 pending: texLoads.filter(r => !r.tex.loaded).length,
+            });
+            // Come il vero GLTFExporter r128: per incorporare l'immagine la
+            // disegna su un canvas dimensionato su `image.width`. Su una texture
+            // che non si e' decodificata `image` e' undefined e SOLLEVA. Il
+            // criterio e' l'assenza di `image`, non un marcatore nostro: se
+            // dipendesse da qualcosa che aggiunge il codice sotto esame, il
+            // controllo non potrebbe mai vedere il difetto.
+            allMats.forEach(m => {
+                if (m && m.map && !(m.map.image && m.map.image.width)) {
+                    throw new TypeError("Cannot read properties of undefined (reading 'width')");
+                }
             });
             onDone(new ArrayBuffer(8));
         }
@@ -392,6 +425,50 @@ if (snap) {
     ok(plainMats.length > 0 && plainMats.every(m => !(near(m.color.r, 1) && near(m.color.g, 1) && near(m.color.b, 1))),
         'riggato: i materiali senza texture tengono il loro colore, non diventano bianchi');
 }
+
+// ===== D. la texture che NON si decodifica ==============================
+// Il difetto misurato (review del task 9, C1): una texture illeggibile risolveva
+// comunque la promessa ma lasciava `map.image` undefined, e il GLTFExporter r128
+// sollevava mentre disegnava sul canvas -- dentro un .then() senza .catch().
+// Risultato: zero download, `restore()` mai eseguito (modello invisibile a
+// schermo dopo un export riggato) e NESSUN errore mostrato. Meglio un GLB a
+// tinte piatte che nessun GLB.
+console.log('\n== texture illeggibile: il GLB esce lo stesso, a tinte piatte ==');
+global.currentModelData = freshModel();
+const failApi = new Function(rigSrc + '\n' + matSrc + '\n' + glbSrc + `
+ ;return { exportGLB };`)();
+texLoads.length = 0; parsedRoots.length = 0;
+downloads.length = 0; alerts.length = 0;
+failApi.exportGLB();
+ok(texLoads.length === 1, `una texture in coda (${texLoads.length})`);
+texLoads.forEach(r => r.reject());
+await new Promise(r => setTimeout(r, 0));
+const failRoot = parsedRoots.length ? parsedRoots[parsedRoots.length - 1].root : null;
+
+ok(downloads.length === 1, `il GLB viene scaricato lo stesso (${downloads.length} download)`);
+ok(parsedRoots.length === 1, `il GLTFExporter viene chiamato e non solleva (${parsedRoots.length})`);
+// I materiali si guardano dal mesh, non da `snap.mats`: il root statico e' un
+// Group e non porta `material` addosso.
+const dmesh = failRoot && failRoot.children ? failRoot.children[0] : null;
+const dmats = dmesh ? (Array.isArray(dmesh.material) ? dmesh.material : [dmesh.material]) : [];
+ok(dmats.length > 0 && dmats.every(m => !m.map),
+    `la texture rotta e' stata staccata dal materiale prima della parse (${dmats.length} materiali)`);
+// Il bianco serviva solo a non moltiplicare due volte la tinta SOTTO una
+// texture: caduta la texture, va disfatto o il modello esce slavato.
+const wasTextured = dmats.filter(m => m.name === '@m1');
+ok(wasTextured.length === 1 && !near(wasTextured[0].color.r, 1),
+    `il materiale torna alla sua tinta invece di restare bianco (r=${wasTextured.length ? wasTextured[0].color.r.toFixed(3) : '?'})`);
+ok(alerts.length === 1 && String(alerts[0]).indexOf('export.glb.texturesDropped') === 0,
+    `l'utente viene avvisato, con una chiave i18n (${JSON.stringify(alerts)})`);
+
+// Un secondo export non deve ereditare le promesse del primo: la lista delle
+// texture in attesa e' stato di modulo e va azzerata a ogni export.
+texLoads.length = 0; parsedRoots.length = 0; downloads.length = 0; alerts.length = 0;
+global.currentModelData = { metadata: { name: 'Senza', materials: [] }, voxels: [{ x: 0, y: 0, z: 0, color: '#FF0000' }] };
+failApi.exportGLB();
+await new Promise(r => setTimeout(r, 0));
+ok(downloads.length === 1 && parsedRoots.length === 1,
+    `un export successivo senza texture non resta appeso alle promesse del precedente (${downloads.length} download)`);
 
 console.log(`\n${fail ? 'FALLITI' : 'OK'}: ${pass} controlli passati, ${fail} falliti`);
 process.exit(fail ? 1 : 0);

@@ -664,5 +664,7 @@
   "prim.info": "{n} voxels, grade {g}",
   "prim.tooBig": "Voxels em excesso ({n}): reduza o tamanho",
   "materials.swatchMaterialTitle": "{name} — clique para usar este material",
-  "materials.swatchColorTitle": "{color} — clique para usá-lo como cor ativa"
+  "materials.swatchColorTitle": "{color} — clique para usá-lo como cor ativa",
+  "export.glb.failed": "A exportação GLB falhou. Os detalhes estão na consola do navegador.",
+  "export.glb.texturesDropped": "{n} texturas não carregaram: o GLB foi exportado com cores planas."
 }
