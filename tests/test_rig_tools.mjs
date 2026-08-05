@@ -84,6 +84,10 @@ global.THREE = {
     MathUtils: { degToRad: d => d * Math.PI / 180, radToDeg: r => r * 180 / Math.PI },
 };
 global.scene = { add() { }, remove() { } };
+// `t` esiste sempre nel bundle vero (23-i18n.js sta piu' su nel manifest). Qui
+// torna la chiave con i segnaposto risolti, cosi' un'asserzione puo' leggere
+// SIA la chiave sia i valori che le sono stati passati.
+global.t = (k, vars) => k + (vars ? JSON.stringify(vars) : '');
 
 const rigSrc = fs.readFileSync(path.join(REPO_ROOT, 'ui/src/lib/15-rig.js'), 'latin1');
 const toolsSrc = fs.readFileSync(path.join(REPO_ROOT, 'ui/src/lib/32-rig-tools.js'), 'latin1');

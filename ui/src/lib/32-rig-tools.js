@@ -864,7 +864,7 @@
                     const del = document.createElement('button');
                     del.className = 'btn btn-secondary';
                     del.style.cssText = 'padding:5px 9px; font-size:12px; line-height:1;';
-                    del.textContent = '×';
+                    del.textContent = '\u00D7';
                     del.title = t('rigTools.poseDelete');
                     del.addEventListener('click', () => deletePoseFromLib(idx));
                     row.appendChild(label);
