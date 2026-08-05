@@ -641,7 +641,7 @@
   "rigTools.ikOn": "IK active : fais glisser l'extrémité du membre vers le point voulu avec le bouton gauche.",
   "rigTools.ikOff": "IK désactivée : [R] tourne, [G] déplace l'articulation.",
   "rigTools.poseNoCommonBones": "Aucun os en commun avec la pose « {name} » : il faut un squelette avec les mêmes noms.",
-  "rigTools.poseApplied": "Pose \"{name}\" appliquée à {n} os",
+  "rigTools.poseApplied": "Pose « {name} » appliquée à {n} os",
   "rigTools.poseMissingBones": " ({n} os de la pose n'existent pas ici : {names})",
   "rigTools.poseConfirmDelete": "Supprimer la pose \"{name}\" de la bibliothèque ?",
   "rigTools.poseBoneCount": "{n} os dans la pose",
@@ -649,7 +649,7 @@
   "rigTools.poseZero": "La pose est à zéro : déplace quelques os avant de l'enregistrer.",
   "rigTools.poseSavePrompt": "Nom de la pose à enregistrer :",
   "rigTools.poseDefaultName": "Pose {n}",
-  "rigTools.poseSaved": "Pose \"{name}\" enregistrée ({n} os) : tu peux la réappliquer à tout objet ayant les mêmes noms d'os.",
+  "rigTools.poseSaved": "Pose « {name} » enregistrée ({n} os) : tu peux la réappliquer à n'importe quel objet ayant les mêmes noms d'os.",
   "prim.title": "Ajouter une primitive",
   "prim.cube": "Cube",
   "prim.pyramid": "Pyramide",
@@ -705,5 +705,8 @@
   "rigTools.poseApply": "Appliquer",
   "rigTools.poseDelete": "Supprimer cette pose",
   "rigTools.poseIsZero": "La pose est à zéro : bouge un os avant de l'enregistrer.",
-  "tools.activeColor": "Couleur active"
+  "tools.activeColor": "Couleur active",
+  "rigTools.lastBone": "Il doit rester au moins un os. Utilise Auto-Rig pour refaire le squelette.",
+  "rigTools.needSkeleton": "Crée d'abord un squelette avec Auto-Rig.",
+  "rigTools.ikOnUndo": "Chaque glisser est un seul Ctrl+Z. Appuie à nouveau sur le bouton pour sortir."
 }

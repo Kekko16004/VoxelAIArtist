@@ -641,7 +641,7 @@
   "rigTools.ikOn": "IK attiva: trascina con il tasto sinistro l'estremita' dell'arto verso il punto voluto.",
   "rigTools.ikOff": "IK disattivata: [R] ruota, [G] sposta l'articolazione.",
   "rigTools.poseNoCommonBones": "Nessun osso in comune con la posa “{name}”: serve uno scheletro con gli stessi nomi.",
-  "rigTools.poseApplied": "Posa \"{name}\" applicata a {n} ossa",
+  "rigTools.poseApplied": "Posa “{name}” applicata a {n} ossa",
   "rigTools.poseMissingBones": " ({n} ossa della posa non esistono qui: {names})",
   "rigTools.poseConfirmDelete": "Eliminare la posa \"{name}\" dalla libreria?",
   "rigTools.poseBoneCount": "{n} ossa nella posa",
@@ -649,7 +649,7 @@
   "rigTools.poseZero": "La posa è a zero: muovi qualche osso prima di salvarla.",
   "rigTools.poseSavePrompt": "Nome della posa da salvare:",
   "rigTools.poseDefaultName": "Posa {n}",
-  "rigTools.poseSaved": "Posa \"{name}\" salvata ({n} ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.",
+  "rigTools.poseSaved": "Posa “{name}” salvata ({n} ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.",
   "prim.title": "Aggiungi primitiva",
   "prim.cube": "Cubo",
   "prim.pyramid": "Piramide",
@@ -705,5 +705,8 @@
   "rigTools.poseApply": "Applica",
   "rigTools.poseDelete": "Elimina questa posa",
   "rigTools.poseIsZero": "La posa e' a zero: muovi qualche osso prima di salvarla.",
-  "tools.activeColor": "Colore Attivo"
+  "tools.activeColor": "Colore Attivo",
+  "rigTools.lastBone": "Deve restare almeno un osso. Usa Auto-Rig per rifare lo scheletro.",
+  "rigTools.needSkeleton": "Prima crea uno scheletro con Auto-Rig.",
+  "rigTools.ikOnUndo": "Ogni trascinamento e' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire."
 }

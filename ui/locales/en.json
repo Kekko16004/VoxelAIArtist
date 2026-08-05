@@ -641,7 +641,7 @@
   "rigTools.ikOn": "IK on: drag the tip of the limb towards the target with the left button.",
   "rigTools.ikOff": "IK off: [R] rotates, [G] moves the joint.",
   "rigTools.poseNoCommonBones": "No bone in common with the pose “{name}”: you need a skeleton with the same names.",
-  "rigTools.poseApplied": "Pose \"{name}\" applied to {n} bones",
+  "rigTools.poseApplied": "Pose “{name}” applied to {n} bones",
   "rigTools.poseMissingBones": " ({n} bones of the pose do not exist here: {names})",
   "rigTools.poseConfirmDelete": "Delete the pose \"{name}\" from the library?",
   "rigTools.poseBoneCount": "{n} bones in the pose",
@@ -649,7 +649,7 @@
   "rigTools.poseZero": "The pose is at zero: move some bones before saving it.",
   "rigTools.poseSavePrompt": "Name of the pose to save:",
   "rigTools.poseDefaultName": "Pose {n}",
-  "rigTools.poseSaved": "Pose \"{name}\" saved ({n} bones): you can reapply it to any object with the same bone names.",
+  "rigTools.poseSaved": "Pose “{name}” saved ({n} bones): you can reapply it to any object with the same bone names.",
   "prim.title": "Add primitive",
   "prim.cube": "Cube",
   "prim.pyramid": "Pyramid",
@@ -705,5 +705,8 @@
   "rigTools.poseApply": "Apply",
   "rigTools.poseDelete": "Delete this pose",
   "rigTools.poseIsZero": "The pose is at zero: move a bone before saving it.",
-  "tools.activeColor": "Active colour"
+  "tools.activeColor": "Active colour",
+  "rigTools.lastBone": "At least one bone must remain. Use Auto-Rig to rebuild the skeleton.",
+  "rigTools.needSkeleton": "Create a skeleton with Auto-Rig first.",
+  "rigTools.ikOnUndo": "Each drag is a single Ctrl+Z. Press the button again to exit."
 }

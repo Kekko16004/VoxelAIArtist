@@ -641,7 +641,7 @@
   "rigTools.ikOn": "IK ativa: arrasta a extremidade do membro para o ponto pretendido com o botão esquerdo.",
   "rigTools.ikOff": "IK desativada: [R] roda, [G] move a articulação.",
   "rigTools.poseNoCommonBones": "Nenhum osso em comum com a pose “{name}”: é preciso um esqueleto com os mesmos nomes.",
-  "rigTools.poseApplied": "Pose \"{name}\" aplicada a {n} ossos",
+  "rigTools.poseApplied": "Pose “{name}” aplicada a {n} ossos",
   "rigTools.poseMissingBones": " ({n} ossos da pose não existem aqui: {names})",
   "rigTools.poseConfirmDelete": "Eliminar a pose \"{name}\" da biblioteca?",
   "rigTools.poseBoneCount": "{n} ossos na pose",
@@ -649,7 +649,7 @@
   "rigTools.poseZero": "A pose está a zero: move alguns ossos antes de a guardar.",
   "rigTools.poseSavePrompt": "Nome da pose a guardar:",
   "rigTools.poseDefaultName": "Pose {n}",
-  "rigTools.poseSaved": "Pose \"{name}\" guardada ({n} ossos): podes reaplicá-la a qualquer objeto com os mesmos nomes de ossos.",
+  "rigTools.poseSaved": "Pose “{name}” guardada ({n} ossos): podes reaplicá-la a qualquer objeto com os mesmos nomes de ossos.",
   "prim.title": "Adicionar primitiva",
   "prim.cube": "Cubo",
   "prim.pyramid": "Pirâmide",
@@ -705,5 +705,8 @@
   "rigTools.poseApply": "Aplicar",
   "rigTools.poseDelete": "Eliminar esta pose",
   "rigTools.poseIsZero": "A pose está a zero: move algum osso antes de a guardar.",
-  "tools.activeColor": "Cor ativa"
+  "tools.activeColor": "Cor ativa",
+  "rigTools.lastBone": "Tem de ficar pelo menos um osso. Usa Auto-Rig para refazer o esqueleto.",
+  "rigTools.needSkeleton": "Cria primeiro um esqueleto com Auto-Rig.",
+  "rigTools.ikOnUndo": "Cada arrasto é um só Ctrl+Z. Carrega novamente no botão para sair."
 }

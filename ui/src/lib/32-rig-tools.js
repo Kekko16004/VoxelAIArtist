@@ -275,7 +275,7 @@
                 if (!rigData || !rigData.bones || !rigData.bones[index]) return { error: 'Osso inesistente.', select: -1 };
                 const bones = rigData.bones;
                 if (bones.filter(b => !b.helper).length <= 1) {
-                    return { error: 'Deve restare almeno un osso. Usa Auto-Rig per rifare lo scheletro.', select: index };
+                    return { error: t('rigTools.lastBone'), select: index };
                 }
                 const remove = new Set([index]);
                 bones.forEach((o, i) => { if (o.helper && o.parent === index) remove.add(i); });
@@ -420,7 +420,7 @@
 
             function rigToolsReady() {
                 if (!rig || !rig.bones || !rig.bones.length) {
-                    alert('Prima crea uno scheletro con Auto-Rig.');
+                    alert(t('rigTools.needSkeleton'));
                     return false;
                 }
                 return true;
@@ -731,8 +731,7 @@
                     ikActive = true;
                     ikToggleBtn.classList.add('active');
                     if (ikHintEl) ikHintEl.textContent = t('rigTools.ikDragHint');
-                    if (rigHint) rigHint.textContent = t('rigTools.ikOn') + ' '
-                        + 'Ogni trascinamento e\' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire.';
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOn') + ' ' + t('rigTools.ikOnUndo');
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
@@ -828,8 +827,8 @@
                 rigSetEffectivePose(res.pose);
                 stashRigToActiveObject();
                 refreshPoseUI();
-                if (rigHint) rigHint.textContent = 'Posa "' + entry.name + '" applicata a ' + res.applied + ' ossa'
-                    + (res.missing.length ? ' (' + res.missing.length + ' ossa della posa non esistono qui: ' + res.missing.slice(0, 4).join(', ') + ')' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseApplied', { name: entry.name, n: res.applied })
+                    + (res.missing.length ? t('rigTools.poseMissingBones', { n: res.missing.length, names: res.missing.slice(0, 4).join(', ') }) : '') + '.';
             }
 
             function deletePoseFromLib(idx) {
@@ -890,8 +889,7 @@
                 list.unshift({ name, pose: clean, ts: Date.now() });
                 poseLibSave(list);
                 renderPoseLib();
-                if (rigHint) rigHint.textContent = 'Posa "' + name + '" salvata (' + names.length
-                    + ' ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseSaved', { name: name, n: names.length });
             });
 
             renderPoseLib();
