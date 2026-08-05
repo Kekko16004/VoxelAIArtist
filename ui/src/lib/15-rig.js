@@ -1039,6 +1039,7 @@
 
                 const positions = [];
                 const normals = [];
+                const uvs = [];        // quadrato unitario per faccia (texture dei materiali)
                 const vColors = [];   // real voxel colors
                 const bColors = [];   // per-bone debug colors
                 const wColors = [];   // rampa peso dell'osso selezionato (stile Blender)
@@ -1058,11 +1059,28 @@
                     { n: [0, 0, 1], c: [[s, -s, s], [s, s, s], [-s, s, s], [-s, -s, s]] },
                     { n: [0, 0, -1], c: [[-s, -s, -s], [-s, s, -s], [s, s, -s], [s, -s, -s]] }
                 ];
+                // I 4 angoli del quadrato UV, nello stesso ordine dei 4 angoli di
+                // `faces`: il winding e' coerente su tutte e 6 le facce, quindi lo
+                // stesso quadrato le copre tutte ("la stessa texture su ogni faccia").
+                // Copia locale come `faces`: 16-export-glb.js ha la sua (UV_UNIT) e
+                // questo modulo si carica anche da solo nei test.
+                const UV_QUAD = [[0, 0], [0, 1], [1, 1], [1, 0]];
 
+                // Per TOKEN, non per colore: un voxel texturizzato e un voxel dello
+                // STESSO colore senza materiale devono finire in due gruppi (e quindi
+                // in due materiali glTF) diversi, o il secondo eredita la texture del
+                // primo. `tokenOf`/`decodeToken` stanno in 36-materials.js, che nel
+                // bundle e' un modulo dopo questo: le sue sono dichiarazioni di
+                // funzione, quindi sono in scope quando questa gira. Un
+                // "tokenOf is not defined" qui significa che quel modulo NON e' stato
+                // caricato, non che serva un fallback.
                 const byColor = {};
+                // Colore PROPRIO del gruppo: il token ha buttato via l'hex del voxel,
+                // quindi e' il solo fallback per un id materiale orfano.
+                const hexOfToken = {};
                 for (let i = 0; i < voxels.length; i++) {
-                    const c = voxels[i].color;
-                    if (!byColor[c]) byColor[c] = [];
+                    const c = tokenOf(voxels[i]);
+                    if (!byColor[c]) { byColor[c] = []; hexOfToken[c] = voxels[i].color; }
                     byColor[c].push(i);
                 }
 
@@ -1075,10 +1093,13 @@
                 // ogni pennellata costerebbe un rebuild completo (secondi su modelli grandi).
                 const vertexRanges = new Int32Array(voxels.length * 2);
 
-                for (const hexColor in byColor) {
+                for (const token in byColor) {
                     const groupStart = indices.length;
-                    const col = new THREE.Color(hexColor);
-                    for (const i of byColor[hexColor]) {
+                    // Il colore del voxel resta il fallback: su un id materiale orfano
+                    // il gruppo esce nella sua tinta piatta, non in grigio neutro.
+                    const dec = decodeToken(token, hexOfToken[token]);
+                    const col = new THREE.Color(dec.color);
+                    for (const i of byColor[token]) {
                         const v = voxels[i];
                         const bi = assignments[i];
                         const bc = boneColor(bi, bones.length);
@@ -1147,11 +1168,13 @@
                                 }
                             }
 
-                            for (const off of f.c) {
+                            for (let ci = 0; ci < f.c.length; ci++) {
+                                const off = f.c[ci];
                                 positions.push((v.x + off[0] - O.x) * K,
                                     (v.y + off[1] - O.y) * K,
                                     (v.z + off[2] - O.z) * K);
                                 normals.push(f.n[0], f.n[1], f.n[2]);
+                                uvs.push(UV_QUAD[ci][0], UV_QUAD[ci][1]);
                                 vColors.push(col.r, col.g, col.b);
                                 bColors.push(bc.r, bc.g, bc.b);
                                 wColors.push(wc.r, wc.g, wc.b);
@@ -1190,7 +1213,14 @@
                         skinning: true,
                         side: THREE.DoubleSide
                     });
-                    mat.userData.hexColor = hexColor;
+                    mat.userData.hexColor = dec.color;
+                    // Il token e l'id del materiale servono all'export, che da qui
+                    // ricava texture, ruvidita', metallicita' ed emissione
+                    // (applyExportMaterial in 16-export-glb.js). `hexColor` resta un hex
+                    // VERO anche quando il token e' '@m1': chi legge quel campo lo passa
+                    // a THREE.Color, e '@m1' diventerebbe nero.
+                    mat.userData.token = token;
+                    mat.userData.materialId = dec.material;
                     materials.push(mat);
                     groups.push({ start: groupStart, count, matIndex: materials.length - 1 });
                 }
@@ -1204,6 +1234,10 @@
                 const geo = new THREE.BufferGeometry();
                 geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
                 geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                // Gli UV servono solo all'export texturizzato (l'anteprima disegna dai
+                // colori per vertice), ma costano poco e tenerli qui evita una seconda
+                // costruzione della geometria a tempo di export.
+                geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
                 geo.setAttribute('color', new THREE.Float32BufferAttribute(vColors, 3));
                 geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
                 geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));

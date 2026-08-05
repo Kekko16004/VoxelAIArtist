@@ -131,7 +131,12 @@ global.THREE = {
 };
 
 const src = fs.readFileSync(path.join(REPO_ROOT, 'ui/src/lib/15-rig.js'), 'latin1');
-const api = new Function(src + `
+// buildSkinnedMesh raggruppa per TOKEN (tokenOf/decodeToken di 36-materials.js):
+// due voxel dello stesso colore con materiali diversi devono finire in due
+// materiali glTF distinti. Nel bundle i due moduli stanno nello stesso scope,
+// quindi qui si concatenano come fa test_channel_keys.mjs con la timeline.
+const matSrc = fs.readFileSync(path.join(REPO_ROOT, 'ui/src/lib/36-materials.js'), 'latin1');
+const api = new Function(src + '\n' + matSrc + `
  ;return {buildHumanoidSkeleton, bindVoxels, buildSkinnedMesh,
           setRig:(r)=>{rig=r;}, bindSkin};`)();
 

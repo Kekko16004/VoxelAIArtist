@@ -6,6 +6,13 @@
                 { n: [0, 0, 1], v: [[.5, -.5, .5], [.5, .5, .5], [-.5, .5, .5], [-.5, -.5, .5]] },
                 { n: [0, 0, -1], v: [[-.5, -.5, -.5], [-.5, .5, -.5], [.5, .5, -.5], [.5, -.5, -.5]] }
             ];
+            // Il quadrato UV di UNA faccia. CUBE_FACES elenca i 4 angoli con winding
+            // coerente su tutte e 6 le facce, quindi lo stesso quadrato vale per
+            // ognuna: e' esattamente "la stessa texture su tutte e 6 le facce", senza
+            // bisogno di una geometria diversa. (buildSkinnedMesh in 15-rig.js ha la
+            // sua copia locale, UV_QUAD, per lo stesso motivo per cui ha una copia
+            // locale di CUBE_FACES: quel modulo si carica anche da solo nei test.)
+            const UV_UNIT = [[0, 0], [0, 1], [1, 1], [1, 0]];
 
             // --- GLB export ---------------------------------------------------------
             // Rigged path: export the live SkinnedMesh + Skeleton + preset clips.
@@ -28,6 +35,81 @@
             function exportCullInternal() {
                 const cb = document.getElementById('glbCullInternalCheckbox');
                 return cb ? cb.checked : true;
+            }
+
+            // --- materiali d'export ---------------------------------------------------
+            // NON si riusa `threeMaterialFor` (36-materials.js): quella e' la fabbrica
+            // del VISORE e tiene una cache condivisa con la scena viva, mentre questi
+            // materiali sono usa e getta e vengono distrutti da `restore()` a fine
+            // export -- disporre un materiale della cache (o la sua texture) spegnerebbe
+            // il modello a schermo. E i valori sono comunque altri: colore convertito in
+            // lineare, `side: THREE.FrontSide` (vedi i commenti sul culling) e i default
+            // 0.35/0.25 dell'export invece di quelli dell'anteprima.
+            //
+            // Le texture nascono da una data URL, quindi si decodificano in modo
+            // ASINCRONO. Il GLTFExporter r128 incorpora l'immagine disegnandola su un
+            // canvas dimensionato su image.width: chiamato prima del decode scrive un
+            // canvas 0x0, cioe' una texture VUOTA. Ogni texture registra qui la sua
+            // promessa e `exportGLB` aspetta prima di chiamare l'exporter.
+            const exportTexturePending = [];
+
+            function exportTextureFor(def) {
+                if (!def || !def.texture || !def.texture.data) return null;
+                let settle;
+                exportTexturePending.push(new Promise(res => { settle = res; }));
+                // Anche l'errore risolve: un'immagine illeggibile non deve appendere
+                // l'export per sempre, il GLB esce senza quella texture.
+                const tex = new THREE.TextureLoader().load(def.texture.data, settle, undefined, settle);
+                // Voxel art: nessuna interpolazione fra i pixel.
+                tex.magFilter = THREE.NearestFilter;
+                tex.minFilter = THREE.NearestFilter;
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.name = 'tex_' + def.id;
+                return tex;
+            }
+
+            // Decora un materiale (statico o riggato) col contenuto del token.
+            // `fallbackColor` e' il colore PROPRIO del voxel: senza di lui un id
+            // materiale orfano (file aperto senza le sue definizioni) uscirebbe grigio
+            // neutro invece che nella sua tinta piatta.
+            function applyExportMaterial(m, token, fallbackColor) {
+                const dec = decodeToken(token, fallbackColor);
+                // materialById, non `dec.material`: su un id orfano l'id resta
+                // valorizzato di proposito ma la definizione non esiste.
+                const def = materialById(dec.material);
+                m.color = new THREE.Color(dec.color).convertSRGBToLinear();
+                m.roughness = def ? def.roughness : 0.35;
+                m.metalness = def ? def.metalness : 0.25;
+                // FrontSide, non DoubleSide: il culling per-parte (statico) e la regola
+                // di `deformsAlike` (riggato) lasciano di proposito due facce coplanari
+                // sul confine, una per lato. Col backface culling ognuna si vede solo
+                // dal suo lato; con DoubleSide sono z-fighting. Vale anche coi materiali
+                // texturizzati: la texture non cambia da che parte guarda una faccia.
+                m.side = THREE.FrontSide;
+                if (def && def.emissive > 0) {
+                    // In glTF emissiveFactor = colore x intensita'.
+                    m.emissive = new THREE.Color(dec.color).convertSRGBToLinear();
+                    m.emissiveIntensity = def.emissive;
+                }
+                const tex = exportTextureFor(def);
+                if (tex) {
+                    m.map = tex;
+                    // In glTF il colore finale e' baseColorFactor * texture: il fattore
+                    // deve restare BIANCO, altrimenti la tinta si moltiplica due volte
+                    // (stessa trappola dell'invariante 6 sul COLOR_0, vedi CLAUDE.md).
+                    m.color = new THREE.Color(0xffffff);
+                }
+                m.name = token;
+                return m;
+            }
+
+            function disposeExportMaterial(m) {
+                if (!m) return;
+                // La texture e' stata creata QUI (mai presa dalla cache del visore),
+                // quindi si puo' disporre senza spegnere niente a schermo.
+                if (m.map && m.map.dispose) m.map.dispose();
+                if (m.dispose) m.dispose();
             }
 
             function buildStaticExportMesh(scale) {
@@ -65,20 +147,28 @@
 
                 Object.keys(partsMap).forEach(partName => {
                     const partData = partsMap[partName];
+                    // Per TOKEN, non per colore: due voxel dello stesso colore con
+                    // materiali diversi vogliono due materiali glTF distinti (uno con
+                    // la texture, uno senza). Raggruppando per colore il secondo
+                    // erediterebbe il materiale del primo.
                     const byColor = {};
+                    // Il colore PROPRIO del primo voxel di ogni gruppo: e' il solo
+                    // fallback disponibile per un token materiale orfano, perche' il
+                    // token ha gia' buttato via l'hex del voxel.
+                    const fallbackOf = {};
                     partData.voxels.forEach(v => {
-                        if (!byColor[v.color]) byColor[v.color] = [];
-                        byColor[v.color].push(v);
+                        const tok = tokenOf(v);
+                        if (!byColor[tok]) { byColor[tok] = []; fallbackOf[tok] = v.color; }
+                        byColor[tok].push(v);
                     });
 
                     const materials = [];
-                    const positions = [], normals = [], indices = []; let vbase = 0;
+                    const positions = [], normals = [], uvs = [], indices = []; let vbase = 0;
                     const geom = new THREE.BufferGeometry();
 
-                    Object.keys(byColor).forEach((hexColor) => {
+                    Object.keys(byColor).forEach((token) => {
                         const groupStart = indices.length;
-                        const col = new THREE.Color(hexColor).convertSRGBToLinear();
-                        byColor[hexColor].forEach(v => {
+                        byColor[token].forEach(v => {
                             CUBE_FACES.forEach(f => {
                                 const nx = v.x + f.n[0];
                                 const ny = v.y + f.n[1];
@@ -91,11 +181,12 @@
                                         (v.y + vt[1] * s - o.y) * K,
                                         (v.z + vt[2] * s - o.z) * K);
                                     normals.push(f.n[0], f.n[1], f.n[2]);
+                                    uvs.push(UV_UNIT[k][0], UV_UNIT[k][1]);
                                 }
                                 indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3); vbase += 4;
                             });
                         });
-                        // Niente gruppo (ne' materiale) per un colore che non ha
+                        // Niente gruppo (ne' materiale) per un token che non ha
                         // prodotto facce: qui capita a chi sta tutto dentro un'altra
                         // parte. Un gruppo con count 0 fa scrivere al GLTFExporter r128
                         // una primitiva SENZA `indices`, che per la specifica glTF si
@@ -105,13 +196,8 @@
                         // in 15-rig.js, dove il commento la racconta per esteso.
                         const count = indices.length - groupStart;
                         if (count === 0) return;
-                        // FrontSide, non DoubleSide: il culling per-parte (voxelSet qui
-                        // sopra e' costruito PER PARTE, apposta) lascia le facce sul
-                        // confine fra due parti, e le due parti ne emettono una ciascuna
-                        // nello stesso piano. Con DoubleSide sono z-fighting; col
-                        // backface culling ognuna si vede solo dal suo lato.
-                        const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.25, side: THREE.FrontSide });
-                        mat.name = hexColor;
+                        const mat = applyExportMaterial(new THREE.MeshStandardMaterial({}),
+                            token, fallbackOf[token]);
                         materials.push(mat);
                         geom.addGroup(groupStart, count, materials.length - 1);
                     });
@@ -120,8 +206,9 @@
 
                     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
                     geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+                    geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
                     geom.setIndex(indices);
-                    
+
                     const mesh = new THREE.Mesh(geom, materials);
                     mesh.name = partName;
                     group.add(mesh);
@@ -135,6 +222,9 @@
                 const name = (meta.name || 'voxel_model').replace(/\s+/g, '_');
                 let exportRoot, animations = [];
                 let restore = null;
+                // Un export interrotto a meta' potrebbe aver lasciato promesse appese:
+                // ogni giro riparte da zero.
+                exportTexturePending.length = 0;
 
                 const haveRig = rig && rig.bones && rig.bones.length;
                 if (haveRig && !skinnedMesh) { applyRig(); }
@@ -182,11 +272,16 @@
 
                     (Array.isArray(outMesh.material) ? outMesh.material : [outMesh.material])
                         .forEach(m => {
-                            m.metalness = 0.25;
-                            if (m.userData && m.userData.hexColor) {
-                                m.color.set(m.userData.hexColor).convertSRGBToLinear();
-                                m.name = m.userData.hexColor;
-                            }
+                            // Il token e' stato messo in userData da buildSkinnedMesh
+                            // (il gruppo e' per token, non per colore) e `hexColor` e'
+                            // il colore VERO del gruppo: serve da fallback se il token
+                            // e' un materiale orfano. Da qui arrivano anche texture,
+                            // ruvidita', metallicita', emissione e FrontSide.
+                            applyExportMaterial(m, (m.userData && m.userData.token) || (m.userData && m.userData.hexColor),
+                                m.userData && m.userData.hexColor);
+                            // L'anteprima disegna i colori dai vertici; in export il
+                            // colore viaggia solo sul materiale (vedi il commento sul
+                            // COLOR_0 qui sopra).
                             m.vertexColors = false;
                             // Guscio chiuso con normali verso l'esterno: il backface
                             // culling e' corretto e fa da seconda difesa: se una faccia
@@ -213,7 +308,7 @@
                         // mai stata toccata, quindi qui si libera solo la temporanea.
                         outMesh.geometry.dispose();
                         (Array.isArray(outMesh.material) ? outMesh.material : [outMesh.material])
-                            .forEach(m => m.dispose());
+                            .forEach(disposeExportMaterial);
                     };
                 } else {
                     // Statico: la scala e' cotta nei vertici (vedi buildStaticExportMesh),
@@ -223,17 +318,35 @@
                     exportRoot = buildStaticExportMesh(doScale ? 0.01 : 1);
                     exportRoot.name = name;
                     exportRoot.updateMatrixWorld(true);
+                    restore = () => {
+                        // Anche qui i materiali (e le loro texture) sono nati per
+                        // l'export e non li usa nessun altro: si liberano.
+                        exportRoot.children.forEach(mesh => {
+                            if (mesh.geometry) mesh.geometry.dispose();
+                            (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+                                .forEach(disposeExportMaterial);
+                        });
+                    };
                 }
 
-                const exporter = new THREE.GLTFExporter();
-                exporter.parse(exportRoot, (result) => {
-                    const blob = new Blob([result], { type: 'model/gltf-binary' });
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `${name}.glb`;
-                    a.click();
-                    URL.revokeObjectURL(a.href);
-                    if (restore) restore();
-                }, { binary: true, animations, onlyVisible: false });
+                // Le texture arrivano da una data URL e si decodificano in modo
+                // asincrono: il GLTFExporter r128 incorpora l'immagine disegnandola su
+                // un canvas dimensionato su image.width, quindi chiamato prima del
+                // decode scriverebbe un canvas 0x0 (texture vuota nel GLB). Si aspetta.
+                // Senza texture la lista e' vuota e Promise.all risolve subito, ma
+                // resta comunque un tick asincrono: nessun percorso dell'export dipende
+                // dal fatto che parse() sia sincrono.
+                Promise.all(exportTexturePending.slice()).then(() => {
+                    const exporter = new THREE.GLTFExporter();
+                    exporter.parse(exportRoot, (result) => {
+                        const blob = new Blob([result], { type: 'model/gltf-binary' });
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `${name}.glb`;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                        if (restore) restore();
+                    }, { binary: true, animations, onlyVisible: false });
+                });
             }
             document.getElementById('exportGlbBtn').addEventListener('click', exportGLB);
