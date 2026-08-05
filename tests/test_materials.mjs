@@ -228,7 +228,9 @@ function makeThree() {
     constructor(c) { this.value = c; }
   }
   class MeshStandardMaterial {
-    constructor(p) { Object.assign(this, p); this.disposed = 0; this.map = null; }
+    // `userData` esiste SEMPRE su un THREE.Material vero (e' `{}` dalla nascita):
+    // senza, threeMaterialFor esplode nello stub mentre in browser funziona.
+    constructor(p) { Object.assign(this, p); this.disposed = 0; this.map = null; this.userData = {}; }
     dispose() { this.disposed++; }
   }
   class TextureLoader {
@@ -403,6 +405,249 @@ function makeThree() {
   try { await a.importTextureFile({ name: 'x.txt' }); } catch (e) { rejected = true; }
   check('un file non decodificabile fa fallire la promessa', rejected, 'la promessa e\' passata');
   check('anche in errore il blob viene rilasciato', revoked.length === 1, JSON.stringify(revoked));
+}
+
+// --- round-trip attraverso il formato compatto ------------------------------
+// Le ops sanno esprimere SOLO colori (palette -> hex): non c'e' posto dove
+// mettere un materiale. I materiali viaggiano quindi in metadata.material_map e
+// vengono riversati sui voxel DOPO l'espansione, cosi' expand_ops (Python) /
+// expandOps (JS) e la loro parita' non si toccano.
+//
+// 07-save-payload.js aggancia due listener a livello top (i bottoni di
+// salvataggio): senza uno stub di document il modulo non si carica nemmeno.
+// expand-ops.js entra nella fetta perche' il giro completo (salva -> espandi ->
+// riversa) e' il requisito vero, non un dettaglio interno.
+function loadSaveApi(model, scene) {
+  const srcExp = fs.readFileSync(path.join(ROOT, 'ui/src/utils/expand-ops.js'), 'latin1');
+  const srcMat = fs.readFileSync(path.join(ROOT, 'ui/src/lib/36-materials.js'), 'latin1');
+  const srcSave = fs.readFileSync(path.join(ROOT, 'ui/src/lib/07-save-payload.js'), 'latin1');
+  const doc = { getElementById: () => ({ addEventListener() {} }) };
+  return new Function('currentModelData', 'sceneObjects', 'document',
+    srcExp + srcMat + srcSave + `
+   ;return { buildMaterialMap, applyMaterialMap, buildObjectPayload,
+             getSceneSavePayload, expandOps, materialsOfProject };`
+  )(model, scene || [], doc);
+}
+
+const LEGNO = { id: 'm1', name: 'Legno', color: '#8B5A2B', texture: null,
+  roughness: 0.7, metalness: 0, emissive: 0 };
+
+{
+  const model = {
+    metadata: { name: 'T', grid_size: [4, 4, 4], materials: [Object.assign({}, LEGNO)] },
+    voxels: [
+      { x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1' },
+      { x: 1, y: 0, z: 0, color: '#8B5A2B', material: 'm1' },
+      { x: 2, y: 0, z: 0, color: '#FF0000' }
+    ]
+  };
+  const mod = loadSaveApi(model);
+
+  const mm = mod.buildMaterialMap(model.voxels);
+  check('material_map raggruppa per id come una op set',
+    JSON.stringify(mm) === JSON.stringify([['m1', 0, 0, 0, 1, 0, 0]]), JSON.stringify(mm));
+  check('i voxel senza materiale non finiscono nella mappa',
+    JSON.stringify(mm).indexOf('2,0,0') === -1 && mm.length === 1, JSON.stringify(mm));
+
+  const payload = mod.buildObjectPayload(model);
+  check('il payload porta le definizioni dei materiali',
+    payload.metadata.materials.length === 1, JSON.stringify(payload.metadata.materials));
+  check('il payload porta la material_map',
+    JSON.stringify(payload.metadata.material_map) === JSON.stringify([['m1', 0, 0, 0, 1, 0, 0]]),
+    JSON.stringify(payload.metadata.material_map));
+  // Il contratto ops NON si allarga: nessuna chiave di palette diventa '@m1', o
+  // i due espansori la risolverebbero a #CCCCCC.
+  check('la palette resta di soli colori (ops intatte)',
+    Object.values(payload.palette).every(c => typeof c === 'string' && /^#[0-9A-F]{6}$/.test(c)),
+    JSON.stringify(payload.palette));
+  check('le ops restano triplette di coordinate con chiave di palette',
+    payload.ops.every(op => op[0] === 'set' && typeof op[1] === 'string' && op[1][0] !== '@'),
+    JSON.stringify(payload.ops));
+
+  // IL GIRO VERO: il payload salvato viene riespanso come all'apertura di un
+  // file, e i materiali tornano sui voxel giusti.
+  const riletto = mod.applyMaterialMap(mod.expandOps(JSON.parse(JSON.stringify(payload))));
+  const at = (x, y, z) => riletto.voxels.find(v => v.x === x && v.y === y && v.z === z);
+  check('salva -> espandi -> riversa: il materiale torna sui voxel giusti',
+    at(0, 0, 0).material === 'm1' && at(1, 0, 0).material === 'm1'
+    && at(2, 0, 0).material === undefined, JSON.stringify(riletto.voxels));
+  check('salva -> espandi -> riversa: il colore resta quello del voxel',
+    at(0, 0, 0).color === '#8B5A2B' && at(2, 0, 0).color === '#FF0000',
+    JSON.stringify(riletto.voxels));
+  check('salva -> espandi -> riversa: le definizioni sopravvivono',
+    riletto.metadata.materials.length === 1 && riletto.metadata.materials[0].texture === null,
+    JSON.stringify(riletto.metadata.materials));
+
+  // Ricarica "a mano": i voxel arrivano espansi e SENZA materiale.
+  const espansi = { metadata: payload.metadata, voxels: [
+    { x: 0, y: 0, z: 0, color: '#8B5A2B' },
+    { x: 1, y: 0, z: 0, color: '#8B5A2B' },
+    { x: 2, y: 0, z: 0, color: '#FF0000' }
+  ]};
+  mod.applyMaterialMap(espansi);
+  check('applyMaterialMap ripristina il materiale sui voxel giusti',
+    espansi.voxels[0].material === 'm1' && espansi.voxels[1].material === 'm1'
+    && espansi.voxels[2].material === undefined, JSON.stringify(espansi.voxels));
+}
+
+// Un progetto SENZA materiali deve produrre esattamente il file di prima: e' la
+// garanzia di non aver rotto i .voxelai e i .json esistenti.
+{
+  const model = { metadata: { name: 'T', grid_size: [4, 4, 4] },
+    voxels: [{ x: 0, y: 0, z: 0, color: '#FF0000' }] };
+  const p = loadSaveApi(model).buildObjectPayload(model);
+  check('senza materiali il metadata non cresce',
+    JSON.stringify(Object.keys(p.metadata)) === JSON.stringify(['name', 'grid_size']),
+    JSON.stringify(p.metadata));
+}
+
+// Un file importato senza texture: la mappa c'e' ma le definizioni no. Nessun
+// ramo "if (niente texture)": e' l'ASSENZA della definizione a lasciare il
+// voxel a tinta unita.
+{
+  const orfano = { metadata: { material_map: [['m9', 0, 0, 0]] },
+    voxels: [{ x: 0, y: 0, z: 0, color: '#123456' }] };
+  loadSaveApi(orfano).applyMaterialMap(orfano);
+  check('un id senza definizione non viene applicato (tinta unita)',
+    orfano.voxels[0].material === undefined, JSON.stringify(orfano.voxels));
+  check('il colore del voxel orfano non viene toccato',
+    orfano.voxels[0].color === '#123456', JSON.stringify(orfano.voxels));
+}
+
+// Nessuna mappa / dati storti: nulla deve rompersi (i file di TUTTE le versioni
+// precedenti passano da qui).
+{
+  const mod = loadSaveApi({ metadata: {}, voxels: [] });
+  const semplice = { metadata: {}, voxels: [{ x: 0, y: 0, z: 0, color: '#123456' }] };
+  mod.applyMaterialMap(semplice);
+  check('un file senza material_map passa indenne',
+    semplice.voxels[0].material === undefined, JSON.stringify(semplice.voxels));
+  check('applyMaterialMap regge null', mod.applyMaterialMap(null) === null);
+  const senzaMeta = { voxels: [] };
+  check('applyMaterialMap regge un payload senza metadata',
+    mod.applyMaterialMap(senzaMeta) === senzaMeta);
+  const storto = { metadata: { materials: [Object.assign({}, LEGNO)],
+      material_map: ['m1', ['m1'], ['m1', 0, 0], null, ['m1', 0, 0, 0]] },
+    voxels: [{ x: 0, y: 0, z: 0, color: '#8B5A2B' }] };
+  mod.applyMaterialMap(storto);
+  check('le voci malformate della mappa vengono ignorate senza lanciare',
+    storto.voxels[0].material === 'm1', JSON.stringify(storto.voxels));
+}
+
+// Definizioni ARRIVATE da un JSON scritto a mano: decodeToken restituisce
+// `mat.color` cosi' com'e', quindi un hex storto finirebbe dentro THREE.Color
+// lontano da qui. Vanno normalizzate all'ingresso.
+{
+  const sporco = {
+    metadata: {
+      materials: [
+        { id: 'm1', name: 'Storto', color: 'verde', roughness: null },
+        { id: 'm1', name: 'Doppione', color: '#000000' },
+        { name: 'Senza id', color: '#111111' }
+      ],
+      material_map: [['m1', 0, 0, 0]]
+    },
+    voxels: [{ x: 0, y: 0, z: 0, color: '#123456' }]
+  };
+  loadSaveApi(sporco).applyMaterialMap(sporco);
+  const defs = sporco.metadata.materials;
+  check('un hex storto in ingresso viene normalizzato al neutro',
+    defs[0].color === '#CCCCCC', JSON.stringify(defs[0]));
+  check('un roughness null in ingresso torna al default 0.6',
+    defs[0].roughness === 0.6, String(defs[0].roughness));
+  check('gli id duplicati in ingresso vengono scartati (vince il primo)',
+    defs.length === 1 && defs[0].name === 'Storto', JSON.stringify(defs));
+  check('una definizione senza id viene scartata',
+    defs.every(d => !!d.id), JSON.stringify(defs));
+  check('la mappa si applica comunque dopo la normalizzazione',
+    sporco.voxels[0].material === 'm1', JSON.stringify(sporco.voxels));
+}
+
+// Un voxel NASCOSTO (parte nascosta nell'outliner) conserva il materiale: nel
+// ramo piatto di buildObjectPayload finisce comunque nelle ops, quindi
+// scartarlo dalla mappa gli farebbe perdere la texture al primo salvataggio.
+{
+  const model = { metadata: { materials: [Object.assign({}, LEGNO)] }, voxels: [
+    { x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1', _hidden: true }
+  ]};
+  const mm = loadSaveApi(model).buildMaterialMap(model.voxels);
+  check('un voxel nascosto non perde il materiale nel salvataggio',
+    JSON.stringify(mm) === JSON.stringify([['m1', 0, 0, 0]]), JSON.stringify(mm));
+}
+
+// Sulla stessa cella il voxel VISIBILE vince su quello nascosto, in qualunque
+// ordine arrivino (vedi syncVoxelsFromMap in 03-voxel-map.js).
+{
+  const model = { metadata: { materials: [Object.assign({}, LEGNO)] }, voxels: [
+    { x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1', _hidden: true },
+    { x: 0, y: 0, z: 0, color: '#888888', material: 'm2' }
+  ]};
+  const a = loadSaveApi(model).buildMaterialMap(model.voxels);
+  const b = loadSaveApi(model).buildMaterialMap(model.voxels.slice().reverse());
+  check('sulla stessa cella il visibile vince sul nascosto',
+    JSON.stringify(a) === JSON.stringify([['m2', 0, 0, 0]])
+    && JSON.stringify(b) === JSON.stringify([['m2', 0, 0, 0]]),
+    JSON.stringify(a) + ' / ' + JSON.stringify(b));
+}
+
+// Il ramo con le PARTI e' un secondo `return` in buildObjectPayload: e' stato
+// dimenticato una volta e nessun test lo avrebbe visto.
+{
+  const model = {
+    metadata: { name: 'P', materials: [Object.assign({}, LEGNO)] },
+    voxels: [
+      { x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1', part: 'testa' },
+      { x: 1, y: 0, z: 0, color: '#FF0000', part: 'corpo' }
+    ]
+  };
+  const mod = loadSaveApi(model);
+  const p = mod.buildObjectPayload(model);
+  check('anche il ramo con le parti porta i materiali',
+    p.parts && p.metadata.materials.length === 1
+    && JSON.stringify(p.metadata.material_map) === JSON.stringify([['m1', 0, 0, 0]]),
+    JSON.stringify(p.metadata));
+  const riletto = mod.applyMaterialMap(mod.expandOps(JSON.parse(JSON.stringify(p))));
+  const testa = riletto.voxels.find(v => v.part === 'testa');
+  check('il giro completo funziona anche con le parti',
+    testa && testa.material === 'm1' && testa.color === '#8B5A2B',
+    JSON.stringify(riletto.voxels));
+}
+
+// Scena MULTI-oggetto: ogni oggetto porta i PROPRI materiali nel proprio
+// metadata, quindi lo stesso id in due oggetti sono materiali diversi e non
+// c'e' nessuna lista globale da riconciliare.
+{
+  const uno = { metadata: { name: 'Uno', materials: [Object.assign({}, LEGNO)] },
+    voxels: [{ x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1' }] };
+  const due = { metadata: { name: 'Due', materials: [
+      { id: 'm1', name: 'Pietra', color: '#888888', texture: null, roughness: 0.6, metalness: 0, emissive: 0 }] },
+    voxels: [{ x: 5, y: 3, z: 1, color: '#888888', material: 'm1' }] };
+  const scene = [{ data: uno, name: 'Uno', transform: null, visible: true },
+                 { data: due, name: 'Due', transform: null, visible: true }];
+  const out = loadSaveApi(uno, scene).getSceneSavePayload();
+  check('ogni oggetto della scena porta i propri materiali',
+    out.objects.length === 2
+    && out.objects[0].metadata.materials[0].name === 'Legno'
+    && out.objects[1].metadata.materials[0].name === 'Pietra',
+    JSON.stringify(out.objects.map(o => o.metadata.materials)));
+  check('ogni oggetto porta la propria material_map',
+    JSON.stringify(out.objects[1].metadata.material_map) === JSON.stringify([['m1', 5, 3, 1]]),
+    JSON.stringify(out.objects[1].metadata.material_map));
+}
+
+// La richiesta di MODIFICA all'AI manda il modello corrente nel prompt: le
+// texture sono base64 fino a 128x128 l'una (decine di KB) e all'AI non servono,
+// risponde con un diff di ops. Vanno omesse, o costano piu' del modello intero.
+{
+  const model = { metadata: { name: 'T', materials: [Object.assign({}, LEGNO,
+      { texture: { data: 'data:image/png;base64,' + 'A'.repeat(2000), w: 8, h: 8 } })] },
+    voxels: [{ x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1' }] };
+  const p = loadSaveApi(model).buildObjectPayload(model, { materials: false });
+  check('per l\'AI i materiali vengono omessi dal payload',
+    p.metadata.materials === undefined && p.metadata.material_map === undefined,
+    JSON.stringify(p.metadata));
+  check('senza materiali il payload per l\'AI resta un modello normale',
+    p.ops.length === 1 && Object.keys(p.palette).length === 1, JSON.stringify(p.ops));
 }
 
 if (failures.length) { console.error(`\nFALLITI: ${failures.length}`); process.exit(1); }

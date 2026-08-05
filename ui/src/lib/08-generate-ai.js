@@ -170,7 +170,9 @@
 
                 // Cattura cio' che inviamo: in "modifica" la palette inviata serve a
                 // risolvere le chiavi colore del diff di risposta.
-                const sentPayload = getSavePayload();
+                // NIENTE materiali: le loro texture sono base64 fino a 128x128 l'una
+                // (decine di KB) e all'AI non servono, risponde con un diff di ops.
+                const sentPayload = getSavePayload({ materials: false });
 
                 fetch('/api/generate', {
                     method: 'POST',

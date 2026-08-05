@@ -55,6 +55,14 @@
                 // gli indici puntano ai voxel sbagliati. Invalidiamo, cosi' il prossimo
                 // edit passa dal rebuild completo che riallinea tutto.
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                // I materiali appartengono all'OGGETTO (metadata.materials), quindi lo
+                // stesso id in due oggetti sono due materiali diversi: la cache dei
+                // MeshStandardMaterial e' indicizzata per token e va buttata, e il
+                // pannello deve mostrare l'elenco del nuovo attivo. Ogni chiamante di
+                // setActiveObject ridisegna subito dopo (buildModel), quindi liberare
+                // qui non lascia mesh con un materiale gia' rilasciato.
+                if (typeof clearMaterialCache === 'function') clearMaterialCache();
+                if (typeof renderMaterialsPanel === 'function') renderMaterialsPanel();
                 // T1 Fase B: refresh outliner selection / bounding-box highlight here.
                 return obj;
             }
@@ -80,12 +88,15 @@
                 rig = null;
                 if (parsed && Array.isArray(parsed.objects)) {
                     parsed.objects.forEach((o, i) => {
-                        const data = expandOps({
+                        // expandOps NON conosce i materiali (le ops sono di soli colori):
+                        // si riversano subito dopo, dalla mappa nel metadata. Vedi
+                        // applyMaterialMap in 07-save-payload.js.
+                        const data = applyMaterialMap(expandOps({
                             metadata: o.metadata || (o.name ? { name: o.name } : {}),
                             palette: o.palette,
                             ops: o.ops,
                             voxels: o.voxels
-                        });
+                        }));
                         const obj = createObject(data, {
                             name: o.name,
                             transform: o.transform,
@@ -98,12 +109,14 @@
                     if (!sceneObjects.length) createObject({ metadata: {}, voxels: [] });
                     setActiveObject(sceneObjects[0].id);
                 } else {
-                    const data = expandOps(parsed);
+                    const data = applyMaterialMap(expandOps(parsed));
                     const obj = createObject(data);
                     attachRigFromPayload(obj, parsed && parsed.rig, null);
                     setActiveObject(obj.id);
                 }
                 if (typeof invalidateIncremental === 'function') invalidateIncremental();
+                // La cache dei materiali e il pannello li rinfresca setActiveObject, che
+                // entrambi i rami qui sopra chiamano: rifarlo qui sarebbe solo un doppione.
             }
 
             // ===== T1 Fase B: modalità editor, rendering multi-oggetto, selezione =====
@@ -645,16 +658,18 @@
                 let firstNew = null;
                 if (parsed && Array.isArray(parsed.objects)) {
                     parsed.objects.forEach((o, i) => {
-                        const data = expandOps({
+                        // Come in loadSceneFromParsed: i materiali arrivano dal metadata,
+                        // non dalle ops.
+                        const data = applyMaterialMap(expandOps({
                             metadata: o.metadata || (o.name ? { name: o.name } : {}),
                             palette: o.palette, ops: o.ops, voxels: o.voxels
-                        });
+                        }));
                         const obj = createObject(data, { name: o.name, transform: o.transform, visible: o.visible });
                         attachRigFromPayload(obj, o.rig, i === 0 ? parsed.rig : null);
                         if (!firstNew) firstNew = obj;
                     });
                 } else {
-                    const data = expandOps(parsed);
+                    const data = applyMaterialMap(expandOps(parsed));
                     firstNew = createObject(data);
                     attachRigFromPayload(firstNew, parsed && parsed.rig, null);
                 }
