@@ -54,7 +54,7 @@
                 } else {
                     controls.mouseButtons.LEFT = null;
                 }
-                editHint.textContent = HINTS[tool];
+                editHint.textContent = hintsByTool()[tool];
                 clearPreview();
                 renderer.domElement.style.cursor = tool === 'view' ? 'grab' : 'crosshair';
             }
@@ -127,7 +127,7 @@
                         objDelete();
                     } else if (activePartName) {
                         const active = getActiveObject();
-                        if (active && confirm('Eliminare la parte "' + activePartName + '"?')) {
+                        if (active && confirm(t('tools.confirmDeletePart', { name: activePartName }))) {
                             active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                             activePartName = null;
                             buildModel(false);

@@ -59,11 +59,11 @@
 
             modeSelect.addEventListener('change', () => {
                 if (modeSelect.value === 'modify') {
-                    promptInput.placeholder = "Descrivi le modifiche (es. Aggiungi ali rosse)";
-                    generateBtn.textContent = "Modifica Modello";
+                    promptInput.placeholder = t('generate.promptModify');
+                    generateBtn.textContent = t('generate.btnModify');
                 } else {
-                    promptInput.placeholder = "Cosa generiamo? (es. Dinosauro)";
-                    generateBtn.textContent = "Genera Modello";
+                    promptInput.placeholder = t('generate.promptCreate');
+                    generateBtn.textContent = t('generate.btnCreate');
                 }
             });
 
@@ -171,7 +171,7 @@
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
-                    alert("Inserisci una descrizione prima di procedere!");
+                    alert(t('generate.needPrompt'));
                     return;
                 }
 
@@ -210,7 +210,7 @@
                 })
                     .then(res => {
                         if (!res.ok) {
-                            return res.json().then(err => { throw new Error(err.error || "Errore sconosciuto"); });
+                            return res.json().then(err => { throw new Error(err.error || t('generate.errUnknown')); });
                         }
                         return res.json();
                     })
@@ -225,7 +225,7 @@
                         buildModel();
                     })
                     .catch(err => {
-                        alert("Errore nella generazione: " + err.message);
+                        alert(t('generate.errFailed', { msg: err.message }));
                     })
                     .finally(() => {
                         generateBtn.disabled = false;
@@ -236,9 +236,9 @@
                         modeSelect.disabled = false;
                         uploadImageBtn.disabled = false;
                         if (modeSelect.value === 'modify') {
-                            generateBtn.innerHTML = "Modifica Modello";
+                            generateBtn.innerHTML = t('generate.btnModify');
                         } else {
-                            generateBtn.innerHTML = "Genera Modello";
+                            generateBtn.innerHTML = t('generate.btnCreate');
                         }
                         loaderOverlay.style.display = 'none';
                     });

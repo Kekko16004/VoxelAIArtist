@@ -34,13 +34,18 @@
             const undoBtn = document.getElementById('undoBtn');
             const redoBtn = document.getElementById('redoBtn');
 
-            const HINTS = {
-                view: 'Modalità Vista: trascina per orbitare, rotella per zoom.',
-                place: 'Aggiungi: trascina con tasto sinistro per creare un\'area (Scrap Mechanic). Premi Q per ciclare l\'asse.',
-                remove: 'Rimuovi: trascina con tasto destro o strumento attivo per cancellare aree. Premi Q per ciclare l\'asse.',
-                draw: 'Disegna: trascina per ricolorare un\'intera area. Premi Q per ciclare l\'asse.',
-                pick: 'Contagocce: clic sinistro su un voxel per copiarne il colore.',
-            };
+            // FUNZIONE, non costante: a livello di modulo t() girerebbe prima che i
+            // dizionari siano caricati e i suggerimenti resterebbero congelati nella
+            // lingua d'avvio (cambiare lingua non li toccherebbe piu').
+            function hintsByTool() {
+                return {
+                    view: t('hint.toolView'),
+                    place: t('hint.toolPlace'),
+                    remove: t('hint.toolRemove'),
+                    draw: t('hint.toolDraw'),
+                    pick: t('hint.toolPick'),
+                };
+            }
 
             // --- Preview meshes ---
             // Green ghost cube for "place".

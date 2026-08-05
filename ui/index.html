@@ -6147,11 +6147,11 @@
 
             modeSelect.addEventListener('change', () => {
                 if (modeSelect.value === 'modify') {
-                    promptInput.placeholder = "Descrivi le modifiche (es. Aggiungi ali rosse)";
-                    generateBtn.textContent = "Modifica Modello";
+                    promptInput.placeholder = t('generate.promptModify');
+                    generateBtn.textContent = t('generate.btnModify');
                 } else {
-                    promptInput.placeholder = "Cosa generiamo? (es. Dinosauro)";
-                    generateBtn.textContent = "Genera Modello";
+                    promptInput.placeholder = t('generate.promptCreate');
+                    generateBtn.textContent = t('generate.btnCreate');
                 }
             });
 
@@ -6259,7 +6259,7 @@
             generateBtn.addEventListener('click', () => {
                 const promptVal = promptInput.value.trim();
                 if (!promptVal) {
-                    alert("Inserisci una descrizione prima di procedere!");
+                    alert(t('generate.needPrompt'));
                     return;
                 }
 
@@ -6298,7 +6298,7 @@
                 })
                     .then(res => {
                         if (!res.ok) {
-                            return res.json().then(err => { throw new Error(err.error || "Errore sconosciuto"); });
+                            return res.json().then(err => { throw new Error(err.error || t('generate.errUnknown')); });
                         }
                         return res.json();
                     })
@@ -6313,7 +6313,7 @@
                         buildModel();
                     })
                     .catch(err => {
-                        alert("Errore nella generazione: " + err.message);
+                        alert(t('generate.errFailed', { msg: err.message }));
                     })
                     .finally(() => {
                         generateBtn.disabled = false;
@@ -6324,9 +6324,9 @@
                         modeSelect.disabled = false;
                         uploadImageBtn.disabled = false;
                         if (modeSelect.value === 'modify') {
-                            generateBtn.innerHTML = "Modifica Modello";
+                            generateBtn.innerHTML = t('generate.btnModify');
                         } else {
-                            generateBtn.innerHTML = "Genera Modello";
+                            generateBtn.innerHTML = t('generate.btnCreate');
                         }
                         loaderOverlay.style.display = 'none';
                     });
@@ -6387,13 +6387,18 @@
             const undoBtn = document.getElementById('undoBtn');
             const redoBtn = document.getElementById('redoBtn');
 
-            const HINTS = {
-                view: 'Modalità Vista: trascina per orbitare, rotella per zoom.',
-                place: 'Aggiungi: trascina con tasto sinistro per creare un\'area (Scrap Mechanic). Premi Q per ciclare l\'asse.',
-                remove: 'Rimuovi: trascina con tasto destro o strumento attivo per cancellare aree. Premi Q per ciclare l\'asse.',
-                draw: 'Disegna: trascina per ricolorare un\'intera area. Premi Q per ciclare l\'asse.',
-                pick: 'Contagocce: clic sinistro su un voxel per copiarne il colore.',
-            };
+            // FUNZIONE, non costante: a livello di modulo t() girerebbe prima che i
+            // dizionari siano caricati e i suggerimenti resterebbero congelati nella
+            // lingua d'avvio (cambiare lingua non li toccherebbe piu').
+            function hintsByTool() {
+                return {
+                    view: t('hint.toolView'),
+                    place: t('hint.toolPlace'),
+                    remove: t('hint.toolRemove'),
+                    draw: t('hint.toolDraw'),
+                    pick: t('hint.toolPick'),
+                };
+            }
 
             // --- Preview meshes ---
             // Green ghost cube for "place".
@@ -6718,7 +6723,7 @@
                 } else {
                     controls.mouseButtons.LEFT = null;
                 }
-                editHint.textContent = HINTS[tool];
+                editHint.textContent = hintsByTool()[tool];
                 clearPreview();
                 renderer.domElement.style.cursor = tool === 'view' ? 'grab' : 'crosshair';
             }
@@ -6791,7 +6796,7 @@
                         objDelete();
                     } else if (activePartName) {
                         const active = getActiveObject();
-                        if (active && confirm('Eliminare la parte "' + activePartName + '"?')) {
+                        if (active && confirm(t('tools.confirmDeletePart', { name: activePartName }))) {
                             active.data.voxels = active.data.voxels.filter(v => v.part !== activePartName);
                             activePartName = null;
                             buildModel(false);
@@ -13901,7 +13906,7 @@
                 {
                     id: 'hollow',
                     name: 'Svuota interno',
-                    desc: 'Rimuove i voxel completamente circondati (mantiene solo il guscio).',
+                    desc: t('plugins.descShell'),
                     code:
 "// Mantiene solo i voxel esposti: rimuove quelli con tutti e 6 i vicini pieni.\n" +
 "function transform(voxels, api) {\n" +
@@ -13984,7 +13989,7 @@
 
                 // Valida e normalizza i voxel restituiti dal plugin.
                 function sanitize(list) {
-                    if (!Array.isArray(list)) throw new Error('lo script deve restituire un array di voxel');
+                    if (!Array.isArray(list)) throw new Error(t('plugins.errNotArray'));
                     if (list.length > PLUGIN_MAX_VOXELS)
                         throw new Error('troppi voxel restituiti (' + list.length + ' > ' + PLUGIN_MAX_VOXELS + ')');
                     const out = [];
@@ -14011,7 +14016,7 @@
                     currentModelData.voxels = out;
                     if (typeof buildModel === 'function') buildModel(false, true);
                     let msg = (typeof t === 'function' ? t('plugins.done') : 'Fatto') + ': ' + out.length + ' voxel';
-                    if (dropped) msg += ' (' + dropped + ' scartati non validi)';
+                    if (dropped) msg += t('plugins.droppedInvalid', { n: dropped });
                     if (logs && logs.length) msg += ' — ' + logs.join(' | ');
                     setStatus(msg, 'ok');
                 }
@@ -14068,14 +14073,14 @@
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
                             const d = ev.data || {};
-                            if (!d.ok) { setStatus('Errore plugin: ' + (d.error || '?'), 'error'); return; }
+                            if (!d.ok) { setStatus(t('plugins.errGeneric', { msg: d.error || '?' }), 'error'); return; }
                             try { applyResult(d.voxels, d.logs); }
-                            catch (e) { setStatus('Errore: ' + e.message, 'error'); }
+                            catch (e) { setStatus(t('plugins.errPlain', { msg: e.message }), 'error'); }
                         };
                         worker.onerror = (e) => {
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
-                            setStatus('Errore plugin: ' + (e.message || 'esecuzione fallita'), 'error');
+                            setStatus(t('plugins.errGeneric', { msg: e.message || t('plugins.errRunFailed') }), 'error');
                         };
                         worker.postMessage(payload);
                         return;
@@ -14088,7 +14093,7 @@
                             applyResult(result, logs);
                             if (statusEl && statusEl.textContent) statusEl.textContent += ' [fallback senza worker]';
                         } catch (e) {
-                            setStatus('Errore plugin: ' + e.message, 'error');
+                            setStatus(t('plugins.errGeneric', { msg: e.message }), 'error');
                         } finally { done(); }
                     }, 0);
                 }

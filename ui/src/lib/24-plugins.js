@@ -75,7 +75,7 @@
                 {
                     id: 'hollow',
                     name: 'Svuota interno',
-                    desc: 'Rimuove i voxel completamente circondati (mantiene solo il guscio).',
+                    desc: t('plugins.descShell'),
                     code:
 "// Mantiene solo i voxel esposti: rimuove quelli con tutti e 6 i vicini pieni.\n" +
 "function transform(voxels, api) {\n" +
@@ -158,7 +158,7 @@
 
                 // Valida e normalizza i voxel restituiti dal plugin.
                 function sanitize(list) {
-                    if (!Array.isArray(list)) throw new Error('lo script deve restituire un array di voxel');
+                    if (!Array.isArray(list)) throw new Error(t('plugins.errNotArray'));
                     if (list.length > PLUGIN_MAX_VOXELS)
                         throw new Error('troppi voxel restituiti (' + list.length + ' > ' + PLUGIN_MAX_VOXELS + ')');
                     const out = [];
@@ -185,7 +185,7 @@
                     currentModelData.voxels = out;
                     if (typeof buildModel === 'function') buildModel(false, true);
                     let msg = (typeof t === 'function' ? t('plugins.done') : 'Fatto') + ': ' + out.length + ' voxel';
-                    if (dropped) msg += ' (' + dropped + ' scartati non validi)';
+                    if (dropped) msg += t('plugins.droppedInvalid', { n: dropped });
                     if (logs && logs.length) msg += ' — ' + logs.join(' | ');
                     setStatus(msg, 'ok');
                 }
@@ -242,14 +242,14 @@
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
                             const d = ev.data || {};
-                            if (!d.ok) { setStatus('Errore plugin: ' + (d.error || '?'), 'error'); return; }
+                            if (!d.ok) { setStatus(t('plugins.errGeneric', { msg: d.error || '?' }), 'error'); return; }
                             try { applyResult(d.voxels, d.logs); }
-                            catch (e) { setStatus('Errore: ' + e.message, 'error'); }
+                            catch (e) { setStatus(t('plugins.errPlain', { msg: e.message }), 'error'); }
                         };
                         worker.onerror = (e) => {
                             if (finished) return; finished = true;
                             clearTimeout(timer); cleanup(); done();
-                            setStatus('Errore plugin: ' + (e.message || 'esecuzione fallita'), 'error');
+                            setStatus(t('plugins.errGeneric', { msg: e.message || t('plugins.errRunFailed') }), 'error');
                         };
                         worker.postMessage(payload);
                         return;
@@ -262,7 +262,7 @@
                             applyResult(result, logs);
                             if (statusEl && statusEl.textContent) statusEl.textContent += ' [fallback senza worker]';
                         } catch (e) {
-                            setStatus('Errore plugin: ' + e.message, 'error');
+                            setStatus(t('plugins.errGeneric', { msg: e.message }), 'error');
                         } finally { done(); }
                     }, 0);
                 }

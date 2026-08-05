@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // ABBASSARE a ogni passo dello sweep. Non alzare mai.
-const BASELINE = { template: 5, js: 34 };
+const BASELINE = { template: 5, js: 15 };
 
 // File dove una stringa italiana NON e' testo per l'utente. Motivare ogni voce.
 // VUOTA di proposito: 22-screens.js era escluso in blocco perche' inietta un
