@@ -929,6 +929,11 @@
             }
 
             function closeMaterialForm() {
+                // La finestra grande ospita nodi che APPARTENGONO al form: chiuderla
+                // per prima li rimette al loro posto. Lasciarla aperta li terrebbe
+                // agganciati all'overlay mentre il form e' chiuso, e riaprendo il form
+                // la tela non ci sarebbe piu'.
+                if (artEditorIsOpen()) closeArtEditor();
                 const form = document.getElementById('materialForm');
                 if (form) form.style.display = 'none';
                 _formState = { editingId: null, pendingTexture: null, crop: null, source: 'flat' };
@@ -944,7 +949,11 @@
                     if (el) el.style.display = on ? 'flex' : 'none';
                 };
                 show('materialImageSetup', src === 'image');
-                show('materialCanvasSetup', src !== 'flat');
+                // Mentre la tela e' nella finestra grande la scelta della dimensione
+                // sta LI' DENTRO: nasconderla perche' la sorgente e' cambiata la
+                // farebbe sparire da un pannello in cui e' l'unico modo di
+                // ridimensionare il disegno.
+                show('materialCanvasSetup', src !== 'flat' || artEditorIsOpen());
                 show('materialDrawSection', src !== 'flat');
                 show('materialUvSection', src !== 'flat' && !!_formState.pendingTexture);
                 const seg = document.getElementById('materialSourceSeg');
@@ -1205,16 +1214,26 @@
             }
 
             // --- tela del pixel editor ----------------------------------------------
-            // Il canvas VISIBILE e' anche il buffer: e' di w x h pixel veri (16..128) e
+            // Il canvas VISIBILE e' anche il buffer: e' di w x h pixel veri (8..128) e
             // il CSS lo ingrandisce con image-rendering: pixelated. Cosi' un pixel
             // disegnato e' un pixel della texture, senza un secondo buffer da tenere
             // in sincronia -- che e' il posto dove questi editor divergono.
             //
-            // La griglia sta su un SECONDO canvas sovrapposto: disegnarla su quello dei
-            // pixel la farebbe finire nella texture.
-            const ART_GRID_DISPLAY = 256;
+            // La griglia e' un GRADIENTE CSS sopra la tela (.pixel-grid), non un
+            // canvas: resta netta a ogni zoom senza ridisegnarsi, e non alloca un
+            // buffer che a 64x sarebbe da decine di megabyte. Disegnarla invece
+            // DENTRO il canvas dei pixel la farebbe finire nella texture.
             const ART_UNDO_MAX = 40;
             const ART_RECENT_MAX = 12;
+            // Quanto e' grande la tela nel pannello laterale (lato lungo, in px).
+            const ART_INLINE_MAX = 256;
+            // I passi di zoom sono INTERI: un fattore frazionario spalmerebbe un
+            // texel su un numero non intero di pixel dello schermo, e con
+            // image-rendering: pixelated le colonne di pixel uscirebbero di larghezza
+            // diversa (un reticolo irregolare che sembra un difetto del disegno).
+            // Per lo stesso motivo la griglia in gradiente resta esatta: il passo e'
+            // sempre un numero intero di px.
+            const ART_ZOOMS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
 
             let _art = {
                 canvas: null,      // il canvas dei pixel (= #materialArtCanvas)
@@ -1225,7 +1244,10 @@
                 pen: '#E8C39E',
                 recent: [],
                 drawing: false,
-                lastCell: null
+                lastCell: null,
+                zoom: 8,           // px di schermo per pixel della texture (finestra grande)
+                spaceHeld: false,
+                panning: null
             };
 
             function artSelectedSize() {
@@ -1275,7 +1297,7 @@
                 _art.undo = [];
                 _art.redo = [];
                 updateArtHistoryBtns();
-                drawArtGrid();
+                layoutArtStage();
                 commitArtToTexture();
             }
 
@@ -1295,7 +1317,7 @@
                 ctx.imageSmoothingEnabled = false;
                 ctx.clearRect(0, 0, size, size);
                 ctx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, size, size);
-                drawArtGrid();
+                layoutArtStage();
                 commitArtToTexture();
             }
 
@@ -1317,7 +1339,7 @@
                     _art.redo = [];
                     updateArtHistoryBtns();
                     syncSizeSelectTo(Math.max(w, h));
-                    drawArtGrid();
+                    layoutArtStage();
                     // NON si richiama commitArtToTexture: la texture e' gia' quella,
                     // e ricalcolarla la ricomprimerebbe in PNG senza guadagno.
                     refreshSourceUI();
@@ -1353,36 +1375,114 @@
                 ctx.clearRect(0, 0, size.w, size.h);
                 ctx.drawImage(c.img, Math.round(c.x), Math.round(c.y),
                     Math.round(c.w), Math.round(c.h), 0, 0, size.w, size.h);
-                drawArtGrid();
+                layoutArtStage();
                 commitArtToTexture();
             }
 
-            // La griglia: una linea per cella finche' le celle sono grandi abbastanza
-            // da distinguerla. Sopra le 64 celle per lato le linee sarebbero piu'
-            // spesse dei pixel e la tela diventerebbe un reticolo grigio.
-            function drawArtGrid() {
-                const g = document.getElementById('materialGridCanvas');
-                if (!g || !_art.canvas) return;
-                const w = _art.canvas.width, h = _art.canvas.height;
-                const side = ART_GRID_DISPLAY;
-                g.width = side; g.height = side;
-                const ctx = g.getContext('2d');
-                ctx.clearRect(0, 0, side, side);
-                const cell = side / Math.max(w, h);
-                if (cell < 6) return;
-                ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                for (let i = 1; i < w; i++) {
-                    const x = Math.round(i * (side / w)) + 0.5;
-                    ctx.moveTo(x, 0); ctx.lineTo(x, side);
-                }
-                for (let j = 1; j < h; j++) {
-                    const y = Math.round(j * (side / h)) + 0.5;
-                    ctx.moveTo(0, y); ctx.lineTo(side, y);
-                }
-                ctx.stroke();
+            // --- disposizione e zoom della tela --------------------------------------
+            // UN SOLO punto decide quanto grande si vede il disegno: la dimensione in
+            // px dello "stage". La tela e la griglia lo riempiono al 100%, quindi
+            // restano allineate al pixel a qualunque zoom senza doversi accordare.
+            //
+            // Nel pannello laterale lo zoom e' calcolato (il lato lungo va a 256) e
+            // arrotondato per DIFETTO a un intero: un fattore frazionario spalmerebbe
+            // un texel su un numero non intero di pixel dello schermo, e con
+            // image-rendering: pixelated si vedrebbero colonne di larghezza diversa.
+            // Nella finestra grande lo zoom lo sceglie l'utente.
+            function artInlineZoom(w, h) {
+                return Math.max(1, Math.floor(ART_INLINE_MAX / Math.max(w, h)));
             }
+
+            function layoutArtStage() {
+                const stage = document.getElementById('materialArtStage');
+                if (!stage || !_art.canvas) return;
+                const w = _art.canvas.width, h = _art.canvas.height;
+                const z = artEditorIsOpen() ? _art.zoom : artInlineZoom(w, h);
+                stage.style.width = (w * z) + 'px';
+                stage.style.height = (h * z) + 'px';
+                const grid = document.getElementById('materialArtGrid');
+                if (grid) {
+                    grid.style.setProperty('--cell', z + 'px');
+                    // Sotto i 5 px per cella le linee sarebbero fitte quanto i pixel e
+                    // la tela diventerebbe un reticolo grigio in cui non si vede piu'
+                    // il disegno.
+                    grid.classList.toggle('hidden', z < 5);
+                }
+                updateZoomUI();
+            }
+
+            function updateZoomUI() {
+                const lab = document.getElementById('materialZoomLabel');
+                if (lab) lab.textContent = Math.round(_art.zoom * 100) + '%';
+                const size = document.getElementById('materialEditorSize');
+                if (size && _art.canvas) {
+                    size.textContent = t('matcreate.editorSize', {
+                        w: _art.canvas.width, h: _art.canvas.height
+                    });
+                }
+                const vp = document.getElementById('materialArtViewport');
+                if (vp && _art.canvas) {
+                    // "Si puo' spostare" = la tela non ci sta tutta. Serve al cursore
+                    // a manina: mostrarlo quando non c'e' niente da spostare
+                    // prometterebbe un'azione che non fa nulla.
+                    const over = _art.canvas.width * _art.zoom > vp.clientWidth
+                        || _art.canvas.height * _art.zoom > vp.clientHeight;
+                    vp.classList.toggle('pannable', over || _art.spaceHeld);
+                }
+            }
+
+            // Imposta lo zoom tenendo fermo un punto: senza ancora, ingrandire porta
+            // via da sotto il puntatore la zona che si stava guardando, ed e' la
+            // differenza fra uno zoom usabile e uno da rifare a mano ogni volta.
+            // `anchor` e' {clientX, clientY}; assente, si ancora al centro.
+            function setArtZoom(z, anchor) {
+                const vp = document.getElementById('materialArtViewport');
+                const stage = document.getElementById('materialArtStage');
+                const next = Math.min(ART_ZOOMS[ART_ZOOMS.length - 1],
+                    Math.max(ART_ZOOMS[0], z));
+                if (!vp || !stage || !_art.canvas) { _art.zoom = next; return; }
+                const vpBox = vp.getBoundingClientRect();
+                const ax = anchor ? anchor.clientX : vpBox.left + vp.clientWidth / 2;
+                const ay = anchor ? anchor.clientY : vpBox.top + vp.clientHeight / 2;
+                // Il texel sotto l'ancora, PRIMA di cambiare zoom.
+                const stBox = stage.getBoundingClientRect();
+                const tx = (ax - stBox.left) / _art.zoom;
+                const ty = (ay - stBox.top) / _art.zoom;
+
+                _art.zoom = next;
+                layoutArtStage();
+
+                // Rimettere quel texel sotto l'ancora. Lo stage e' centrato da
+                // `margin: auto` finche' ci sta, quindi l'offset dentro il contenuto
+                // scorrevole non e' zero e va rimesso nel conto.
+                const w = _art.canvas.width * next, h = _art.canvas.height * next;
+                const offX = Math.max(0, (vp.clientWidth - w) / 2);
+                const offY = Math.max(0, (vp.clientHeight - h) / 2);
+                vp.scrollLeft = offX + tx * next - (ax - vpBox.left);
+                vp.scrollTop = offY + ty * next - (ay - vpBox.top);
+                updateZoomUI();
+            }
+
+            function stepArtZoom(dir, anchor) {
+                let i = 0;
+                while (i < ART_ZOOMS.length && ART_ZOOMS[i] <= _art.zoom) i++;
+                // `i` e' il primo passo STRETTAMENTE maggiore dello zoom attuale.
+                const idx = (dir > 0) ? Math.min(ART_ZOOMS.length - 1, i)
+                    : Math.max(0, i - 2);
+                setArtZoom(ART_ZOOMS[idx], anchor);
+            }
+
+            function artZoomToFit() {
+                const vp = document.getElementById('materialArtViewport');
+                if (!vp || !_art.canvas) return;
+                // -24: un margine, o la tela tocca i bordi e non si capisce dove
+                // finisce.
+                const kx = (vp.clientWidth - 24) / _art.canvas.width;
+                const ky = (vp.clientHeight - 24) / _art.canvas.height;
+                const k = Math.max(1, Math.floor(Math.min(kx, ky)));
+                setArtZoom(k, null);
+            }
+
 
             // --- storia della tela ---------------------------------------------------
             // Snapshot di ImageData: per una tela di 128x128 sono 64 KB, quindi 40
@@ -1404,6 +1504,83 @@
                 updateArtHistoryBtns();
             }
 
+            // --- finestra grande della tela ------------------------------------------
+            // Non duplica niente: alla tela e ai suoi comandi si cambia GENITORE e alla
+            // chiusura tornano dov'erano. Spostare un <canvas> nel DOM ne conserva il
+            // contenuto, quindi il disegno non passa da un'immagine intermedia e non
+            // esiste un secondo editor da tenere allineato al primo -- che sarebbe il
+            // modo ovvio di farlo e anche quello che diverge alla prima modifica.
+            //
+            // La posizione di partenza si ricorda sul nodo stesso (parent + fratello
+            // successivo), cosi' il ritorno e' esatto anche se in mezzo il form ha
+            // mostrato o nascosto altre sezioni.
+            function artHomeSave(node) {
+                if (!node || node._artHome) return;
+                node._artHome = { parent: node.parentNode, next: node.nextSibling };
+            }
+
+            function artHomeRestore(node) {
+                const home = node && node._artHome;
+                if (!home || !home.parent) return;
+                // Il fratello ricordato puo' essere stato spostato a sua volta: in quel
+                // caso insertBefore solleverebbe, quindi si ricade in fondo al genitore.
+                const ref = (home.next && home.next.parentNode === home.parent) ? home.next : null;
+                home.parent.insertBefore(node, ref);
+                node._artHome = null;
+            }
+
+            function artEditorIsOpen() {
+                const ov = document.getElementById('materialEditorOverlay');
+                return !!ov && ov.style.display !== 'none';
+            }
+
+            function openArtEditor() {
+                const ov = document.getElementById('materialEditorOverlay');
+                const vp = document.getElementById('materialArtViewport');
+                const side = document.getElementById('materialEditorSide');
+                const wrap = document.getElementById('materialArtWrap');
+                const tools = document.getElementById('materialArtTools');
+                const setup = document.getElementById('materialCanvasSetup');
+                if (!ov || !vp || !side || !wrap || !tools) return;
+                if (!_art.canvas) newArtCanvas(artSelectedSize(), artBackgroundColor());
+
+                [wrap, tools, setup].forEach(artHomeSave);
+                vp.appendChild(wrap);
+                // La scelta della dimensione viene portata dentro: da dietro la
+                // finestra non sarebbe raggiungibile, e cambiare misura e' parte del
+                // disegnare.
+                if (setup) { side.appendChild(setup); setup.style.display = 'flex'; }
+                side.appendChild(tools);
+
+                const detached = document.getElementById('materialArtDetached');
+                if (detached) detached.style.display = 'flex';
+                const expand = document.getElementById('materialArtExpandBtn');
+                if (expand) expand.style.display = 'none';
+
+                ov.style.display = 'flex';
+                // Lo zoom si calcola DOPO aver mostrato l'overlay: a display:none il
+                // viewport misura 0 e "adatta" darebbe sempre il minimo.
+                artZoomToFit();
+                layoutArtStage();
+            }
+
+            function closeArtEditor() {
+                const ov = document.getElementById('materialEditorOverlay');
+                if (!ov) return;
+                ov.style.display = 'none';
+                ['materialArtWrap', 'materialArtTools', 'materialCanvasSetup'].forEach(id => {
+                    artHomeRestore(document.getElementById(id));
+                });
+                // La sezione della dimensione torna visibile solo se la sorgente la
+                // prevede: refreshSourceUI e' il solo punto che lo sa.
+                const detached = document.getElementById('materialArtDetached');
+                if (detached) detached.style.display = 'none';
+                const expand = document.getElementById('materialArtExpandBtn');
+                if (expand) expand.style.display = '';
+                refreshSourceUI();
+                layoutArtStage();
+            }
+
             function artSnapshot() {
                 if (!_art.ctx || !_art.canvas) return null;
                 try {
@@ -1419,7 +1596,7 @@
                 const ctx = ensureArtCtx(snap.w, snap.h);
                 if (!ctx) return;
                 ctx.putImageData(snap.data, 0, 0);
-                drawArtGrid();
+                layoutArtStage();
                 commitArtToTexture();
             }
 
@@ -1843,6 +2020,15 @@
                 if (artCanvas) {
                     artCanvas.addEventListener('pointerdown', ev => {
                         if (!_art.ctx) return;
+                        // Solo il tasto sinistro disegna: il centrale serve a spostare
+                        // la tela e il destro apre il menu contestuale. Senza questa
+                        // riga un clic destro dipingeva.
+                        if (ev.button !== 0) return;
+                        // Con la barra spaziatrice premuta il puntatore sposta, non
+                        // disegna: e' la convenzione degli editor di immagini, e senza
+                        // di essa spostarsi a zoom alto significherebbe sporcare il
+                        // disegno a ogni trascinamento.
+                        if (_art.spaceHeld) return;
                         const cell = artCellFromEvent(ev);
                         if (!cell) return;
                         ev.preventDefault();
@@ -1885,6 +2071,114 @@
                     artCanvas.addEventListener('pointerup', endDraw);
                     artCanvas.addEventListener('pointercancel', endDraw);
                 }
+
+                // --- finestra grande: apertura, zoom, spostamento -------------------
+                on('materialArtExpandBtn', 'click', openArtEditor);
+                on('materialArtCollapseBtn', 'click', closeArtEditor);
+                on('materialEditorCloseBtn', 'click', closeArtEditor);
+                on('materialZoomInBtn', 'click', () => stepArtZoom(1, null));
+                on('materialZoomOutBtn', 'click', () => stepArtZoom(-1, null));
+                on('materialZoomFitBtn', 'click', artZoomToFit);
+                on('materialZoomOneBtn', 'click', () => setArtZoom(1, null));
+
+                // Clic sullo sfondo scuro = chiudi. Il confronto e' con currentTarget:
+                // senza, un clic su un bottone DENTRO la finestra chiuderebbe tutto,
+                // perche' l'evento risale fino all'overlay.
+                const editorOverlay = document.getElementById('materialEditorOverlay');
+                if (editorOverlay) {
+                    editorOverlay.addEventListener('click', ev => {
+                        if (ev.target === editorOverlay) closeArtEditor();
+                    });
+                }
+
+                const viewport = document.getElementById('materialArtViewport');
+                if (viewport) {
+                    // Rotella = zoom, che e' la convenzione degli editor di pixel art
+                    // (in un'area dedicata al disegno lo scorrimento e' l'eccezione,
+                    // non la regola). passive: false perche' serve preventDefault, o la
+                    // pagina scorrerebbe sotto la finestra.
+                    viewport.addEventListener('wheel', ev => {
+                        if (!artEditorIsOpen()) return;
+                        ev.preventDefault();
+                        stepArtZoom(ev.deltaY < 0 ? 1 : -1, ev);
+                    }, { passive: false });
+
+                    // Spostamento col tasto CENTRALE o con la barra spaziatrice. Si
+                    // muove scrollLeft/scrollTop invece di una trasformazione: il
+                    // viewport e' gia' un contenitore scorrevole, quindi le due strade
+                    // si contraddirebbero.
+                    viewport.addEventListener('pointerdown', ev => {
+                        if (ev.button !== 1 && !(ev.button === 0 && _art.spaceHeld)) return;
+                        ev.preventDefault();
+                        _art.panning = {
+                            id: ev.pointerId,
+                            x: ev.clientX, y: ev.clientY,
+                            left: viewport.scrollLeft, top: viewport.scrollTop
+                        };
+                        viewport.classList.add('panning');
+                        viewport.setPointerCapture(ev.pointerId);
+                    });
+                    viewport.addEventListener('pointermove', ev => {
+                        const p = _art.panning;
+                        if (!p || p.id !== ev.pointerId) return;
+                        viewport.scrollLeft = p.left - (ev.clientX - p.x);
+                        viewport.scrollTop = p.top - (ev.clientY - p.y);
+                    });
+                    const endPan = ev => {
+                        if (!_art.panning || _art.panning.id !== ev.pointerId) return;
+                        _art.panning = null;
+                        viewport.classList.remove('panning');
+                        if (viewport.hasPointerCapture && viewport.hasPointerCapture(ev.pointerId)) {
+                            viewport.releasePointerCapture(ev.pointerId);
+                        }
+                    };
+                    viewport.addEventListener('pointerup', endPan);
+                    viewport.addEventListener('pointercancel', endPan);
+                    // Il tasto centrale apre l'autoscroll di Windows se non lo si ferma.
+                    viewport.addEventListener('auxclick', ev => {
+                        if (ev.button === 1) ev.preventDefault();
+                    });
+                }
+
+                // Tastiera. In CATTURA e con stopPropagation, perche' l'editor si
+                // sovrappone a scorciatoie globali dell'app: Ctrl+Z qui deve annullare
+                // la PENNELLATA, non l'ultima modifica ai voxel, ed Esc non deve
+                // chiudere anche altro. Attivo solo a finestra aperta.
+                document.addEventListener('keydown', ev => {
+                    if (!artEditorIsOpen()) return;
+                    const tag = (ev.target && ev.target.tagName || '').toLowerCase();
+                    // Un campo di testo o un colore ha la precedenza: dentro un input
+                    // Ctrl+Z e' l'annulla del CAMPO, e rubarglielo sarebbe peggio.
+                    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+                    const k = ev.key;
+                    const ctrl = ev.ctrlKey || ev.metaKey;
+                    let taken = true;
+                    if (k === 'Escape') closeArtEditor();
+                    else if (ctrl && (k === 'z' || k === 'Z')) { ev.shiftKey ? artRedo() : artUndo(); }
+                    else if (ctrl && (k === 'y' || k === 'Y')) artRedo();
+                    else if (k === '+' || k === '=') stepArtZoom(1, null);
+                    else if (k === '-' || k === '_') stepArtZoom(-1, null);
+                    else if (k === '0') artZoomToFit();
+                    else if (k === ' ') {
+                        // repeat: tenendo premuto lo spazio il browser ripete l'evento,
+                        // e senza questo filtro si riscriverebbe la classe a ogni giro.
+                        if (!ev.repeat) { _art.spaceHeld = true; updateZoomUI(); }
+                    } else taken = false;
+                    if (taken) { ev.preventDefault(); ev.stopPropagation(); }
+                }, true);
+
+                document.addEventListener('keyup', ev => {
+                    if (ev.key !== ' ') return;
+                    if (!_art.spaceHeld) return;
+                    _art.spaceHeld = false;
+                    updateZoomUI();
+                }, true);
+
+                // Ridimensionando la finestra del browser cambia quanto ci sta nel
+                // viewport, quindi il cursore "si puo' spostare" va rideciso.
+                window.addEventListener('resize', () => {
+                    if (artEditorIsOpen()) updateZoomUI();
+                });
 
                 setArtTool('pencil');
                 setPenColor(_art.pen, false);

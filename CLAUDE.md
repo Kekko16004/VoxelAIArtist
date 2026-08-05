@@ -261,14 +261,20 @@ canvas di w x h pixel VERI (8..128) che il CSS ingrandisce con
 stessa tela** dopo il ritaglio, quindi resta modificabile pixel per pixel invece
 di essere un blocco intoccabile. Il canvas visibile *e'* il buffer: non c'e' un
 secondo buffer da tenere in sincronia, che e' il posto dove questi editor
-divergono. La griglia sta su un **secondo canvas sovrapposto**
-(`#materialGridCanvas`), o finirebbe dentro la texture.
+divergono. La griglia e' un **gradiente CSS** sopra la tela (`.pixel-grid`, passo
+nella variabile `--cell`), non un canvas: resta netta a ogni zoom senza
+ridisegnarsi e senza allocare un buffer che a 64x sarebbe da decine di megabyte.
+Disegnarla *dentro* il canvas dei pixel la farebbe finire nella texture.
+Tela e griglia stanno in uno **stage** (`#materialArtStage`) e lo riempiono al
+100%: la dimensione dello stage e' l'unico punto che decide quanto grande si vede
+il disegno (`layoutArtStage`), quindi i due restano allineati al pixel a
+qualunque zoom senza doversi accordare fra loro.
 - Gli **id nel CSS devono essere quelli del template**. Con selettori sbagliati
   (`#pixelArtCanvas` invece di `#materialArtCanvas`) il canvas resta alla sua
   dimensione nativa di 16 px, la griglia scivola *accanto* invece che sopra, e le
   coordinate dei clic cadono altrove: la gomma sembrava non cancellare.
   Trovato in GUI reale, invisibile ai test unitari.
-- `#materialGridCanvas` vuole `pointer-events: none`: sta SOPRA la tela.
+- `.pixel-grid` vuole `pointer-events: none`: sta SOPRA la tela.
 - La **storia** e' una pila di `ImageData` (max 40). Lo snapshot si prende una
   volta **per tratto**, non per cella, o annullare una pennellata di trenta celle
   richiederebbe trenta annullamenti. Una modifica nuova azzera il redo.
@@ -286,6 +292,43 @@ divergono. La griglia sta su un **secondo canvas sovrapposto**
   a un disegno cominciato su tela vuota).
 - Lo sfondo "trasparente" **non e' un colore**: `artBackgroundColor()` ritorna
   `null` e la tela resta vuota, non nera.
+
+**Finestra grande** (`#materialEditorOverlay`, z-index 96): non duplica niente —
+alla tela (`#materialArtWrap`), ai suoi comandi (`#materialArtTools`) e alla
+scelta della dimensione (`#materialCanvasSetup`) si cambia **genitore**, e alla
+chiusura tornano dov'erano. Spostare un `<canvas>` nel DOM **ne conserva il
+contenuto**, quindi il disegno non passa da un'immagine intermedia e non esiste
+un secondo editor da tenere allineato al primo — che sarebbe il modo ovvio di
+farlo e anche quello che diverge alla prima modifica. La posizione di partenza si
+ricorda sul nodo (`_artHome` = parent + fratello successivo), e al ritorno si
+ricade in fondo al genitore se quel fratello si e' mosso a sua volta
+(`insertBefore` solleverebbe).
+- `closeMaterialForm` chiude **prima** la finestra: lasciarla aperta terrebbe
+  nodi del form agganciati all'overlay, e riaprendo il form la tela non ci
+  sarebbe piu'.
+- `refreshSourceUI` non nasconde `#materialCanvasSetup` mentre la finestra e'
+  aperta: li' dentro e' l'unico modo di ridimensionare il disegno.
+- **Lo zoom e' un fattore INTERO** (`ART_ZOOMS`). Un fattore frazionario
+  spalmerebbe un texel su un numero non intero di pixel e, con
+  `image-rendering: pixelated`, le colonne uscirebbero di larghezza diversa — un
+  reticolo irregolare che si legge come un difetto del disegno. Per lo stesso
+  motivo la griglia in gradiente resta esatta: il passo e' sempre un intero.
+- `setArtZoom` **ancora il punto sotto il puntatore**: senza, ingrandire porta
+  via da sotto il mouse la zona che si stava guardando. Nel conto va incluso
+  l'offset di `margin: auto`, che centra lo stage finche' ci sta.
+- Nel viewport lo stage si centra con **`margin: auto`, non con `align-items`**:
+  dentro un flex con overflow, centrare col contenitore taglia il bordo
+  alto/sinistro quando il contenuto e' piu' grande, e la parte tagliata non e'
+  raggiungibile nemmeno scorrendo.
+- `artZoomToFit` va chiamata **dopo** aver mostrato l'overlay: a `display:none`
+  il viewport misura 0 e "adatta" darebbe sempre il minimo.
+- La tastiera e' agganciata in **cattura con `stopPropagation`**: la finestra si
+  sovrappone a scorciatoie globali, e Ctrl+Z qui deve annullare la *pennellata*,
+  non l'ultima modifica ai voxel. Si esce subito se il bersaglio e' un campo di
+  testo, dove Ctrl+Z e' l'annulla del campo.
+- Il disegno parte solo col tasto **sinistro** e solo se la barra spaziatrice non
+  e' premuta: il centrale e lo spazio spostano la tela, e senza il filtro
+  spostarsi a zoom alto sporcherebbe il disegno a ogni trascinamento.
 
 **Ritaglio** (`#materialCropSection`): otto maniglie, piu' sposta-dentro e
 disegna-fuori. Le maniglie hanno `pointer-events: none` di proposito — il

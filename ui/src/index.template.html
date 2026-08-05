@@ -1162,36 +1162,104 @@
             touch-action: none;
         }
 
-        /* Il canvas e' piccolo (8..128 px di lato) e ingrandito dal CSS:
-           image-rendering pixelated e' cio' che tiene i pixel netti invece di
-           interpolarli. La griglia sopra e' un SECONDO canvas sovrapposto, cosi'
-           disegnarla non sporca i pixel che poi diventano la texture.
-           Gli id sono quelli del template (materialArtCanvas / materialGridCanvas):
-           con selettori sbagliati il canvas resterebbe alla sua dimensione nativa
-           di 16 px e la griglia scivolerebbe accanto invece che sopra. */
-        #materialArtCanvas,
-        #materialGridCanvas {
-            display: block;
-            width: 100%;
-            max-width: 256px;
-            aspect-ratio: 1;
-            image-rendering: pixelated;
+        /* Lo "stage" e' il rettangolo che contiene la tela e la griglia, ed e' il
+           SOLO punto in cui si decide quanto grande si vede il disegno: la sua
+           dimensione in px la scrive layoutArtStage(). I due figli lo riempiono al
+           100%, quindi restano allineati al pixel a qualunque zoom senza doversi
+           accordare fra loro.
+           `margin: auto` invece di align-items sul contenitore: dentro un flex con
+           overflow, centrare col contenitore TAGLIA il bordo alto/sinistro quando il
+           contenuto e' piu' grande della finestra, e la parte tagliata non e'
+           raggiungibile nemmeno scorrendo. */
+        .pixel-stage {
+            position: relative;
+            line-height: 0;
+            margin: auto;
+            flex: 0 0 auto;
+            touch-action: none;
         }
 
-        #materialArtCanvas {
+        .pixel-stage > canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
             border-radius: var(--radius-sm);
             cursor: crosshair;
         }
 
-        /* La griglia non deve mai ricevere un clic: sta SOPRA il canvas dei pixel,
-           quindi senza pointer-events: none intercetterebbe ogni pennellata. */
-        #materialGridCanvas {
+        /* La griglia e' un GRADIENTE, non un canvas: resta netta a ogni zoom senza
+           ridisegnarsi e senza allocare un buffer che a 64x sarebbe enorme.
+           `--cell` (il passo in px) lo scrive layoutArtStage; il colore cambia col
+           tema perche' su una texture chiara le linee bianche sparirebbero.
+           pointer-events: none e' obbligatorio: sta SOPRA la tela. */
+        .pixel-grid {
             position: absolute;
-            top: 8px;
-            left: 50%;
-            transform: translateX(-50%);
+            inset: 0;
             pointer-events: none;
+            --cell: 16px;
+            --line: rgba(255, 255, 255, 0.16);
+            background-image:
+                repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--cell)),
+                repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px var(--cell));
         }
+
+        :root[data-theme="light"] .pixel-grid {
+            --line: rgba(15, 23, 42, 0.18);
+        }
+
+        .pixel-grid.hidden {
+            display: none;
+        }
+
+        /* Viewport della finestra grande: e' il contenitore che scorre. */
+        .pixel-viewport {
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 0;
+            overflow: auto;
+            display: flex;
+            background: var(--inset-bg);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--glass-border);
+        }
+
+        .pixel-viewport.panning,
+        .pixel-viewport.panning .pixel-stage > canvas {
+            cursor: grabbing;
+        }
+
+        .pixel-viewport.pannable .pixel-stage > canvas {
+            cursor: grab;
+        }
+
+        /* Colonna dei comandi dentro la finestra grande. */
+        .pixel-side {
+            flex: 0 0 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .pixel-zoom-btn {
+            min-width: 30px;
+            padding: 5px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--glass-border);
+            background: var(--hover-bg);
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .pixel-zoom-btn:hover {
+            border-color: var(--accent-primary);
+        }
+
 
         .pixel-tool-row {
             display: grid;
@@ -2933,38 +3001,57 @@
 
                             <!-- Editor pixel art: la tela e i suoi strumenti -->
                             <div id="materialDrawSection" style="display:none; flex-direction:column; gap:8px;">
-                                <div class="pixel-canvas-wrap">
-                                    <canvas id="materialArtCanvas" class="alpha-checker" width="16" height="16"></canvas>
-                                    <canvas id="materialGridCanvas" width="256" height="256"></canvas>
+                                <!-- La tela e i suoi comandi sono due nodi SPOSTABILI: la
+                                     finestra grande li trasloca invece di duplicarli, cosi'
+                                     il canvas resta uno solo e non c'e' niente da tenere in
+                                     sincronia (spostare un <canvas> nel DOM ne conserva il
+                                     contenuto). -->
+                                <div class="pixel-canvas-wrap" id="materialArtWrap">
+                                    <div class="pixel-stage" id="materialArtStage">
+                                        <canvas id="materialArtCanvas" class="alpha-checker" width="16" height="16"></canvas>
+                                        <div class="pixel-grid" id="materialArtGrid"></div>
+                                    </div>
                                 </div>
-                                <div class="pixel-tool-row">
-                                    <button class="pixel-tool-btn active" data-pixeltool="pencil"
-                                        data-i18n="matcreate.toolPencil" data-i18n-title="matcreate.toolPencilTitle"
-                                        title="Matita: dipinge un pixel">Matita</button>
-                                    <button class="pixel-tool-btn" data-pixeltool="eraser"
-                                        data-i18n="matcreate.toolEraser" data-i18n-title="matcreate.toolEraserTitle"
-                                        title="Gomma: rende il pixel trasparente">Gomma</button>
-                                    <button class="pixel-tool-btn" data-pixeltool="fill"
-                                        data-i18n="matcreate.toolFill" data-i18n-title="matcreate.toolFillTitle"
-                                        title="Riempimento: dipinge l'area contigua dello stesso colore">Riempi</button>
-                                    <button class="pixel-tool-btn" data-pixeltool="pick"
-                                        data-i18n="matcreate.toolPick" data-i18n-title="matcreate.toolPickTitle"
-                                        title="Contagocce: prende il colore del pixel">Preleva</button>
+                                <button class="btn btn-secondary" id="materialArtExpandBtn" style="padding:6px; font-size:11px;"
+                                    data-i18n="matcreate.expand" data-i18n-title="matcreate.expandTitle"
+                                    title="Apri la tela in una finestra grande, con zoom">Ingrandisci</button>
+                                <!-- Segnaposto mostrato mentre la tela e i comandi sono nella
+                                     finestra grande: senza, il pannello resterebbe un buco. -->
+                                <div id="materialArtDetached" style="display:none; flex-direction:column; gap:8px;">
+                                    <div class="hint-text" data-i18n="matcreate.detached">La tela e' aperta nella finestra grande.</div>
+                                    <button class="btn btn-secondary" id="materialArtCollapseBtn" style="padding:6px; font-size:11px;"
+                                        data-i18n="matcreate.collapse">Riporta nel pannello</button>
                                 </div>
-                                <div class="control-row">
-                                    <label data-i18n="matcreate.penColor">Colore</label>
-                                    <input type="color" id="materialPenColor" class="accent-swatch" value="#E8C39E"
-                                        style="width:26px; height:26px;">
-                                    <span class="hint-text" id="materialPenHex" style="font-variant-numeric:tabular-nums;">#E8C39E</span>
-                                </div>
-                                <div class="pixel-swatches" id="materialPenSwatches"></div>
-                                <div class="btn-group" style="grid-template-columns:1fr 1fr 1fr;">
-                                    <button class="btn btn-secondary" id="materialArtUndoBtn" disabled style="padding:6px; font-size:11px;"
-                                        data-i18n="matcreate.undo">Annulla</button>
-                                    <button class="btn btn-secondary" id="materialArtRedoBtn" disabled style="padding:6px; font-size:11px;"
-                                        data-i18n="matcreate.redo">Ripeti</button>
-                                    <button class="btn btn-secondary" id="materialArtClearBtn" style="padding:6px; font-size:11px;"
-                                        data-i18n="matcreate.clear">Svuota</button>
+                                <div id="materialArtTools" style="display:flex; flex-direction:column; gap:8px;">
+                                    <div class="pixel-tool-row">
+                                        <button class="pixel-tool-btn active" data-pixeltool="pencil"
+                                            data-i18n="matcreate.toolPencil" data-i18n-title="matcreate.toolPencilTitle"
+                                            title="Matita: dipinge un pixel">Matita</button>
+                                        <button class="pixel-tool-btn" data-pixeltool="eraser"
+                                            data-i18n="matcreate.toolEraser" data-i18n-title="matcreate.toolEraserTitle"
+                                            title="Gomma: rende il pixel trasparente">Gomma</button>
+                                        <button class="pixel-tool-btn" data-pixeltool="fill"
+                                            data-i18n="matcreate.toolFill" data-i18n-title="matcreate.toolFillTitle"
+                                            title="Riempimento: dipinge l'area contigua dello stesso colore">Riempi</button>
+                                        <button class="pixel-tool-btn" data-pixeltool="pick"
+                                            data-i18n="matcreate.toolPick" data-i18n-title="matcreate.toolPickTitle"
+                                            title="Contagocce: prende il colore del pixel">Preleva</button>
+                                    </div>
+                                    <div class="control-row">
+                                        <label data-i18n="matcreate.penColor">Colore</label>
+                                        <input type="color" id="materialPenColor" class="accent-swatch" value="#E8C39E"
+                                            style="width:26px; height:26px;">
+                                        <span class="hint-text" id="materialPenHex" style="font-variant-numeric:tabular-nums;">#E8C39E</span>
+                                    </div>
+                                    <div class="pixel-swatches" id="materialPenSwatches"></div>
+                                    <div class="btn-group" style="grid-template-columns:1fr 1fr 1fr;">
+                                        <button class="btn btn-secondary" id="materialArtUndoBtn" disabled style="padding:6px; font-size:11px;"
+                                            data-i18n="matcreate.undo">Annulla</button>
+                                        <button class="btn btn-secondary" id="materialArtRedoBtn" disabled style="padding:6px; font-size:11px;"
+                                            data-i18n="matcreate.redo">Ripeti</button>
+                                        <button class="btn btn-secondary" id="materialArtClearBtn" style="padding:6px; font-size:11px;"
+                                            data-i18n="matcreate.clear">Svuota</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -3704,6 +3791,42 @@
          una classe .modal-overlay condivisa, e inventarla qui vorrebbe dire
          riscrivere anche gli overlay esistenti. z-index 95 = sopra importOverlay
          (90), sotto il loader. -->
+    <!-- ===== Finestra grande della tela (pixel art) =====
+         Non duplica nulla: al momento dell'apertura ci vengono TRASLOCATI dentro la
+         tela (#materialArtWrap) e i suoi comandi, e alla chiusura tornano al loro
+         posto. Spostare un <canvas> nel DOM ne conserva il contenuto, quindi il
+         disegno non passa da un'immagine intermedia e non esiste un secondo buffer
+         da tenere in sincronia. z-index 96 = sopra primOverlay (95). -->
+    <div id="materialEditorOverlay" style="display:none; position:fixed; inset:0; z-index:96; align-items:center; justify-content:center; background:var(--overlay-scrim);">
+        <div class="glass" style="width:min(1200px, 94vw); height:min(900px, 92vh); padding:16px; border-radius:var(--radius-lg); display:flex; flex-direction:column; gap:12px;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div class="section-title" style="margin:0;" data-i18n="matcreate.editorTitle">Tela del materiale</div>
+                <span class="hint-text" id="materialEditorSize" style="font-variant-numeric:tabular-nums;"></span>
+                <div style="flex:1;"></div>
+                <button class="pixel-zoom-btn" id="materialZoomOutBtn"
+                    data-i18n-title="matcreate.zoomOut" title="Riduci">&#8722;</button>
+                <span class="hint-text" id="materialZoomLabel"
+                    style="min-width:52px; text-align:center; font-variant-numeric:tabular-nums;"></span>
+                <button class="pixel-zoom-btn" id="materialZoomInBtn"
+                    data-i18n-title="matcreate.zoomIn" title="Ingrandisci">+</button>
+                <button class="pixel-zoom-btn" id="materialZoomFitBtn"
+                    data-i18n="matcreate.zoomFit" data-i18n-title="matcreate.zoomFitTitle"
+                    title="Adatta la tela alla finestra">Adatta</button>
+                <button class="pixel-zoom-btn" id="materialZoomOneBtn"
+                    data-i18n-title="matcreate.zoomOneTitle" title="Un pixel dello schermo per pixel della texture">1:1</button>
+                <button class="btn btn-secondary" id="materialEditorCloseBtn" style="padding:6px 14px; font-size:12px;"
+                    data-i18n="matcreate.editorClose">Chiudi</button>
+            </div>
+            <div style="display:flex; gap:12px; flex:1; min-height:0;">
+                <div class="pixel-viewport" id="materialArtViewport"></div>
+                <div class="pixel-side" id="materialEditorSide"></div>
+            </div>
+            <div class="hint-text" data-i18n="matcreate.editorHint">
+                Rotella per lo zoom, tasto centrale o barra spaziatrice per spostare la tela. Ctrl+Z e Ctrl+Y annullano e ripetono il disegno.
+            </div>
+        </div>
+    </div>
+
     <div id="primOverlay" style="display:none; position:fixed; inset:0; z-index:95; align-items:center; justify-content:center; background:var(--overlay-scrim);">
         <div class="glass" style="min-width:320px; max-width:420px; padding:20px; border-radius:var(--radius-md); display:flex; flex-direction:column; gap:14px;">
             <div id="primStepShape">
