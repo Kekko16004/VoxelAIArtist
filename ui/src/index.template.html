@@ -1212,6 +1212,49 @@
             display: none;
         }
 
+        /* Anteprima della cella sotto il puntatore. `left`/`top`/`width`/`height`
+           li scrive updateArtCursorEl a ogni movimento: qui solo l'aspetto.
+           pointer-events: none, o intercetterebbe il click destinato alla tela. */
+        .pixel-cursor {
+            position: absolute;
+            box-sizing: border-box;
+            border: 2px solid #fff;
+            box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba(0, 0, 0, .35);
+            pointer-events: none;
+            display: none;
+            z-index: 2;
+        }
+
+        .pixel-cursor.visible {
+            display: block;
+        }
+
+        .pixel-cursor.tool-eraser {
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(255, 80, 80, .35) 0 4px,
+                rgba(255, 255, 255, .2) 4px 8px
+            );
+        }
+
+        .pixel-cursor.tool-fill,
+        .pixel-cursor.tool-pick {
+            border-style: dashed;
+        }
+
+        /* Stellina "salva in libreria" sulla scheda. */
+        .material-card .material-card-star {
+            bottom: 2px;
+            right: 2px;
+            font-size: 11px;
+            line-height: 18px;
+        }
+
+        .material-card .material-card-star.in-lib {
+            color: #f5c542;
+            opacity: 1;
+        }
+
         /* Viewport della finestra grande: e' il contenitore che scorre. */
         .pixel-viewport {
             flex: 1 1 auto;
@@ -2940,6 +2983,23 @@
                                 <button class="seg-btn" data-source="image" data-i18n="matcreate.srcImage">Da immagine</button>
                             </div>
 
+                            <!-- Sorgente "Tinta unita": il colore del materiale.
+                                 E' LO STESSO colore del pennello (vedi setPenColor):
+                                 sceglierlo qui lo porta nella tela e viceversa, cosi'
+                                 chi vuole restare sulla tinta piatta non deve passare
+                                 dal disegno per cambiarla. -->
+                            <div id="materialSolidSetup" style="display:none; flex-direction:column; gap:8px;">
+                                <div class="control-row">
+                                    <label data-i18n="matcreate.solidColor">Colore</label>
+                                    <input type="color" id="materialSolidColor" class="accent-swatch" value="#E8C39E"
+                                        style="width:26px; height:26px;">
+                                    <span class="hint-text" id="materialSolidHex" style="font-variant-numeric:tabular-nums;"></span>
+                                </div>
+                                <div class="hint-text" data-i18n="matcreate.solidHint">
+                                    E' lo stesso colore del pennello: cambiarlo qui lo cambia anche nella tela.
+                                </div>
+                            </div>
+
                             <!-- Sorgente "Da immagine": file + ritaglio -->
                             <div id="materialImageSetup" style="display:none; flex-direction:column; gap:8px;">
                                 <input type="file" id="materialTextureInput" accept="image/*" class="field-file"
@@ -3010,6 +3070,9 @@
                                     <div class="pixel-stage" id="materialArtStage">
                                         <canvas id="materialArtCanvas" class="alpha-checker" width="16" height="16"></canvas>
                                         <div class="pixel-grid" id="materialArtGrid"></div>
+                                        <!-- Anteprima della cella sotto il puntatore: mostra
+                                             DOVE si sta per dipingere e con quale colore. -->
+                                        <div class="pixel-cursor" id="materialArtCursor"></div>
                                     </div>
                                 </div>
                                 <button class="btn btn-secondary" id="materialArtExpandBtn" style="padding:6px; font-size:11px;"
@@ -3051,6 +3114,15 @@
                                             data-i18n="matcreate.redo">Ripeti</button>
                                         <button class="btn btn-secondary" id="materialArtClearBtn" style="padding:6px; font-size:11px;"
                                             data-i18n="matcreate.clear">Svuota</button>
+                                    </div>
+                                    <!-- Tolleranza del riempimento: su un'immagine
+                                         importata due pixel "dello stesso colore"
+                                         differiscono di qualche unita', e senza
+                                         soglia il riempimento si fermava dopo pochi. -->
+                                    <div class="control-row" id="materialFillTolRow">
+                                        <label data-i18n="matcreate.fillTolerance">Tolleranza</label>
+                                        <input type="range" id="materialFillTolerance" min="0" max="128" step="1" value="24">
+                                        <span id="materialFillToleranceValue" class="hint-text" style="min-width:28px; text-align:right;">24</span>
                                     </div>
                                 </div>
                             </div>

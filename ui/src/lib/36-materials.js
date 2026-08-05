@@ -552,14 +552,37 @@
             // Bottoncino sovrapposto alla scheda. stopPropagation SEMPRE: il bottone
             // sta DENTRO la scheda, quindi senza di esso il click farebbe anche
             // l'azione della scheda (selezionare il materiale che si sta eliminando).
+            //
+            // innerHTML e non textContent perche' i glifi arrivano come entita' HTML:
+            // stella e matita non stanno in latin1, e il build legge/scrive i sorgenti
+            // come latin1. Il contenuto e' una COSTANTE nostra, mai testo dell'utente.
             function materialCardBtn(cls, glyph, title, onClick) {
                 const b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'material-card-btn ' + cls;
-                b.textContent = glyph;
+                b.innerHTML = glyph;
                 b.title = title;
                 b.addEventListener('click', ev => { ev.stopPropagation(); onClick(); });
                 return b;
+            }
+
+            // Copia un materiale del progetto nella libreria personale. COPIA, non
+            // sposta: il materiale resta nel progetto (i voxel lo citano per id), e in
+            // libreria ne va una fotografia indipendente che sopravvive alla sua
+            // modifica o eliminazione.
+            //
+            // L'id viene rinumerato nello spazio della LIBRERIA: due progetti possono
+            // aver usato m1 per materiali diversi, e tenere quello d'origine
+            // sovrapporrebbe due voci diverse.
+            function copyMaterialToLibrary(def) {
+                const lib = loadMaterialLibrary();
+                if (lib.length >= MATERIAL_LIB_MAX) {
+                    alert(t('materials.libraryFull', { max: MATERIAL_LIB_MAX }));
+                    return;
+                }
+                lib.push(normalizeMaterial(def, nextMaterialId(lib.map(m => m && m.id))));
+                saveMaterialLibrary(lib);
+                renderMaterialLibrary();
             }
 
             // --- anteprima live -----------------------------------------------------
@@ -754,9 +777,11 @@
                 list.forEach(def => {
                     const el = materialCardEl(def, () => setActiveMaterialAndSync(def.id));
                     el.title = def.name;
-                    el.appendChild(materialCardBtn('material-card-edit', '✎',
+                    el.appendChild(materialCardBtn('material-card-edit', '&#9998;',
                         t('materials.editTitle'), () => openMaterialForm(def.id)));
-                    el.appendChild(materialCardBtn('material-card-del', '×',
+                    el.appendChild(materialCardBtn('material-card-star', '&#9733;',
+                        t('materials.saveToLibraryTitle'), () => copyMaterialToLibrary(def)));
+                    el.appendChild(materialCardBtn('material-card-del', '&#215;',
                         t('materials.deleteTitle'), () => deleteMaterialFromPanel(def)));
                     el.addEventListener('contextmenu', ev => { ev.preventDefault(); deleteMaterialFromPanel(def); });
                     grid.appendChild(el);
@@ -804,7 +829,7 @@
                     const del = document.createElement('button');
                     del.type = 'button';
                     del.className = 'material-card-btn material-card-del';
-                    del.textContent = '×';
+                    del.innerHTML = '&#215;';
                     del.title = t('materials.deleteTitle');
                     del.addEventListener('click', ev => {
                         ev.stopPropagation();
@@ -893,12 +918,21 @@
                 put('materialUvRotationValue', Math.round(uv.rotation) + '°');
             }
 
-            // Senza texture il materiale e' una tinta unita col colore attivo: e'
-            // comunque utile per ruvidita'/metallicita'/emissivo.
+            // Colore del materiale che il form sta descrivendo. Sulla "Tinta unita" e'
+            // SEMPRE il pennello, anche se la tela ha ancora una texture pendente:
+            // formDefinition scarta la texture in quel caso, e se qui si leggesse
+            // la tinta media della texture il materiale salvato finirebbe col
+            // colore sbagliato (misurato: si sceglieva #CC3311 e si salvava il
+            // ciano del riempimento di prova).
+            //
+            // Con una texture (draw/image) il colore e' la tinta media della
+            // texture: e' quello che serve a .vox/.schem e alle swatch, e
+            // l'anteprima lo moltiplica solo se manca la map.
             function currentFormColor() {
-                if (_formState.pendingTexture) return _formState.pendingTexture.color;
-                return (typeof activeColorHex === 'string' && MATERIAL_HEX_RE.test(activeColorHex))
-                    ? activeColorHex.toUpperCase() : MATERIAL_FALLBACK_COLOR;
+                if (_formState.source !== 'flat' && _formState.pendingTexture) {
+                    return _formState.pendingTexture.color;
+                }
+                return MATERIAL_HEX_RE.test(_art.pen) ? _art.pen : MATERIAL_FALLBACK_COLOR;
             }
 
             // La definizione che il form sta descrivendo ADESSO. Unico punto che la
@@ -949,6 +983,7 @@
                     if (el) el.style.display = on ? 'flex' : 'none';
                 };
                 show('materialImageSetup', src === 'image');
+                show('materialSolidSetup', src === 'flat');
                 // Mentre la tela e' nella finestra grande la scelta della dimensione
                 // sta LI' DENTRO: nasconderla perche' la sorgente e' cambiata la
                 // farebbe sparire da un pannello in cui e' l'unico modo di
@@ -1031,6 +1066,16 @@
                     setSlider('materialUvOffsetV', 0);
                     setSlider('materialUvRotation', 0);
                     resetArtCanvas();
+                }
+                // Il colore del form (pennello E tinta unita, vedi setPenColor):
+                // in modifica quello del materiale, in creazione il colore attivo
+                // dell'editor -- che e' quello che l'utente sta gia' usando, quindi
+                // l'aspettativa e' di ritrovarlo qui.
+                if (def && !def.texture) {
+                    setPenColor(def.color, false);
+                } else if (!def && typeof activeColorHex === 'string'
+                    && MATERIAL_HEX_RE.test(activeColorHex)) {
+                    setPenColor(activeColorHex, false);
                 }
                 // Il file input non si puo' precaricare (non esiste un File da
                 // assegnare): si azzera, e la texture in modifica arriva da _formState.
@@ -1408,6 +1453,9 @@
                     // il disegno.
                     grid.classList.toggle('hidden', z < 5);
                 }
+                // Il riquadro dell'anteprima e' misurato in px: cambiando zoom va
+                // rimesso in scala, o resterebbe grande quanto una cella di prima.
+                updateArtCursorEl();
                 updateZoomUI();
             }
 
@@ -1626,16 +1674,31 @@
             }
 
             // --- strumenti -----------------------------------------------------------
+            // La radice da cui si cercano i bottoni e' #materialArtTools, NON
+            // #materialDrawSection: aprendo la finestra grande i comandi vengono
+            // spostati fuori dalla sezione, quindi cercarli da li' non trovava piu'
+            // nulla e i tasti Gomma/Riempi/Preleva restavano inerti (la Matita
+            // sembrava funzionare solo perche' e' quella attiva per difetto).
+            // Cercare dal nodo che VIAGGIA coi bottoni vale in tutte e due i posti.
             function setArtTool(tool) {
                 _art.tool = ['pencil', 'eraser', 'fill', 'pick'].indexOf(tool) >= 0 ? tool : 'pencil';
-                const row = document.getElementById('materialDrawSection');
+                const row = document.getElementById('materialArtTools');
                 if (row && row.querySelectorAll) {
                     row.querySelectorAll('.pixel-tool-btn').forEach(b => {
                         b.classList.toggle('active', b.dataset.pixeltool === _art.tool);
                     });
                 }
+                updateArtCursorEl();
             }
 
+            // Un solo colore per il pennello E per la "Tinta unita": i due picker
+            // sono due facce della stessa cosa. Sceglierlo in un posto lo porta
+            // nell'altro, cosi' chi resta sulla tinta piatta non deve passare dal
+            // disegno per cambiarla, e chi disegna non deve tornare indietro.
+            //
+            // `remember` lo mette fra le tinte recenti (usato dopo una pennellata
+            // o un prelievo, non a ogni movimento del picker: altrimenti la
+            // tavolozza si riempirebbe di tinte intermedie del trascinamento).
             function setPenColor(hex, remember) {
                 if (!MATERIAL_HEX_RE.test(hex || '')) return;
                 _art.pen = hex.toUpperCase();
@@ -1643,14 +1706,24 @@
                 if (picker) picker.value = _art.pen;
                 const label = document.getElementById('materialPenHex');
                 if (label) label.textContent = _art.pen;
+                // Il picker della "Tinta unita" e' lo stesso colore: si aggiorna
+                // sempre, anche se la sezione e' nascosta, cosi' al rientro non
+                // mostra un valore stantio.
+                const solid = document.getElementById('materialSolidColor');
+                if (solid) solid.value = _art.pen;
+                const solidHex = document.getElementById('materialSolidHex');
+                if (solidHex) solidHex.textContent = _art.pen;
                 if (remember) {
                     // La tinta usata va in testa e le doppie si tolgono: una tavolozza
                     // che ripete lo stesso colore sei volte non aiuta a ritrovarlo.
                     _art.recent = [_art.pen].concat(_art.recent.filter(c => c !== _art.pen))
                         .slice(0, ART_RECENT_MAX);
-                    renderPenSwatches();
                 }
                 renderPenSwatches();
+                // Anche l'anteprima live (sfera/cubo) deve seguire: in "Tinta unita"
+                // il colore del materiale e' proprio questo.
+                if (materialFormIsOpen() && _formState.source === 'flat') refreshFormPreview();
+                updateArtCursorEl();
             }
 
             function renderPenSwatches() {
@@ -1666,6 +1739,47 @@
                     b.addEventListener('click', () => setPenColor(hex, false));
                     box.appendChild(b);
                 });
+            }
+
+            // --- anteprima della cella sotto il puntatore ---------------------------
+            // Mostra DOVE si sta per dipingere e con quale colore. Su una tela
+            // ingrandita il puntatore del sistema copre proprio il pixel che si mira,
+            // e senza questo riquadro si scopre di aver sbagliato cella solo dopo
+            // aver dipinto.
+            //
+            // E' un div dentro lo stage, non un disegno sul canvas: disegnarlo sulla
+            // tela lo farebbe finire nella texture, e cancellarlo richiederebbe di
+            // ridipingere la cella sotto ogni volta che il puntatore si muove.
+            let _artHoverCell = null;
+
+            function updateArtCursorEl() {
+                const cur = document.getElementById('materialArtCursor');
+                if (!cur) return;
+                if (!_artHoverCell || !_art.canvas) {
+                    cur.classList.remove('visible');
+                    return;
+                }
+                const z = artEditorIsOpen()
+                    ? _art.zoom
+                    : artInlineZoom(_art.canvas.width, _art.canvas.height);
+                cur.classList.add('visible');
+                cur.style.left = (_artHoverCell.x * z) + 'px';
+                cur.style.top = (_artHoverCell.y * z) + 'px';
+                cur.style.width = z + 'px';
+                cur.style.height = z + 'px';
+                // La gomma e il contagocce non posano un colore: mostrarne uno
+                // prometterebbe un'azione diversa da quella che fanno.
+                const paints = (_art.tool === 'pencil' || _art.tool === 'fill');
+                cur.style.background = paints ? _art.pen : 'transparent';
+                cur.className = 'pixel-cursor visible tool-' + _art.tool;
+            }
+
+            function setArtHoverCell(cell) {
+                const same = (!cell && !_artHoverCell)
+                    || (cell && _artHoverCell && cell.x === _artHoverCell.x && cell.y === _artHoverCell.y);
+                if (same) return;
+                _artHoverCell = cell;
+                updateArtCursorEl();
             }
 
             function artCellFromEvent(ev) {
@@ -1714,6 +1828,26 @@
             // Il confronto include l'ALPHA, cosi' riempire una zona trasparente
             // funziona invece di essere un no-op -- ed e' il caso piu' comune, perche'
             // e' come si da' uno sfondo a un disegno cominciato su tela vuota.
+            //
+            // TOLLERANZA. Il confronto ESATTO funziona solo su una tela disegnata a
+            // mano, dove le tinte sono poche e identiche. Su un'immagine importata
+            // (che passa da un ricampionamento, quindi da un'interpolazione) due pixel
+            // adiacenti dello stesso "colore" differiscono di qualche unita': il
+            // riempimento si fermava dopo pochi pixel e lasciava un alone, che e' il
+            // "non funziona al meglio". Si confronta quindi la distanza di Chebyshev
+            // sui 4 canali contro una soglia regolabile.
+            //
+            // I pixel gia' riempiti vanno segnati a parte (`done`): con la tolleranza
+            // il colore nuovo puo' rientrare nella soglia del vecchio, e senza un
+            // segno esplicito la stessa cella verrebbe rimessa in pila all'infinito.
+            // Col confronto esatto non serviva, perche' il colore scritto non poteva
+            // piu' somigliare a quello cercato.
+            function artFillTolerance() {
+                const el = document.getElementById('materialFillTolerance');
+                const n = el ? parseInt(el.value, 10) : 24;
+                return isFinite(n) ? Math.max(0, Math.min(255, n)) : 24;
+            }
+
             function artFloodFill(sx, sy) {
                 const ctx = _art.ctx, cv = _art.canvas;
                 if (!ctx || !cv) return;
@@ -1731,15 +1865,31 @@
                     n2 = parseInt(hex.substr(5, 2), 16);
                     n3 = 255;
                 }
-                // Sorgente e destinazione identiche: il riempimento non finirebbe mai
-                // di trovare celle "da cambiare" se non si uscisse subito.
+                // Sorgente e destinazione identiche: non ci sarebbe niente da fare, e
+                // la pila girerebbe a vuoto sull'intera area.
                 if (t0[0] === n0 && t0[1] === n1 && t0[2] === n2 && t0[3] === n3) return;
+                const tol = artFillTolerance();
+                // Un pixel completamente trasparente non ha colore: confrontarne RGB
+                // e' senza senso (il canvas ci lascia dentro valori arbitrari), quindi
+                // fra due trasparenti conta solo che lo siano entrambi.
+                const alike = (i) => {
+                    if (t0[3] === 0) return d[i + 3] === 0;
+                    if (d[i + 3] === 0) return false;
+                    return Math.abs(d[i] - t0[0]) <= tol
+                        && Math.abs(d[i + 1] - t0[1]) <= tol
+                        && Math.abs(d[i + 2] - t0[2]) <= tol
+                        && Math.abs(d[i + 3] - t0[3]) <= tol;
+                };
+                const done = new Uint8Array(W * H);
                 const stack = [sx, sy];
                 while (stack.length) {
                     const y = stack.pop(), x = stack.pop();
                     if (x < 0 || y < 0 || x >= W || y >= H) continue;
-                    const i = at(x, y);
-                    if (d[i] !== t0[0] || d[i + 1] !== t0[1] || d[i + 2] !== t0[2] || d[i + 3] !== t0[3]) continue;
+                    const p = y * W + x;
+                    if (done[p]) continue;
+                    const i = p * 4;
+                    if (!alike(i)) continue;
+                    done[p] = 1;
                     d[i] = n0; d[i + 1] = n1; d[i + 2] = n2; d[i + 3] = n3;
                     stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
                 }
@@ -2005,15 +2155,33 @@
                     commitArtToTexture();
                 });
 
-                const drawSec = document.getElementById('materialDrawSection');
-                if (drawSec) {
-                    drawSec.addEventListener('click', ev => {
+                // La delega sta su #materialArtTools e non sulla sezione che lo
+                // contiene: la finestra grande sposta questo nodo, e un ascoltatore
+                // sul contenitore non vedrebbe piu' i click (era il difetto per cui
+                // Gomma/Riempi/Preleva non si potevano scegliere da ingrandito).
+                const toolsBox = document.getElementById('materialArtTools');
+                if (toolsBox) {
+                    toolsBox.addEventListener('click', ev => {
                         const b = ev.target.closest ? ev.target.closest('.pixel-tool-btn') : null;
                         if (b && b.dataset.pixeltool) setArtTool(b.dataset.pixeltool);
                     });
                 }
 
                 on('materialPenColor', 'input', ev => setPenColor(ev.target.value, false));
+                // Il picker della "Tinta unita" scrive lo STESSO colore del pennello:
+                // e' un solo valore mostrato in due posti, non due impostazioni che
+                // possono divergere.
+                on('materialSolidColor', 'input', ev => setPenColor(ev.target.value, false));
+                // A rilascio avvenuto la tinta entra fra le recenti: durante il
+                // trascinamento del picker si passa per decine di colori intermedi
+                // che non ha senso ricordare.
+                on('materialPenColor', 'change', ev => setPenColor(ev.target.value, true));
+                on('materialSolidColor', 'change', ev => setPenColor(ev.target.value, true));
+
+                on('materialFillTolerance', 'input', () => {
+                    const el = document.getElementById('materialFillToleranceValue');
+                    if (el) el.textContent = String(artFillTolerance());
+                });
 
                 // --- disegno sulla tela --------------------------------------------
                 const artCanvas = document.getElementById('materialArtCanvas');
@@ -2049,8 +2217,12 @@
                         artCanvas.setPointerCapture(ev.pointerId);
                     });
                     artCanvas.addEventListener('pointermove', ev => {
-                        if (!_art.drawing) return;
                         const cell = artCellFromEvent(ev);
+                        // L'anteprima segue il puntatore anche senza tasto premuto:
+                        // e' proprio quando NON si sta dipingendo che serve sapere
+                        // dove si finirebbe.
+                        setArtHoverCell(cell);
+                        if (!_art.drawing) return;
                         if (!cell) return;
                         const key = cell.x + ',' + cell.y;
                         // Ridipingere la stessa cella a ogni pixel di movimento non
@@ -2059,6 +2231,9 @@
                         _art.lastCell = key;
                         artPaintCell(cell.x, cell.y);
                     });
+                    // Uscendo dalla tela il riquadro va tolto, o resterebbe fermo
+                    // sull'ultima cella come se il puntatore fosse ancora li'.
+                    artCanvas.addEventListener('pointerleave', () => setArtHoverCell(null));
                     const endDraw = ev => {
                         if (!_art.drawing) return;
                         _art.drawing = false;
