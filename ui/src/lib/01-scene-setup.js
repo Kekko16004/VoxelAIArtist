@@ -366,10 +366,13 @@
             document.getElementById('fillFloorBtn').addEventListener('click', () => {
                 pushHistory();
                 const g = currentModelData.metadata.grid_size || [16, 16, 16];
+                // Un TOKEN, non un colore: col materiale attivo il piano nasce
+                // texturizzato come ogni altra scrittura nella voxelMap.
+                const tok = (typeof activeToken === 'function') ? activeToken() : activeColorHex;
                 for (let x = 0; x < g[0]; x++) {
                     for (let z = 0; z < g[2]; z++) {
                         const key = `${x},0,${z}`;
-                        voxelMap.set(key, activeColorHex);
+                        voxelMap.set(key, tok);
                     }
                 }
                 syncVoxelsFromMap();

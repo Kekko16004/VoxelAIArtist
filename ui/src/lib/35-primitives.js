@@ -314,8 +314,20 @@
                 // (normalize_asset): una primitiva che nasce in un angolo va spostata
                 // a mano ogni volta.
                 const ox = Math.floor((g - d.size) / 2), oz = Math.floor((g - d.size) / 2);
-                const color = (typeof activeColorHex === 'string') ? activeColorHex : '#CCCCCC';
-                const voxels = cells.map(c => ({ x: c.x + ox, y: c.y, z: c.z + oz, color: color }));
+                // Un TOKEN, non un colore: con un materiale attivo la primitiva nasce
+                // texturizzata come ogni altra scrittura nella voxelMap.
+                const tok = (typeof activeToken === 'function') ? activeToken()
+                    : (typeof activeColorHex === 'string' ? activeColorHex : '#CCCCCC');
+                const voxels = cells.map(c => {
+                    const decoded = (typeof decodeToken === 'function')
+                        ? decodeToken(tok, tok)
+                        : { color: tok, material: null };
+                    const v = { x: c.x + ox, y: c.y, z: c.z + oz, color: decoded.color };
+                    // `material` e' FACOLTATIVO: si aggiunge solo se c'e' davvero,
+                    // altrimenti ogni voxel di colore porterebbe un campo a null.
+                    if (decoded.material) v.material = decoded.material;
+                    return v;
+                });
                 const obj = createObject({
                     // primLabel, non t(): questo nome viene SALVATO nel progetto, quindi
                     // una chiave nuda qui sopravvive al guasto che l'ha causata.

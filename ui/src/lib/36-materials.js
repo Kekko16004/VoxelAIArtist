@@ -43,13 +43,39 @@
 
             let activeMaterialId = null;
 
+            // I materiali sono di PROGETTO, non del singolo oggetto. `currentModelData`
+            // pero' e' l'oggetto ATTIVO (04-objects.js: `currentModelData = obj.data`),
+            // quindi tenerli solo li' dentro li faceva sparire appena si creava o si
+            // sceglieva un altro oggetto: misurato in GUI: crea materiale -> Shift+A ->
+            // il pannello torna "Nessun materiale" e la primitiva nasce a tinta unita.
+            // Qui la lista vive a livello di scena e ogni oggetto ci fa da ALIAS, cosi'
+            // il salvataggio per-oggetto la scrive senza sapere che e' condivisa e il
+            // caricamento la fonde invece di sostituirla.
+            let sceneMaterials = [];
+
+            // Da chiamare quando si azzera la scena (nuovo progetto / apertura file):
+            // senza, i materiali del progetto precedente sopravvivono al successivo.
+            function resetSceneMaterials() {
+                sceneMaterials = [];
+                activeMaterialId = null;
+            }
+
             function materialsOfProject() {
-                if (!currentModelData) return [];
+                if (!currentModelData) return sceneMaterials;
                 if (!currentModelData.metadata) currentModelData.metadata = {};
-                if (!Array.isArray(currentModelData.metadata.materials)) {
-                    currentModelData.metadata.materials = [];
+                const own = currentModelData.metadata.materials;
+                if (Array.isArray(own) && own !== sceneMaterials) {
+                    // Un oggetto appena caricato porta la SUA lista: si fonde per id.
+                    // Non si sovrascrive l'id in collisione, perche' i voxel di questo
+                    // oggetto lo citano gia': rimapparli qui e' fuori portata, e due
+                    // definizioni con lo stesso id in uno stesso progetto vengono
+                    // comunque dallo stesso salvataggio.
+                    own.forEach(m => {
+                        if (m && m.id && !sceneMaterials.some(x => x.id === m.id)) sceneMaterials.push(m);
+                    });
                 }
-                return currentModelData.metadata.materials;
+                currentModelData.metadata.materials = sceneMaterials;
+                return sceneMaterials;
             }
 
             function materialById(id) {

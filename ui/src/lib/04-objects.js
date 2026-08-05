@@ -86,6 +86,10 @@
                 sceneObjects = [];
                 activeObjectId = null;
                 rig = null;
+                // I materiali sono di progetto: aprire un file non deve ereditare
+                // quelli del progetto precedente. La lista si ripopola fondendo i
+                // metadata degli oggetti appena caricati (vedi materialsOfProject).
+                if (typeof resetSceneMaterials === 'function') resetSceneMaterials();
                 if (parsed && Array.isArray(parsed.objects)) {
                     parsed.objects.forEach((o, i) => {
                         // expandOps NON conosce i materiali (le ops sono di soli colori):

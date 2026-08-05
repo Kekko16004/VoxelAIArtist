@@ -129,7 +129,11 @@
                 const cells = extrudeTargetCells();
                 if (cells.length > 0) {
                     pushHistory();
-                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                    // activeToken(), non activeColorHex: nella voxelMap va un TOKEN, e
+                    // con un materiale attivo l'estrusione deve nascere texturizzata
+                    // come tutto il resto dell'editing.
+                    const tok = (typeof activeToken === 'function') ? activeToken() : activeColorHex;
+                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                     syncVoxelsFromMap();
                     buildModel(false);
                 }

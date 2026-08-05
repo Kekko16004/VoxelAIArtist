@@ -2534,9 +2534,11 @@
                             <button class="btn btn-secondary" id="fillFloorBtn" style="padding:4px; font-size:11px;"
                                 title="Riempie il piano base col colore attivo" data-i18n-title="tools.fillPlaneTitle" data-i18n="tools.fillPlane">Riempi Piano</button>
                         </div>
-                        <div class="control-row" style="margin-top: 8px;">
-                            <label>Colore Attivo</label>
+                        <div class="control-row" style="margin-top: 8px;" id="activeColorRow">
+                            <label data-i18n="tools.activeColor">Colore Attivo</label>
                             <div style="display:flex; align-items:center; gap:8px;">
+                                <span id="activeMaterialName"
+                                    style="font-size:11px; color:var(--accent-primary); max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
                                 <span id="activeColorHex"
                                     style="font-size:12px; color:var(--text-secondary); font-variant-numeric:tabular-nums;">#6366F1</span>
                                 <input type="color" id="activeColor" value="#6366f1" class="color-input"

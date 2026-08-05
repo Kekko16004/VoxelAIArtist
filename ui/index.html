@@ -2534,9 +2534,11 @@
                             <button class="btn btn-secondary" id="fillFloorBtn" style="padding:4px; font-size:11px;"
                                 title="Riempie il piano base col colore attivo" data-i18n-title="tools.fillPlaneTitle" data-i18n="tools.fillPlane">Riempi Piano</button>
                         </div>
-                        <div class="control-row" style="margin-top: 8px;">
-                            <label>Colore Attivo</label>
+                        <div class="control-row" style="margin-top: 8px;" id="activeColorRow">
+                            <label data-i18n="tools.activeColor">Colore Attivo</label>
                             <div style="display:flex; align-items:center; gap:8px;">
+                                <span id="activeMaterialName"
+                                    style="font-size:11px; color:var(--accent-primary); max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
                                 <span id="activeColorHex"
                                     style="font-size:12px; color:var(--text-secondary); font-variant-numeric:tabular-nums;">#6366F1</span>
                                 <input type="color" id="activeColor" value="#6366f1" class="color-input"
@@ -3847,10 +3849,13 @@
             document.getElementById('fillFloorBtn').addEventListener('click', () => {
                 pushHistory();
                 const g = currentModelData.metadata.grid_size || [16, 16, 16];
+                // Un TOKEN, non un colore: col materiale attivo il piano nasce
+                // texturizzato come ogni altra scrittura nella voxelMap.
+                const tok = (typeof activeToken === 'function') ? activeToken() : activeColorHex;
                 for (let x = 0; x < g[0]; x++) {
                     for (let z = 0; z < g[2]; z++) {
                         const key = `${x},0,${z}`;
-                        voxelMap.set(key, activeColorHex);
+                        voxelMap.set(key, tok);
                     }
                 }
                 syncVoxelsFromMap();
@@ -4659,6 +4664,10 @@
                 sceneObjects = [];
                 activeObjectId = null;
                 rig = null;
+                // I materiali sono di progetto: aprire un file non deve ereditare
+                // quelli del progetto precedente. La lista si ripopola fondendo i
+                // metadata degli oggetti appena caricati (vedi materialsOfProject).
+                if (typeof resetSceneMaterials === 'function') resetSceneMaterials();
                 if (parsed && Array.isArray(parsed.objects)) {
                     parsed.objects.forEach((o, i) => {
                         // expandOps NON conosce i materiali (le ops sono di soli colori):
@@ -6890,7 +6899,11 @@
                 const cells = extrudeTargetCells();
                 if (cells.length > 0) {
                     pushHistory();
-                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                    // activeToken(), non activeColorHex: nella voxelMap va un TOKEN, e
+                    // con un materiale attivo l'estrusione deve nascere texturizzata
+                    // come tutto il resto dell'editing.
+                    const tok = (typeof activeToken === 'function') ? activeToken() : activeColorHex;
+                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                     syncVoxelsFromMap();
                     buildModel(false);
                 }
@@ -16988,7 +17001,7 @@ async function voxelizeScene(gltfScene, options) {
                 if (!rigData || !rigData.bones || !rigData.bones[index]) return { error: 'Osso inesistente.', select: -1 };
                 const bones = rigData.bones;
                 if (bones.filter(b => !b.helper).length <= 1) {
-                    return { error: 'Deve restare almeno un osso. Usa Auto-Rig per rifare lo scheletro.', select: index };
+                    return { error: t('rigTools.lastBone'), select: index };
                 }
                 const remove = new Set([index]);
                 bones.forEach((o, i) => { if (o.helper && o.parent === index) remove.add(i); });
@@ -17133,7 +17146,7 @@ async function voxelizeScene(gltfScene, options) {
 
             function rigToolsReady() {
                 if (!rig || !rig.bones || !rig.bones.length) {
-                    alert('Prima crea uno scheletro con Auto-Rig.');
+                    alert(t('rigTools.needSkeleton'));
                     return false;
                 }
                 return true;
@@ -17444,8 +17457,7 @@ async function voxelizeScene(gltfScene, options) {
                     ikActive = true;
                     ikToggleBtn.classList.add('active');
                     if (ikHintEl) ikHintEl.textContent = t('rigTools.ikDragHint');
-                    if (rigHint) rigHint.textContent = t('rigTools.ikOn') + ' '
-                        + 'Ogni trascinamento e\' un solo Ctrl+Z. Premi di nuovo il pulsante per uscire.';
+                    if (rigHint) rigHint.textContent = t('rigTools.ikOn') + ' ' + t('rigTools.ikOnUndo');
                     if (typeof updateGizmo === 'function') updateGizmo();
                 } else {
                     rigDisableIk();
@@ -17541,8 +17553,8 @@ async function voxelizeScene(gltfScene, options) {
                 rigSetEffectivePose(res.pose);
                 stashRigToActiveObject();
                 refreshPoseUI();
-                if (rigHint) rigHint.textContent = 'Posa "' + entry.name + '" applicata a ' + res.applied + ' ossa'
-                    + (res.missing.length ? ' (' + res.missing.length + ' ossa della posa non esistono qui: ' + res.missing.slice(0, 4).join(', ') + ')' : '') + '.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseApplied', { name: entry.name, n: res.applied })
+                    + (res.missing.length ? t('rigTools.poseMissingBones', { n: res.missing.length, names: res.missing.slice(0, 4).join(', ') }) : '') + '.';
             }
 
             function deletePoseFromLib(idx) {
@@ -17577,7 +17589,7 @@ async function voxelizeScene(gltfScene, options) {
                     const del = document.createElement('button');
                     del.className = 'btn btn-secondary';
                     del.style.cssText = 'padding:5px 9px; font-size:12px; line-height:1;';
-                    del.textContent = '×';
+                    del.textContent = '\u00D7';
                     del.title = t('rigTools.poseDelete');
                     del.addEventListener('click', () => deletePoseFromLib(idx));
                     row.appendChild(label);
@@ -17603,8 +17615,7 @@ async function voxelizeScene(gltfScene, options) {
                 list.unshift({ name, pose: clean, ts: Date.now() });
                 poseLibSave(list);
                 renderPoseLib();
-                if (rigHint) rigHint.textContent = 'Posa "' + name + '" salvata (' + names.length
-                    + ' ossa): puoi riapplicarla su qualsiasi oggetto con gli stessi nomi di ossa.';
+                if (rigHint) rigHint.textContent = t('rigTools.poseSaved', { name: name, n: names.length });
             });
 
             renderPoseLib();
@@ -19585,8 +19596,20 @@ async function voxelizeScene(gltfScene, options) {
                 // (normalize_asset): una primitiva che nasce in un angolo va spostata
                 // a mano ogni volta.
                 const ox = Math.floor((g - d.size) / 2), oz = Math.floor((g - d.size) / 2);
-                const color = (typeof activeColorHex === 'string') ? activeColorHex : '#CCCCCC';
-                const voxels = cells.map(c => ({ x: c.x + ox, y: c.y, z: c.z + oz, color: color }));
+                // Un TOKEN, non un colore: con un materiale attivo la primitiva nasce
+                // texturizzata come ogni altra scrittura nella voxelMap.
+                const tok = (typeof activeToken === 'function') ? activeToken()
+                    : (typeof activeColorHex === 'string' ? activeColorHex : '#CCCCCC');
+                const voxels = cells.map(c => {
+                    const decoded = (typeof decodeToken === 'function')
+                        ? decodeToken(tok, tok)
+                        : { color: tok, material: null };
+                    const v = { x: c.x + ox, y: c.y, z: c.z + oz, color: decoded.color };
+                    // `material` e' FACOLTATIVO: si aggiunge solo se c'e' davvero,
+                    // altrimenti ogni voxel di colore porterebbe un campo a null.
+                    if (decoded.material) v.material = decoded.material;
+                    return v;
+                });
                 const obj = createObject({
                     // primLabel, non t(): questo nome viene SALVATO nel progetto, quindi
                     // una chiave nuda qui sopravvive al guasto che l'ha causata.
@@ -19706,13 +19729,39 @@ async function voxelizeScene(gltfScene, options) {
 
             let activeMaterialId = null;
 
+            // I materiali sono di PROGETTO, non del singolo oggetto. `currentModelData`
+            // pero' e' l'oggetto ATTIVO (04-objects.js: `currentModelData = obj.data`),
+            // quindi tenerli solo li' dentro li faceva sparire appena si creava o si
+            // sceglieva un altro oggetto: misurato in GUI: crea materiale -> Shift+A ->
+            // il pannello torna "Nessun materiale" e la primitiva nasce a tinta unita.
+            // Qui la lista vive a livello di scena e ogni oggetto ci fa da ALIAS, cosi'
+            // il salvataggio per-oggetto la scrive senza sapere che e' condivisa e il
+            // caricamento la fonde invece di sostituirla.
+            let sceneMaterials = [];
+
+            // Da chiamare quando si azzera la scena (nuovo progetto / apertura file):
+            // senza, i materiali del progetto precedente sopravvivono al successivo.
+            function resetSceneMaterials() {
+                sceneMaterials = [];
+                activeMaterialId = null;
+            }
+
             function materialsOfProject() {
-                if (!currentModelData) return [];
+                if (!currentModelData) return sceneMaterials;
                 if (!currentModelData.metadata) currentModelData.metadata = {};
-                if (!Array.isArray(currentModelData.metadata.materials)) {
-                    currentModelData.metadata.materials = [];
+                const own = currentModelData.metadata.materials;
+                if (Array.isArray(own) && own !== sceneMaterials) {
+                    // Un oggetto appena caricato porta la SUA lista: si fonde per id.
+                    // Non si sovrascrive l'id in collisione, perche' i voxel di questo
+                    // oggetto lo citano gia': rimapparli qui e' fuori portata, e due
+                    // definizioni con lo stesso id in uno stesso progetto vengono
+                    // comunque dallo stesso salvataggio.
+                    own.forEach(m => {
+                        if (m && m.id && !sceneMaterials.some(x => x.id === m.id)) sceneMaterials.push(m);
+                    });
                 }
-                return currentModelData.metadata.materials;
+                currentModelData.metadata.materials = sceneMaterials;
+                return sceneMaterials;
             }
 
             function materialById(id) {
