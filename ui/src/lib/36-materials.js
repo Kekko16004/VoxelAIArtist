@@ -168,6 +168,49 @@
                 activeMaterialId = id || null;
             }
 
+            // Cosa si sta posando adesso. Unico punto da cui l'editing lo legge:
+            // finche' passa da qui, la mutua esclusione non puo' essere aggirata.
+            //
+            // `materialById` e non il solo id: se la definizione e' stata cancellata
+            // sotto i piedi, posare '@m9' creerebbe voxel orfani a tavolino invece
+            // che per un incidente di caricamento.
+            function activeToken() {
+                if (activeMaterialId && materialById(activeMaterialId)) return '@' + activeMaterialId;
+                return (typeof activeColorHex === 'string' && activeColorHex)
+                    ? activeColorHex.toUpperCase() : MATERIAL_FALLBACK_COLOR;
+            }
+
+            // Evidenza sulla scheda del materiale attivo e colore "smorzato" quando un
+            // materiale ha la precedenza. Smorzato con una classe, NON disabled: l'input
+            // deve restare cliccabile, perche' cliccarlo e' proprio il modo per tornare
+            // al colore.
+            function refreshMaterialSelectionUI() {
+                const panel = document.getElementById('materialsPanel');
+                if (panel) {
+                    panel.querySelectorAll('.material-card').forEach(el => {
+                        el.classList.toggle('active', el.dataset.materialId === activeMaterialId);
+                    });
+                }
+                const swatchRow = document.getElementById('activeColorRow');
+                if (swatchRow) swatchRow.classList.toggle('muted-by-material', !!activeMaterialId);
+                const label = document.getElementById('activeMaterialName');
+                if (label) {
+                    const def = activeMaterialId ? materialById(activeMaterialId) : null;
+                    label.textContent = def ? def.name : '';
+                }
+            }
+
+            // Contraltare della mutua esclusione che setActiveColor (11-symmetry-tools.js)
+            // applica dall'altro lato: seleziona il materiale e riallinea l'interfaccia.
+            // `activeColorHex` NON viene toccato di proposito -- il colore resta quello
+            // che era, solo scavalcato da activeToken(). E' questo che rende il clic
+            // sulla swatch del colore una via di ritorno funzionante invece di un valore
+            // da reinventare.
+            function setActiveMaterialAndSync(id) {
+                setActiveMaterial(id);
+                if (typeof refreshMaterialSelectionUI === 'function') refreshMaterialSelectionUI();
+            }
+
             // --- import della texture --------------------------------------------
 
             // Il lato lungo comanda, l'altro segue in proporzione, minimo 1 pixel.

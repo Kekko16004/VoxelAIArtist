@@ -45,7 +45,11 @@ const mkEl=()=>{
   return el;
 };
 global.voxelCountEl=mkEl(); global.visibleCountEl=mkEl(); global.paletteEl=mkEl();
-global.document={createElement:()=>mkEl()};
+// getElementById: un `document` vero ce l'ha sempre. refreshMaterialSelectionUI
+// (36-materials.js) lo chiama e fa `if (panel)` su ognuno, quindi null basta e
+// non serve simulare il pannello. La carenza era del test double, non del
+// sorgente: la stessa trappola di MeshStandardMaterial senza userData.
+global.document={createElement:()=>mkEl(),getElementById:()=>null};
 global.setActiveColor=(c)=>{ lastActivated={kind:'color',value:c}; };
 global.setActiveMaterialAndSync=(id)=>{ lastActivated={kind:'material',value:id}; };
 let lastActivated=null;
@@ -72,6 +76,7 @@ const matSrc=fs.readFileSync(path.join(REPO_ROOT,'ui/src/lib/36-materials.js'),'
 const api=new Function(src+'\n'+matSrc+`
  ;return {primeIncrementalState,applyVoxelEdits,invalidateIncremental,isVisibleAt,syncVisibleVoxels,
           renderPaletteSwatches,addMaterial,materialById,tokenOf,threeMaterialFor,
+          getActiveMaterialId,setActiveMaterial,
           getState:()=>({voxelIndex,visibleColorByKey,visibleByColor,meshByColor,incrementalReady,
                          paletteSignature})};`)();
 
@@ -345,9 +350,13 @@ api.addMaterial({id:'mTex',name:'Legno',color:'#8B5A2B',
   ok(sw[1].title.indexOf('materials.swatchColorTitle')===0,
      'il titolo del colore passa da t(): '+sw[1].title);
   ok(sw[1].title.indexOf('#123456')>0,'il colore arriva come segnaposto {color}: '+sw[1].title);
-  lastActivated=null; sw[0]._on.click();
-  ok(lastActivated && lastActivated.kind==='material' && lastActivated.value==='mTex',
-     'il clic su una swatch materiale seleziona il MATERIALE: '+JSON.stringify(lastActivated));
+  // Si legge lo STATO vero, non la spia globale: 36-materials.js definisce una
+  // setActiveMaterialAndSync dentro QUESTO scope, e in uno scope condiviso la
+  // definizione locale scavalca il globale - esattamente come fara' il bundle.
+  // Leggere getActiveMaterialId() e' anche piu' severo che contare la chiamata.
+  api.setActiveMaterial(null); sw[0]._on.click();
+  ok(api.getActiveMaterialId()==='mTex',
+     'il clic su una swatch materiale seleziona il MATERIALE: '+api.getActiveMaterialId());
   lastActivated=null; sw[1]._on.click();
   ok(lastActivated && lastActivated.kind==='color' && lastActivated.value==='#123456',
      'il clic su una swatch colore seleziona il COLORE: '+JSON.stringify(lastActivated));
@@ -356,9 +365,9 @@ api.addMaterial({id:'mTex',name:'Legno',color:'#8B5A2B',
   api.renderPaletteSwatches(['@mAbc']);
   ok(!paletteEl.children[0].style.backgroundImage,
      'un materiale senza texture non finge una miniatura');
-  lastActivated=null; paletteEl.children[0]._on.click();
-  ok(lastActivated && lastActivated.kind==='material' && lastActivated.value==='mAbc',
-     'e il suo clic seleziona comunque il materiale');
+  api.setActiveMaterial(null); paletteEl.children[0]._on.click();
+  ok(api.getActiveMaterialId()==='mAbc',
+     'e il suo clic seleziona comunque il materiale: '+api.getActiveMaterialId());
 }
 
 console.log('\n'+(fail===0?'TUTTI I TEST INCREMENTALI PASSATI':'FALLITI: '+fail)+`  (pass=${pass})`);

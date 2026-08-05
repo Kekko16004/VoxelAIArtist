@@ -42,7 +42,13 @@
                         const vz = Math.round(targetPoint.z);
                         if (vx >= 0 && vx < gSize[0] && vz >= 0 && vz < gSize[2]) {
                             return {
-                                voxel: { x: vx, y: -1, z: vz, color: activeColorHex },
+                                // Bersaglio FINTO sotto il piano di terra: serve solo per
+                                // le sue coordinate (la cella da riempire e' quella sopra).
+                                // Il campo si chiama `color` e va letto come tale da chi
+                                // capitasse a leggerlo, quindi qui il token si risolve.
+                                // Nessun orfano possibile: activeToken() ritorna '@id'
+                                // solo per un materiale che esiste.
+                                voxel: { x: vx, y: -1, z: vz, color: decodeToken(activeToken()).color },
                                 normal: { x: 0, y: 1, z: 0 }
                             };
                         }
@@ -137,6 +143,25 @@
                 return all;
             }
 
+            // Contagocce. Su un voxel texturizzato seleziona il suo MATERIALE: e' il
+            // comportamento atteso e cade fuori gratis dal token, senza un ramo dedicato.
+            //
+            // Si legge dalla voxelMap e non da `voxel.color`, perche' il colore di un
+            // voxel texturizzato e' la tinta media della sua texture: prelevarlo darebbe
+            // un colore piatto invece del materiale. Il colore proprio del voxel resta
+            // il ripiego per un id ORFANO, che non ha una definizione da selezionare.
+            //
+            // Il contagocce e' agganciato in DUE punti (pointerdown e performAction):
+            // sta qui una volta sola perche' la regola non possa divergere fra i due.
+            function adoptTokenAt(voxel) {
+                const tok = voxelMap.get(`${voxel.x},${voxel.y},${voxel.z}`);
+                if (isMaterialToken(tok) && materialById(tok.slice(1))) {
+                    setActiveMaterialAndSync(tok.slice(1));
+                } else {
+                    setActiveColor(decodeToken(tok, voxel.color).color);
+                }
+            }
+
             // Perform the current tool at the pointer. `isStroke` is true for the moves
             // during a held drag; history is pushed once per stroke (in pointerdown/click),
             // not per move, so an entire drag is a single undo step.
@@ -150,11 +175,16 @@
                     const cells = withMirrors(brushCells(base))
                         .filter(c => inBounds(c) && !voxelMap.has(`${c.x},${c.y},${c.z}`));
                     if (cells.length === 0) return false;
-                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                    // Nella mappa va il TOKEN, non il colore: con un materiale attivo si
+                    // posa quello (vedi activeToken in 36-materials.js). Calcolato una
+                    // volta sola e non per cella: risolve l'id con una scansione lineare.
+                    const tok = activeToken();
+                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                     // Percorso rapido (28-incremental.js): aggiorna solo le celle toccate
                     // e i mesh dei colori coinvolti. Se non e' disponibile si ricade sul
-                    // rebuild completo, che resta la strada sicura.
-                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                    // rebuild completo, che resta la strada sicura. Il campo `color` di
+                    // queste celle e' un token: applyVoxelEdits lo scompone da se'.
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: tok })))) {
                         syncVoxelsFromMap();
                         buildModel(false, true);
                     }
@@ -172,21 +202,25 @@
                     return true;
                 } else if (currentTool === 'draw') {
                     const base = { x: pick.voxel.x, y: pick.voxel.y, z: pick.voxel.z };
-                    // Only recolor existing voxels, and skip ones already the active color.
+                    // Il confronto e' fra TOKEN, perche' e' un token quello che c'e' nella
+                    // mappa: confrontarlo col solo colore non vedrebbe la differenza fra
+                    // un voxel a tinta unita e uno texturizzato della stessa tinta, e
+                    // riverniciarlo col materiale sembrerebbe non fare nulla.
+                    const tok = activeToken();
                     const cells = withMirrors(brushCells(base))
                         .filter(c => {
                             const k = `${c.x},${c.y},${c.z}`;
-                            return voxelMap.has(k) && voxelMap.get(k) !== activeColorHex;
+                            return voxelMap.has(k) && voxelMap.get(k) !== tok;
                         });
                     if (cells.length === 0) return false;
-                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
-                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: activeColorHex })))) {
+                    cells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
+                    if (!applyVoxelEdits(cells.map(c => ({ x: c.x, y: c.y, z: c.z, color: tok })))) {
                         syncVoxelsFromMap();
                         buildModel(false, true);
                     }
                     return true;
                 } else if (currentTool === 'pick') {
-                    setActiveColor(pick.voxel.color);
+                    adoptTokenAt(pick.voxel);
                     setTool('draw'); // natural flow: pick a color, then recolor with it
                     return false;
                 }
@@ -290,7 +324,7 @@
                 }
 
                 if (activeActionTool === 'pick') {
-                    setActiveColor(pick.voxel.color);
+                    adoptTokenAt(pick.voxel);
                     setTool('draw');
                     return;
                 }
@@ -347,12 +381,15 @@
                         const finalCells = withMirrors(cellsToApply).filter(inBounds);
                         if (finalCells.length > 0) {
                             let changed = false;
+                            // Come in performAction: nella mappa va il TOKEN, e si
+                            // calcola una volta per l'intera area invece che per cella.
+                            const tok = activeToken();
 
                             if (activeActionTool === 'place') {
                                 const emptyCells = finalCells.filter(c => !voxelMap.has(`${c.x},${c.y},${c.z}`));
                                 if (emptyCells.length > 0) {
                                     pushHistory();
-                                    emptyCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                                    emptyCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                                     changed = true;
                                 }
                             } else if (activeActionTool === 'remove') {
@@ -365,11 +402,11 @@
                             } else if (activeActionTool === 'draw') {
                                 const colorCells = finalCells.filter(c => {
                                     const k = `${c.x},${c.y},${c.z}`;
-                                    return voxelMap.has(k) && voxelMap.get(k) !== activeColorHex;
+                                    return voxelMap.has(k) && voxelMap.get(k) !== tok;
                                 });
                                 if (colorCells.length > 0) {
                                     pushHistory();
-                                    colorCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, activeColorHex));
+                                    colorCells.forEach(c => voxelMap.set(`${c.x},${c.y},${c.z}`, tok));
                                     changed = true;
                                 }
                             }
@@ -442,11 +479,17 @@
                 });
             }
 
-            // Clicking a palette swatch loads it as the active paint color.
-            paletteEl.addEventListener('click', e => {
-                const sw = e.target.closest('.swatch');
-                if (sw && sw.title) setActiveColor(sw.title);
-            });
+            // NIENTE handler delegato sulla palette. Ce n'era uno che ricavava il
+            // colore da `sw.title`, ma il titolo non e' un hex: e' un testo tradotto
+            // ({color} o {name} + la spiegazione del clic), quindi finiva in
+            // activeColorHex come stringa qualsiasi. Ora e' anche peggio: ogni swatch
+            // ha gia' il SUO listener (renderPaletteSwatches, 28-incremental.js) e il
+            // click risale comunque fino a qui, cosi' la delega scattava DOPO e
+            // rimangiava la scelta -- misurato: selezionando '@m1' il materiale attivo
+            // tornava a null e activeColorHex diventava il titolo maiuscolo, che
+            // activeToken() avrebbe poi posato nella voxelMap come se fosse un colore.
+            // La palette e' costruita in un punto solo, quindi il listener per swatch
+            // basta e avanza.
 
             setTool('view');
             updateHistoryButtons();

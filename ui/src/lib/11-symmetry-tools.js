@@ -150,6 +150,11 @@
                 activeColorHex = hex.toUpperCase();
                 activeColorInput.value = hex.toLowerCase();
                 activeColorHexEl.textContent = activeColorHex;
+                // Mutua esclusione: scegliere un colore toglie la selezione al materiale.
+                if (typeof setActiveMaterial === 'function') {
+                    setActiveMaterial(null);
+                    if (typeof refreshMaterialSelectionUI === 'function') refreshMaterialSelectionUI();
+                }
             }
             activeColorInput.addEventListener('input', e => setActiveColor(e.target.value));
 

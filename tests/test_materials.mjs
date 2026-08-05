@@ -650,5 +650,208 @@ const LEGNO = { id: 'm1', name: 'Legno', color: '#8B5A2B', texture: null,
     p.ops.length === 1 && Object.keys(p.palette).length === 1, JSON.stringify(p.ops));
 }
 
+// --- mutua esclusione fra colore e materiale --------------------------------
+// Il requisito e' simmetrico: scegliere un materiale toglie il colore, scegliere
+// un colore toglie il materiale. Si verifica su activeToken(), che e' l'unico
+// punto da cui l'editing legge "cosa sto posando".
+//
+// setActiveColor vive in 11-symmetry-tools.js, che a livello top parla con la
+// scena e col DOM e non si puo' caricare intero. Se ne ESTRAE il testo: cosi' il
+// controllo e' sulla funzione VERA, non su una sua imitazione scritta nel test
+// (che passerebbe anche se il modulo non chiamasse mai setActiveMaterial).
+function extractFunction(src, name) {
+  const start = src.indexOf('function ' + name + '(');
+  if (start === -1) throw new Error('funzione non trovata: ' + name);
+  // Conteggio di graffe: regge finche' la funzione non ne contiene dentro una
+  // stringa o un template literal. Vale per setActiveColor; se un giorno non
+  // valesse piu', questo helper esplode invece di estrarre un pezzo storto.
+  let depth = 0;
+  for (let j = src.indexOf('{', start); j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}') { depth--; if (depth === 0) return src.slice(start, j + 1); }
+  }
+  throw new Error('graffa non chiusa: ' + name);
+}
+
+function fakeClassList() {
+  const set = new Set();
+  return {
+    add: c => set.add(c), remove: c => set.delete(c),
+    contains: c => set.has(c), has: c => set.has(c),
+    toggle: (c, on) => { if (on) set.add(c); else set.delete(c); }
+  };
+}
+
+function fakeMaterialsDom() {
+  const cards = [
+    { dataset: { materialId: 'm1' }, classList: fakeClassList() },
+    { dataset: { materialId: 'm2' }, classList: fakeClassList() }
+  ];
+  const swatchRow = { classList: fakeClassList() };
+  const label = { textContent: 'prima' };
+  const byId = {
+    materialsPanel: { querySelectorAll: () => cards },
+    activeColorRow: swatchRow,
+    activeMaterialName: label
+  };
+  return { document: { getElementById: id => byId[id] || null }, cards, swatchRow, label };
+}
+
+function loadColorAndMaterials(model, startHex) {
+  const srcMat = fs.readFileSync(path.join(ROOT, 'ui/src/lib/36-materials.js'), 'latin1');
+  const srcSym = fs.readFileSync(path.join(ROOT, 'ui/src/lib/11-symmetry-tools.js'), 'latin1');
+  const dom = fakeMaterialsDom();
+  const input = { value: '' };
+  const hexEl = { textContent: '' };
+  const api = new Function('currentModelData', 'document', 'activeColorHex',
+    'activeColorInput', 'activeColorHexEl',
+    srcMat + '\n' + extractFunction(srcSym, 'setActiveColor') + `
+   ;return { activeToken, setActiveMaterial, setActiveMaterialAndSync, getActiveMaterialId,
+             refreshMaterialSelectionUI, setActiveColor, materialById,
+             currentColor: () => activeColorHex };`
+  )(model, dom.document, startHex, input, hexEl);
+  return { api, dom, input, hexEl };
+}
+
+{
+  const model = { metadata: { materials: [
+    { id: 'm1', name: 'Legno', color: '#8B5A2B', texture: null, roughness: 0.7, metalness: 0, emissive: 0 },
+    { id: 'm2', name: 'Pietra', color: '#888888', texture: null, roughness: 0.6, metalness: 0, emissive: 0 }
+  ] }, voxels: [] };
+  const { api, dom, input, hexEl } = loadColorAndMaterials(model, '#FF0000');
+
+  check('senza materiale attivo si posa il colore', api.activeToken() === '#FF0000', api.activeToken());
+
+  api.setActiveMaterialAndSync('m1');
+  check('col materiale attivo si posa il materiale', api.activeToken() === '@m1', api.activeToken());
+  // Scegliere un materiale NON deve azzerare activeColorHex: il colore resta
+  // quello che era, solo scavalcato da activeToken(). E' cosi' che il clic sulla
+  // swatch e' una via di ritorno funzionante e non un valore da reinventare.
+  check('scegliere un materiale non cancella il colore', api.currentColor() === '#FF0000',
+    api.currentColor());
+  check('la scheda del materiale attivo viene evidenziata',
+    dom.cards[0].classList.has('active') && !dom.cards[1].classList.has('active'),
+    'evidenza sbagliata');
+  check('il colore viene smorzato quando comanda un materiale',
+    dom.swatchRow.classList.has('muted-by-material'), 'riga colore non smorzata');
+  check('il nome del materiale attivo compare', dom.label.textContent === 'Legno', dom.label.textContent);
+
+  api.setActiveColor('#0000ff');
+  check('scegliere un colore azzera il materiale', api.getActiveMaterialId() === null,
+    String(api.getActiveMaterialId()));
+  check('e si torna a posare il colore', api.activeToken() === '#0000FF', api.activeToken());
+  check('scegliere un colore toglie l\'evidenza alla scheda',
+    !dom.cards[0].classList.has('active'), 'evidenza rimasta');
+  check('scegliere un colore toglie lo smorzamento',
+    !dom.swatchRow.classList.has('muted-by-material'), 'smorzamento rimasto');
+  check('scegliere un colore svuota il nome del materiale attivo',
+    dom.label.textContent === '', dom.label.textContent);
+  check('setActiveColor aggiorna comunque input ed etichetta del colore',
+    input.value === '#0000ff' && hexEl.textContent === '#0000FF',
+    `${input.value}/${hexEl.textContent}`);
+
+  // Un id attivo che non esiste (definizione cancellata sotto i piedi) non deve
+  // far posare '@qualcosa' di inesistente: si ricade sul colore.
+  api.setActiveMaterialAndSync('m99');
+  check('un materiale attivo inesistente non viene posato',
+    api.activeToken() === '#0000FF', api.activeToken());
+}
+
+{
+  // Il colore attivo puo' arrivare minuscolo (input type=color): il token e' la
+  // chiave dei gruppi di rendering, quindi '#aabbcc' e '#AABBCC' non devono
+  // essere due token diversi.
+  const { api } = loadColorAndMaterials({ metadata: {}, voxels: [] }, '#aabbcc');
+  check('il token colore e\' sempre maiuscolo', api.activeToken() === '#AABBCC', api.activeToken());
+}
+
+// --- la voxelMap porta il TOKEN ---------------------------------------------
+// 03-voxel-map.js e' la cerniera fra la mappa (sorgente di verita' per l'editing)
+// e currentModelData.voxels (cio' che finisce su disco).
+function loadVoxelMap(model) {
+  const srcMat = fs.readFileSync(path.join(ROOT, 'ui/src/lib/36-materials.js'), 'latin1');
+  const srcMap = fs.readFileSync(path.join(ROOT, 'ui/src/lib/03-voxel-map.js'), 'latin1');
+  return new Function('currentModelData', 'voxelMap', srcMat + '\n' + srcMap + `
+   ;return { rebuildVoxelMap, syncVoxelsFromMap, map: () => voxelMap };`)(model, new Map());
+}
+
+{
+  const model = { metadata: { materials: [Object.assign({}, LEGNO)] }, voxels: [
+    { x: 0, y: 0, z: 0, color: '#ab12cd' },
+    { x: 1, y: 0, z: 0, color: '#8B5A2B', material: 'm1' }
+  ]};
+  const mod = loadVoxelMap(model);
+  mod.rebuildVoxelMap();
+  check('nella voxelMap un voxel semplice e\' il suo colore maiuscolo',
+    mod.map().get('0,0,0') === '#AB12CD', mod.map().get('0,0,0'));
+  check('nella voxelMap un voxel texturizzato e\' @id',
+    mod.map().get('1,0,0') === '@m1', mod.map().get('1,0,0'));
+
+  mod.syncVoxelsFromMap();
+  const at = (x, y, z) => model.voxels.find(v => v.x === x && v.y === y && v.z === z);
+  check('il giro mappa -> voxel non inventa materiali',
+    at(0, 0, 0).color === '#AB12CD' && at(0, 0, 0).material === undefined,
+    JSON.stringify(at(0, 0, 0)));
+  check('il giro mappa -> voxel conserva il materiale',
+    at(1, 0, 0).material === 'm1' && at(1, 0, 0).color === '#8B5A2B',
+    JSON.stringify(at(1, 0, 0)));
+}
+
+// ORFANO NELLA MAPPA. Il caso peggiore, e il motivo per cui syncVoxelsFromMap
+// DEVE passare a decodeToken il colore proprio del voxel: il token ha collassato
+// il voxel a '@m77' buttandone via l'hex, quindi su un id senza definizione (un
+// .voxai aperto senza i suoi materiali) non resta nulla su cui ricadere. E
+// questo array e' esattamente quello che va su disco: un solo sync dopo un
+// caricamento con orfani riscriverebbe ogni voxel a #CCCCCC, per sempre.
+{
+  const model = { metadata: { materials: [] }, voxels: [
+    { x: 1, y: 2, z: 3, color: '#8B5A2B', material: 'm77' }
+  ]};
+  const mod = loadVoxelMap(model);
+  mod.rebuildVoxelMap();
+  mod.syncVoxelsFromMap();
+  const v = model.voxels[0];
+  check('un voxel ORFANO non perde il suo colore in un sync',
+    v.color === '#8B5A2B', JSON.stringify(v));
+  check('un voxel ORFANO non perde l\'id del materiale',
+    v.material === 'm77', JSON.stringify(v));
+}
+
+// Cella appena dipinta: nella mappa c'e' un token ma nell'array non c'e' ancora
+// nessun voxel da cui prendere un colore di riserva. Qui il ripiego non serve --
+// solo un token MATERIALE puo' essere senza colore, e un materiale appena posato
+// per definizione esiste.
+{
+  const model = { metadata: { materials: [Object.assign({}, LEGNO)] }, voxels: [] };
+  const mod = loadVoxelMap(model);
+  mod.rebuildVoxelMap();
+  mod.map().set('4,0,0', '#00FF00');
+  mod.map().set('5,0,0', '@m1');
+  mod.syncVoxelsFromMap();
+  const at = (x) => model.voxels.find(v => v.x === x);
+  check('una cella dipinta col colore entra col suo colore',
+    at(4).color === '#00FF00' && at(4).material === undefined, JSON.stringify(at(4)));
+  check('una cella dipinta col materiale prende il colore della definizione',
+    at(5).color === '#8B5A2B' && at(5).material === 'm1', JSON.stringify(at(5)));
+}
+
+// I voxel NASCOSTI restano fuori dalla mappa e sopravvivono al sync, materiale
+// compreso: e' il comportamento di prima, e il token non deve smontarlo.
+{
+  const model = { metadata: { materials: [Object.assign({}, LEGNO)] }, voxels: [
+    { x: 0, y: 0, z: 0, color: '#8B5A2B', material: 'm1', _hidden: true },
+    { x: 1, y: 0, z: 0, color: '#FF0000' }
+  ]};
+  const mod = loadVoxelMap(model);
+  mod.rebuildVoxelMap();
+  check('un voxel nascosto non entra nella voxelMap', !mod.map().has('0,0,0'),
+    JSON.stringify([...mod.map().keys()]));
+  mod.syncVoxelsFromMap();
+  const nascosto = model.voxels.find(v => v._hidden);
+  check('un voxel nascosto sopravvive al sync col suo materiale',
+    nascosto && nascosto.material === 'm1' && nascosto.color === '#8B5A2B',
+    JSON.stringify(model.voxels));
+}
+
 if (failures.length) { console.error(`\nFALLITI: ${failures.length}`); process.exit(1); }
 console.log('  tutti i controlli passati');
