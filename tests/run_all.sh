@@ -106,6 +106,14 @@ run "Export GLB: posa dell'editor (Node)" node tests/test_glb_pose_export.mjs
 #            quasi nero.
 run "Export GLB: artefatti del riggato (Node)" node tests/test_glb_rigged_artifacts.mjs
 
+# 4c-decies-bis. Export GLB con le texture. Il raggruppamento passa da v.color al
+#            TOKEN e la geometria guadagna l'attributo `uv`. Due trappole
+#            misurate: il GLTFExporter r128 dimensiona il canvas su image.width,
+#            quindi senza attendere il decode incorpora un'immagine 0x0; e
+#            l'attributo `color` va cancellato ANCHE con la texture, perche' map
+#            per COLOR_0 rida' lo stesso modello quasi nero dell'invariante 6.
+run "Export GLB: materiali con texture (Node)" node tests/test_glb_materials.mjs
+
 # 4c-undecies. Preset di animazione (idle/walk/run/jump/wave). Due invarianti:
 #            (1) le BRACCIA devono uscire dalla T-pose. A riposo il braccio e'
 #            allineato all'asse X, quindi ruotarlo su X non lo muove di un
