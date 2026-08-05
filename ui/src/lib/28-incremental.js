@@ -16,8 +16,8 @@
             //   - l'array `currentModelData.voxels` si aggiorna in O(1) per cella grazie
             //     a un indice chiave -> posizione (`voxelIndex`), con rimozione
             //     swap-with-last invece della ricostruzione integrale;
-            //   - si ricreano solo gli InstancedMesh dei COLORI toccati;
-            //   - la palette DOM si riscrive solo se l'insieme dei colori e' cambiato
+            //   - si ricreano solo gli InstancedMesh dei TOKEN toccati;
+            //   - la palette DOM si riscrive solo se l'insieme dei token e' cambiato
             //     (altrimenti le swatch lampeggiano a ogni tratto).
             //
             // SICUREZZA. `buildModel()` resta il percorso completo e autorevole per
@@ -26,17 +26,22 @@
 
             // Stato del renderer incrementale (valido per l'OGGETTO ATTIVO).
             //
-            // NOTA sulle strutture dati: `visibleByColor` mappa colore -> Map(chiave ->
-            // voxel), NON colore -> array. Con un array servirebbe un findIndex per
-            // togliere una cella, cioe' O(colori x lunghezza_lista) per ogni cella
+            // I nomi dicono "color" per continuita' storica, ma la CHIAVE e' il TOKEN
+            // di 36-materials.js: '#RRGGBB' per un colore, '@id' per un materiale. Due
+            // voxel dello stesso colore con materiali diversi sono percio' due gruppi e
+            // due InstancedMesh, che e' l'unico modo di dargli due materiali THREE.
+            //
+            // NOTA sulle strutture dati: `visibleByColor` mappa token -> Map(chiave ->
+            // voxel), NON token -> array. Con un array servirebbe un findIndex per
+            // togliere una cella, cioe' O(token x lunghezza_lista) per ogni cella
             // toccata: su un modello grande sarebbe piu' LENTO del rebuild completo che
             // stiamo cercando di evitare. Con le Map ogni rimozione e' O(1).
-            // `visibleColorByKey` completa il quadro: dice a quale colore appartiene una
+            // `visibleColorByKey` completa il quadro: dice a quale token appartiene una
             // cella visibile, senza doverlo cercare fra le liste.
             let voxelIndex = null;         // "x,y,z" -> indice in currentModelData.voxels
-            let visibleColorByKey = null;  // "x,y,z" -> "#RRGGBB" (solo celle visibili)
-            let meshByColor = null;        // "#RRGGBB" -> InstancedMesh
-            let visibleByColor = null;     // "#RRGGBB" -> Map("x,y,z" -> voxel)
+            let visibleColorByKey = null;  // "x,y,z" -> token (solo celle visibili)
+            let meshByColor = null;        // token -> InstancedMesh
+            let visibleByColor = null;     // token -> Map("x,y,z" -> voxel)
             let paletteSignature = '';     // per non riscrivere il DOM della palette invano
             let incrementalReady = false;  // false = usa sempre il percorso completo
             let visibleVoxelsDirty = false; // visibleVoxels da ricostruire alla prossima lettura
@@ -91,7 +96,10 @@
                     for (let i = 0; i < visible.length; i++) {
                         const v = visible[i];
                         const k = vkey(v.x, v.y, v.z);
-                        const hex = (v.color || '').toUpperCase();
+                        // tokenOf, non v.color: senza di lui due voxel dello stesso
+                        // colore con materiali diversi finirebbero nello stesso mesh e
+                        // uno dei due materiali non si vedrebbe mai.
+                        const hex = tokenOf(v);
                         visibleColorByKey.set(k, hex);
                         let m = visibleByColor.get(hex);
                         if (!m) { m = new Map(); visibleByColor.set(hex, m); }
@@ -108,10 +116,23 @@
             }
 
             function computePaletteSignature() {
-                // Firma dell'insieme dei colori presenti. Se non cambia, il DOM della
-                // palette non va toccato.
+                // Firma dell'insieme dei TOKEN presenti. Se non cambia, il DOM della
+                // palette non va toccato. Deve essere per token e non per colore:
+                // assegnare un materiale a un voxel non cambia il suo colore, quindi
+                // una firma sui soli colori non si accorgerebbe mai della differenza e
+                // la palette non mostrerebbe la nuova voce.
                 if (!visibleByColor) return '';
                 return Array.from(visibleByColor.keys()).sort().join('|');
+            }
+
+            // Normalizza un valore letto dalla voxelMap in un TOKEN canonico, con le
+            // stesse regole di tokenOf: un colore va MAIUSCOLO, un id di materiale NO.
+            // Maiuscolizzare tutto (com'era) trasformava '@m1' in '@M1', cioe' in un id
+            // diverso: il gruppo non combaciava piu' con quello di primeIncrementalState
+            // e il materiale risultava orfano.
+            function tokenNormalized(tok) {
+                if (typeof tok !== 'string' || tok === '') return undefined;
+                return isMaterialToken(tok) ? tok : tok.toUpperCase();
             }
 
             function getTargetPartForVoxel(x, y, z) {
@@ -133,17 +154,46 @@
                 return nearestPart;
             }
 
-            function voxelArrayAdd(x, y, z, color) {
+            // `decodeToken` risolve un id di materiale con una SCANSIONE LINEARE della
+            // lista (materialById): su una pennellata da 4000 celle sarebbe una
+            // scansione per cella. I token distinti in una pennellata sono di norma uno,
+            // quindi si memoizza per (token, colore di ripiego) e la scansione si paga
+            // una volta sola. La cache vive quanto la singola applyVoxelEdits: piu' a
+            // lungo e non vedrebbe una definizione appena aggiunta.
+            function decodeTokenMemo(cache, token, fallbackColor) {
+                const ck = token + '|' + (fallbackColor || '');
+                let hit = cache.get(ck);
+                if (hit === undefined) {
+                    hit = decodeToken(token, fallbackColor);
+                    cache.set(ck, hit);
+                }
+                return hit;
+            }
+
+            // `token` e' un token (vedi 36-materials.js), non un colore: va SCOMPOSTO,
+            // altrimenti nel voxel finirebbe color: '@m1' e ogni consumatore che si
+            // aspetta un hex (export, .vox, MTL) leggerebbe spazzatura.
+            function voxelArrayAdd(x, y, z, token, decCache) {
                 const arr = currentModelData.voxels;
                 const k = vkey(x, y, z);
                 const existing = voxelIndex.get(k);
                 const targetPart = getTargetPartForVoxel(x, y, z);
+                // Il colore del voxel che c'e' GIA' e' il ripiego giusto per un id
+                // orfano: assegnare un materiale non ancora caricato non deve
+                // ricolorare di grigio un voxel che aveva il suo colore.
+                const fallback = (existing !== undefined && arr[existing]) ? arr[existing].color : undefined;
+                const dec = decCache
+                    ? decodeTokenMemo(decCache, token, fallback)
+                    : decodeToken(token, fallback);
                 if (existing !== undefined) {          // gia' presente: solo ricolora
-                    arr[existing].color = color;
+                    arr[existing].color = dec.color;
+                    if (dec.material) arr[existing].material = dec.material;
+                    else delete arr[existing].material;
                     if (targetPart) arr[existing].part = targetPart;
                     return;
                 }
-                const newVoxel = { x: x, y: y, z: z, color: color };
+                const newVoxel = { x: x, y: y, z: z, color: dec.color };
+                if (dec.material) newVoxel.material = dec.material;
                 if (targetPart) newVoxel.part = targetPart;
                 arr.push(newVoxel);
                 voxelIndex.set(k, arr.length - 1);
@@ -165,7 +215,29 @@
                 voxelIndex.delete(k);
             }
 
-            // --- (ri)costruzione del mesh di UN SOLO colore ----------------------
+            // --- materiale THREE di un token ------------------------------------
+            // Unico punto in cui i due percorsi di rendering (completo e incrementale)
+            // si procurano un materiale, cosi' non possono divergere.
+            //
+            // `sample` e' un voxel QUALSIASI del gruppo e serve solo per il suo colore:
+            // su un id ORFANO threeMaterialFor ricade su quello invece che sul grigio
+            // neutro, e un modello aperto senza le sue definizioni resta a tinte piatte.
+            // Limite noto e inevitabile a questo livello: il token collassa il colore,
+            // quindi due voxel ORFANI dello stesso id ma di colore diverso stanno nello
+            // stesso gruppo e prendono il colore del primo. Vale solo per gli orfani --
+            // con la definizione presente il colore lo decide lei.
+            //
+            // Il materiale arriva dalla cache di 36-materials.js ed e' CONDIVISO fra i
+            // mesh e fra i rebuild; e' threeMaterialFor a marcarlo userData.shared, e
+            // disposeMesh (05-build-model.js) a rispettare il marchio. Qui non si tocca.
+            function voxelMaterialFor(token, sample) {
+                return threeMaterialFor(token, {
+                    wireframe: toggleWireframe.checked,
+                    color: sample ? sample.color : undefined
+                });
+            }
+
+            // --- (ri)costruzione del mesh di UN SOLO token ----------------------
             function rebuildColorMesh(colorHex) {
                 const cellMap = visibleByColor.get(colorHex);
                 const list = cellMap ? Array.from(cellMap.values()) : null;
@@ -192,12 +264,7 @@
                 const geometry = (typeof getVoxelGeometry === 'function')
                     ? getVoxelGeometry(boxSize)
                     : new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-                const material = new THREE.MeshStandardMaterial({
-                    color: new THREE.Color(colorHex),
-                    roughness: 0.2,
-                    metalness: 0.1,
-                    wireframe: toggleWireframe.checked
-                });
+                const material = voxelMaterialFor(colorHex, list[0]);
                 const instMesh = new THREE.InstancedMesh(geometry, material, list.length);
                 const dummy = new THREE.Object3D();
                 for (let i = 0; i < list.length; i++) {
@@ -234,11 +301,15 @@
                 if (cells.length > 4000) return false;
 
                 try {
+                    // Un solo memo di decodifica per tutta la pennellata: vedi
+                    // decodeTokenMemo. Non va tenuto fra chiamate diverse.
+                    const decCache = new Map();
+
                     // 1. Array dei voxel: O(1) per cella (indice + swap-with-last).
                     for (let i = 0; i < cells.length; i++) {
                         const c = cells[i];
                         if (c.removed) voxelArrayRemove(c.x, c.y, c.z);
-                        else voxelArrayAdd(c.x, c.y, c.z, (c.color || '').toUpperCase());
+                        else voxelArrayAdd(c.x, c.y, c.z, tokenNormalized(c.color), decCache);
                     }
 
                     // 2. Visibilita': solo celle toccate + vicini. Una cella nascosta puo'
@@ -260,15 +331,23 @@
                         const x = pos.x, y = pos.y, z = pos.z;
                         const prevColor = visibleColorByKey.get(k);   // undefined = non visibile
                         const nowVisible = isVisibleAt(x, y, z);
-                        const nowColor = nowVisible ? (voxelMap.get(k) || '').toUpperCase() : undefined;
+                        // voxelMap contiene gia' il TOKEN: va normalizzato come fa
+                        // tokenOf (colore maiuscolo, id di materiale intatto), non
+                        // maiuscolizzato in blocco -- '@m1' e '@M1' sono id diversi.
+                        const nowColor = nowVisible ? tokenNormalized(voxelMap.get(k)) : undefined;
 
                         if (prevColor === nowColor) return;           // nulla da fare
 
-                        if (prevColor !== undefined) {                // toglila dal vecchio colore
-                            const m = visibleByColor.get(prevColor);
-                            if (m) {
-                                m.delete(k);
-                                if (m.size === 0) visibleByColor.delete(prevColor);
+                        // Il voxel com'era PRIMA: unico posto in cui questo ramo ha
+                        // ancora in mano il colore vero della cella, e serve piu' sotto
+                        // se l'array non la contiene.
+                        const prevMap = (prevColor !== undefined) ? visibleByColor.get(prevColor) : undefined;
+                        const prevVox = prevMap ? prevMap.get(k) : undefined;
+
+                        if (prevColor !== undefined) {                // toglila dal vecchio token
+                            if (prevMap) {
+                                prevMap.delete(k);
+                                if (prevMap.size === 0) visibleByColor.delete(prevColor);
                             }
                             dirtyColors.add(prevColor);
                             visibleColorByKey.delete(k);
@@ -277,20 +356,29 @@
                             let m = visibleByColor.get(nowColor);
                             if (!m) { m = new Map(); visibleByColor.set(nowColor, m); }
                             const idx = voxelIndex ? voxelIndex.get(k) : undefined;
-                            const voxObj = (idx !== undefined && currentModelData.voxels[idx])
+                            let voxObj = (idx !== undefined && currentModelData.voxels[idx])
                                 ? currentModelData.voxels[idx]
-                                : { x: x, y: y, z: z, color: nowColor };
+                                : null;
+                            if (!voxObj) {
+                                // Ripiego difensivo (la cella dovrebbe stare nell'array).
+                                // Anche qui il token va SCOMPOSTO, o il voxel finto
+                                // porterebbe color: '@m1'. Il solo colore vero a
+                                // disposizione e' quello che la cella aveva prima.
+                                const dec = decodeToken(nowColor, prevVox ? prevVox.color : undefined);
+                                voxObj = { x: x, y: y, z: z, color: dec.color };
+                                if (dec.material) voxObj.material = dec.material;
+                            }
                             m.set(k, voxObj);
                             dirtyColors.add(nowColor);
                             visibleColorByKey.set(k, nowColor);
                         }
                     });
 
-                    // 3. Ricrea SOLO i mesh dei colori toccati (non tutti).
+                    // 3. Ricrea SOLO i mesh dei token toccati (non tutti).
                     dirtyColors.forEach(hex => rebuildColorMesh(hex));
 
                     // 4. Contatori e palette. La palette si riscrive solo se l'insieme dei
-                    //    colori e' cambiato davvero: altrimenti le swatch lampeggiano a
+                    //    token e' cambiato davvero: altrimenti le swatch lampeggiano a
                     //    ogni pennellata.
                     // `visibleVoxels` e' letto da 16-export-glb.js e deve restare
                     // aggiornato. MA ricostruire l'intero array a ogni pennellata era
@@ -317,18 +405,42 @@
                 }
             }
 
-            // Disegna le swatch della palette dai colori attualmente visibili.
+            // Disegna le swatch della palette dai TOKEN attualmente visibili.
             // Estratta da buildModel() cosi' il percorso incrementale puo' riusarla.
-            function renderPaletteSwatches(colorsOverride) {
-                const colors = colorsOverride
+            // Un token materiale mostra la miniatura della texture; un token colore il
+            // colore pieno. Il click seleziona l'uno o l'altro, coerentemente con la
+            // mutua esclusione fra colore e materiale.
+            function renderPaletteSwatches(tokensOverride) {
+                const tokens = tokensOverride
                     || (visibleByColor ? Array.from(visibleByColor.keys()) : []);
                 paletteEl.innerHTML = '';
-                colors.forEach(c => {
+                tokens.forEach(tok => {
                     const s = document.createElement('div');
                     s.className = 'swatch';
-                    s.style.backgroundColor = c;
-                    s.title = c + ' — clic per usarlo come colore attivo';
-                    s.addEventListener('click', () => setActiveColor(c));
+                    // decodeToken UNA volta per token (non per voxel): risolve l'id con
+                    // una scansione lineare della lista materiali.
+                    const dec = decodeToken(tok);
+                    // materialById, non `dec.material`: su un id orfano il campo resta
+                    // valorizzato di proposito ma la definizione non c'e'.
+                    const def = dec.material ? materialById(dec.material) : null;
+                    s.style.backgroundColor = dec.color;
+                    if (def && def.texture && def.texture.data) {
+                        s.style.backgroundImage = `url(${def.texture.data})`;
+                        s.style.backgroundSize = 'cover';
+                        s.style.imageRendering = 'pixelated';
+                    }
+                    if (def) {
+                        s.title = t('materials.swatchMaterialTitle', { name: def.name });
+                        // setActiveMaterialAndSync arriva col pannello materiali: finche'
+                        // non c'e' si seleziona comunque il materiale, senza ReferenceError.
+                        s.addEventListener('click', () => {
+                            if (typeof setActiveMaterialAndSync === 'function') setActiveMaterialAndSync(dec.material);
+                            else if (typeof setActiveMaterial === 'function') setActiveMaterial(dec.material);
+                        });
+                    } else {
+                        s.title = t('materials.swatchColorTitle', { color: dec.color });
+                        s.addEventListener('click', () => setActiveColor(dec.color));
+                    }
                     paletteEl.appendChild(s);
                 });
             }

@@ -21,7 +21,9 @@ class FakeGeom {
 }
 global.THREE = {
   BoxGeometry: FakeGeom,
-  MeshStandardMaterial: class { constructor(o){Object.assign(this,o);} dispose(){} },
+  // userData esiste su OGNI THREE.Material vero: e' dove threeMaterialFor marca
+  // i materiali condivisi (e disposeMesh li salta di conseguenza).
+  MeshStandardMaterial: class { constructor(o){this.userData={};Object.assign(this,o);} dispose(){} },
   Color: class { constructor(c){this.c=c;} },
   Object3D: class { constructor(){this.position={set(){}};this.matrix={};} updateMatrix(){} },
   InstancedMesh: class {
@@ -44,6 +46,8 @@ const mk = () => ({textContent:'',innerHTML:'',appendChild(){},addEventListener(
 global.voxelCountEl=mk(); global.visibleCountEl=mk(); global.paletteEl=mk();
 global.document={createElement:mk};
 global.setActiveColor=()=>{};
+// t() prima di bootI18n ritorna la chiave nuda: e' quello che fa il motore vero.
+global.t=(k)=>k;
 
 // requestRender TRACCIATO: e' il cuore del bug "schermo congelato"
 let renderRequests = 0;
@@ -58,7 +62,11 @@ global.disposeMesh = api05.disposeMesh;
 global.getVoxelGeometry = api05.getVoxelGeometry;
 
 const inc = fs.readFileSync(REPO+'/ui/src/lib/28-incremental.js','latin1');
-const api = new Function(inc + `
+// 28-incremental.js raggruppa per TOKEN e quindi usa tokenOf / decodeToken /
+// threeMaterialFor / materialById, che vivono in 36-materials.js. Nel bundle sono
+// lo stesso scope: qui li si concatena nello stesso ordine del manifest.
+const mats = fs.readFileSync(REPO+'/ui/src/lib/36-materials.js','latin1');
+const api = new Function(inc + mats + `
  ;return {primeIncrementalState, applyVoxelEdits, syncVisibleVoxels,
           getState:()=>({visibleByColor, meshByColor, incrementalReady, visibleColorByKey})};`)();
 

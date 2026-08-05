@@ -45,8 +45,10 @@
                 // Palette: usa la funzione condivisa con il renderer incrementale
                 // (28-incremental.js) invece di duplicarne il codice, cosi' le due
                 // strade non possono divergere e le swatch non lampeggiano.
-                const uniqueColors = [...new Set(voxels.map(v => v.color.toUpperCase()))];
-                renderPaletteSwatches(uniqueColors);
+                // Token, non colori: due voxel dello stesso colore ma con materiali
+                // diversi sono due voci di palette distinte (vedi 36-materials.js).
+                const uniqueTokens = [...new Set(voxels.map(v => tokenOf(v)))];
+                renderPaletteSwatches(uniqueTokens);
 
                 let minX, maxX, minY, maxY, minZ, maxZ;
                 if (voxels.length === 0) {
@@ -76,9 +78,12 @@
                 modelPivotBaseCenter.copy(center);
 
                 if (voxels.length > 0) {
+                    // Un gruppo (= un InstancedMesh) per TOKEN, non per colore: e' il
+                    // solo modo di dare due materiali THREE diversi a due voxel che
+                    // condividono la tinta. Vedi 36-materials.js.
                     const colorGroups = {};
                     visibleVoxels.forEach(v => {
-                        const c = v.color.toUpperCase();
+                        const c = tokenOf(v);
                         if (!colorGroups[c]) colorGroups[c] = [];
                         colorGroups[c].push(v);
                     });
@@ -91,12 +96,10 @@
                         const groupList = colorGroups[colorHex];
                         const count = groupList.length;
 
-                        const material = new THREE.MeshStandardMaterial({
-                            color: new THREE.Color(colorHex),
-                            roughness: 0.2,
-                            metalness: 0.1,
-                            wireframe: toggleWireframe.checked
-                        });
+                        // Materiale condiviso e messo in cache per token (una sola
+                        // decodifica per gruppo, non per voxel): ricrearlo a ogni
+                        // rebuild rifarebbe l'upload della texture sulla GPU.
+                        const material = voxelMaterialFor(colorHex, groupList[0]);
 
                         const instMesh = new THREE.InstancedMesh(geometry, material, count);
                         const dummy = new THREE.Object3D();
@@ -189,8 +192,18 @@
                     m.geometry.dispose();
                 }
                 const mat = m.material;
-                if (Array.isArray(mat)) mat.forEach(x => x && x.dispose && x.dispose());
-                else if (mat && typeof mat.dispose === 'function') mat.dispose();
+                // Stessa trappola della geometria condivisa: i materiali dei voxel
+                // vengono dalla cache di 36-materials.js e sono condivisi fra i mesh e
+                // fra i rebuild. Liberarli qui li rendeva invalidi per gli altri
+                // (texture nera, mesh non disegnati). Sono marcati userData.shared da
+                // threeMaterialFor() e si liberano solo da clearMaterialCache().
+                const disposeMat = x => {
+                    if (!x || typeof x.dispose !== 'function') return;
+                    if (x.userData && x.userData.shared) return;
+                    x.dispose();
+                };
+                if (Array.isArray(mat)) mat.forEach(disposeMat);
+                else disposeMat(mat);
             }
 
             // ===== Geometria voxel condivisa =====
