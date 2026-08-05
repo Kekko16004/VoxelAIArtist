@@ -662,5 +662,7 @@
   "prim.create": "Crea",
   "prim.cancel": "Annulla",
   "prim.info": "{n} voxel, griglia {g}",
-  "prim.tooBig": "Troppi voxel ({n}): riduci la dimensione"
+  "prim.tooBig": "Troppi voxel ({n}): riduci la dimensione",
+  "materials.swatchMaterialTitle": "{name} — clic per usare questo materiale",
+  "materials.swatchColorTitle": "{color} — clic per usarlo come colore attivo"
 }

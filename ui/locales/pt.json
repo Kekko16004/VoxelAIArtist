@@ -662,5 +662,7 @@
   "prim.create": "Criar",
   "prim.cancel": "Cancelar",
   "prim.info": "{n} voxels, grade {g}",
-  "prim.tooBig": "Voxels em excesso ({n}): reduza o tamanho"
+  "prim.tooBig": "Voxels em excesso ({n}): reduza o tamanho",
+  "materials.swatchMaterialTitle": "{name} — clique para usar este material",
+  "materials.swatchColorTitle": "{color} — clique para usá-lo como cor ativa"
 }

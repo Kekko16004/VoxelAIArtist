@@ -662,5 +662,7 @@
   "prim.create": "Create",
   "prim.cancel": "Cancel",
   "prim.info": "{n} voxels, grid {g}",
-  "prim.tooBig": "Too many voxels ({n}): reduce the size"
+  "prim.tooBig": "Too many voxels ({n}): reduce the size",
+  "materials.swatchMaterialTitle": "{name} — click to use this material",
+  "materials.swatchColorTitle": "{color} — click to use it as the active colour"
 }

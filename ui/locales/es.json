@@ -662,5 +662,7 @@
   "prim.create": "Crear",
   "prim.cancel": "Cancelar",
   "prim.info": "{n} vóxeles, cuadrícula {g}",
-  "prim.tooBig": "Demasiados vóxeles ({n}): reduce el tamaño"
+  "prim.tooBig": "Demasiados vóxeles ({n}): reduce el tamaño",
+  "materials.swatchMaterialTitle": "{name} — haz clic para usar este material",
+  "materials.swatchColorTitle": "{color} — haz clic para usarlo como color activo"
 }
