@@ -241,6 +241,18 @@ run "Ctrl+A nella vista: colonna del frame (Node)" node tests/test_timeline_sele
 #         altrimenti ogni texture con bordo trasparente diventa scura.
 run "Materiali (store, token, tinta media)" node tests/test_materials.mjs
 
+# 4d-septies-bis. Export OBJ/MTL coi materiali: il greedy mesher unisce per TOKEN (due
+#         voxel dello stesso colore con materiali diversi NON si fondono, o la texture
+#         del primo si spalma sul secondo), gli UV valgono 0..uw/0..uh cosi' la texture
+#         si ripete una volta per VOXEL invece di stirarsi sul quad merged, il .mtl
+#         scrive map_Kd + un Kd che resta la tinta vera anche sugli id orfani, e con le
+#         texture l'export diventa un solo ZIP col PNG in byte grezzi.
+#         Il quad `back` ha l'ordine dei vertici INVERTITO (pre-esistente), quindi una
+#         lista fissa di UV e' giusta per lui e trasposta per l'altro verso: su un quad
+#         3x1 la texture si ripeteva 3 volte lungo il lato da 1 voxel. Il controllo che
+#         lo prende e' quello di isometria, non l'insieme dei `vt` (identico nei due casi).
+run "Export OBJ/MTL con texture" node tests/test_obj_materials.mjs
+
 # 4d-quinquies. Persistenza dei pannelli del pannello destro: i quattro <details
 #         class="rp-section"> (Outliner, Proprieta', Palette, Vista) devono
 #         ricordare il loro stato aperto/chiuso tra una sessione e l'altra.
