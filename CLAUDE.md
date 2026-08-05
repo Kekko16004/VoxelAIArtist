@@ -34,6 +34,29 @@ pyinstaller --clean VoxelAI.spec   # build dist/VoxelAIArtist.exe (or run build.
 
 ## Verifying changes
 
+**La GUI si puo' provare DAVVERO in questo ambiente**, e piu' sessioni di fila si
+erano fermate credendo di no. `python -m playwright` con Chromium e WebGL via
+SwiftShader (`--enable-unsafe-swiftshader`), piu' Pillow per misurare i pixel.
+Gli arnesi stanno in `.superpowers/` (gitignored), non nella suite.
+Il 2026-08-05 questa prova ha trovato **quattro difetti che la suite verde non
+vedeva**: i materiali erano per-oggetto invece che per-progetto (Shift+A e il
+pannello tornava vuoto), `activeColorRow`/`activeMaterialName` non esistevano nel
+template (meta' della mutua esclusione era invisibile), un `.voxai` salvato non si
+riapriva perche' nessuno scartava la busta, e gli oggetti inattivi perdevano le
+texture. Nessuno di questi e' visibile leggendo il codice o dai test unitari.
+Regole apprese:
+- Misurare i pixel con `page.screenshot(clip=...)` + PIL, **mai** con
+  `canvas.toDataURL()`: il `WebGLRenderer` non chiede `preserveDrawingBuffer`,
+  quindi il buffer e' gia' scartato e si ottengono immagini bianche.
+- Il bundle vive in una closure `window.addEventListener('load', ...)`: `scene`,
+  `rig`, `activeColorHex` non sono raggiungibili da `page.evaluate`. Si verifica a
+  scatola chiusa (tasti e clic veri, poi DOM e pixel).
+- All'avvio c'e' il **launcher** (`#launcherOverlay`) che intercetta i clic: va
+  chiuso con `#launcherSkipBtn`. Il salvataggio sta nel menu File, che va aperto
+  (`#menuFile`) prima di cliccare `#saveProjectBtn`.
+- La console di Windows e' cp1252: serve
+  `sys.stdout.reconfigure(encoding='utf-8', errors='replace')`.
+
 **Run the suite: `bash tests/run_all.sh`** (no network, no cookies, no AI quota —
 the Gemini client is replaced by a fake generator in every test). It covers: the
 pack queue + style distiller, the `/api/pack/*` HTTP endpoints on a real
@@ -155,6 +178,72 @@ Ops apply in order; later ops overwrite earlier cells:
 - `set  color x y z x y z ...` — individual voxels of one color
 - `del  x0 y0 z0 x1 y1 z1` — carve/remove
 Color is a palette key or a literal `#RRGGBB`; unknown keys fall back to `#CCCCCC`.
+
+### Materiali con texture
+
+Un voxel ha **sempre** `color` e **facoltativamente** `material` (l'id di una voce
+di `metadata.materials`). Il colore di un voxel texturizzato e' la tinta media
+della texture, quindi ogni percorso che pretende un hex (`.vox`, `.schem`, le
+swatch, l'MTL senza PNG) funziona senza sapere che i materiali esistono, e un id
+**orfano degrada da solo a tinta unita** — che e' il "materiale neutro" richiesto
+per i file importati senza texture, ottenuto senza un ramo dedicato.
+
+Le ops compatte sanno esprimere solo colori, e i materiali **non vi entrano**:
+viaggiano in `metadata.material_map` (`[["m1", x,y,z, x,y,z, ...], ...]`, la stessa
+forma di una op `set`) e vengono riversati sui voxel **dopo** l'espansione, da
+`applyMaterialMap()` in `07-save-payload.js`. Quindi `expand_ops` (Python) e
+`expandOps` (JS) **restano intatti**: nessuna modifica accoppiata, la parita' ops
+non e' in gioco, e il generatore AI continua a produrre ops di soli colori.
+`applyMaterialMap` va chiamata su **ogni** via d'ingresso (ce ne sono quattro in
+`04-objects.js`): `expandOps` non sa nulla di materiali e non deve impararlo.
+
+Internamente il raggruppamento passa da un **token**: `#RRGGBB` per un colore,
+`@m1` per un materiale. E' il valore dentro `voxelMap`, ed e' cosi' che i confronti
+sparsi per l'editor (che lo trattano come stringa opaca) sono rimasti invariati.
+`tokenOf(v)` e `decodeToken(tok, fallbackColor)` in `36-materials.js` sono l'unico
+punto di conversione. Tre trappole, tutte gia' costate un difetto:
+
+- **`decodeToken` ha il secondo argomento OPZIONALE**, e ometterlo degrada in
+  silenzio al grigio `#CCCCCC`. Passare sempre il colore vero del voxel. In
+  `syncVoxelsFromMap` e' distruttivo: il token butta via l'hex, quindi su un id
+  orfano non resta nulla su cui ricadere, e quella funzione riscrive
+  `currentModelData.voxels`, cioe' il disco.
+- **`result.material` NON prova che il materiale esista**: sull'orfano l'id viene
+  conservato di proposito (azzerarlo renderebbe definitiva via `syncVoxelsFromMap`
+  una perdita transitoria). L'esistenza si verifica con `materialById(id)`.
+- **`threeMaterialFor` ritorna un'istanza CONDIVISA e cachata**, marcata
+  `userData.shared = true`: `disposeMesh` la salta e solo `clearMaterialCache()`
+  la libera. Chi la vuole diversa (l'anteprima semitrasparente degli oggetti
+  inattivi) la **clona**; disporla spegnerebbe la texture di tutto il resto.
+  `clearMaterialCache()` va chiamata dopo ogni modifica o eliminazione di un
+  materiale e a ogni cambio di oggetto/progetto.
+
+I materiali sono di **progetto**, non del singolo oggetto: `currentModelData` e'
+l'oggetto ATTIVO (`04-objects.js`: `currentModelData = obj.data`), quindi la lista
+vive a livello di scena (`sceneMaterials`) e ogni oggetto ci fa da **alias**. Cosi'
+il salvataggio per-oggetto la scrive senza sapere che e' condivisa e il caricamento
+la **fonde per id** invece di sostituirla. `loadSceneFromParsed` chiama
+`resetSceneMaterials()`, o un progetto erediterebbe i materiali del precedente.
+Tenerli solo dentro l'oggetto attivo li faceva sparire premendo Shift+A.
+
+Oltre alla libreria di progetto c'e' una **libreria personale** in `localStorage`
+(`voxelai-material-library`, max 40) per riusare un materiale fra progetti diversi.
+Importarne uno **rinumera** l'id: due progetti possono aver usato `m1` per
+materiali diversi, e tenere l'id d'origine legherebbe la copia al materiale
+gia' presente invece di aggiungerne uno.
+
+Export: OBJ/MTL emette gli UV `0..uw / 0..uh` con `RepeatWrapping`, cosi' la
+texture si ripete **una volta per voxel** invece di stirarsi sul quad unito dal
+greedy mesher — e gli UV li emette il mesher accanto ai vertici, perche' la faccia
+`back` ha l'ordine dei vertici invertito e una lista fissa sarebbe trasposta per
+l'altro verso. Con le texture l'export diventa un solo **ZIP** (OBJ + MTL + PNG),
+perche' i browser bloccano i download multipli. Nel GLB la texture e' incorporata,
+e l'attesa del decode e' obbligatoria: il `GLTFExporter` r128 dimensiona il canvas
+su `image.width`, quindi chiamato prima incorpora un'immagine **0x0**. Una texture
+illeggibile viene staccata prima della parse (altrimenti l'exporter solleva dentro
+una promise e l'export sparisce in silenzio, senza download e senza `restore()`).
+**L'invariante 6 resta valido anche con la texture**: `map` moltiplicato per COLOR_0
+rida' lo stesso modello quasi nero.
 
 ### Robust JSON recovery
 LLM output is unreliable, so `extract_and_parse_json()` → `extract_json_candidate()` → `parse_with_recovery()` handle: fenced ```json blocks (including unterminated ones), brace/bracket balancing, unescaped inner quotes (`repair_unescaped_quotes`), and control-char cleanup. Preserve this pipeline when touching parsing.
