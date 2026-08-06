@@ -59,8 +59,10 @@
             // costruzione, li abbiamo appena creati.
             let exportTexturedMaterials = [];
 
-            function exportTextureFor(def) {
-                if (!def || !def.texture || !def.texture.data) return null;
+            // Carica una texture d'export da una ref {data,w,h,alpha}. `name` finisce
+            // nel GLB per ritrovarla. Stessa pipeline asincrona di prima.
+            function exportTextureFromRef(texRef, name) {
+                if (!texRef || !texRef.data) return null;
                 let settle;
                 exportTexturePending.push(new Promise(res => { settle = res; }));
                 // Anche l'errore risolve: un'immagine illeggibile non deve appendere
@@ -70,7 +72,7 @@
                 // un .then() senza .catch(). Misurato: zero download, zero dispose,
                 // `restore()` mai eseguito e nessun errore all'utente - l'export
                 // spariva in silenzio. Vedi dropFailedExportTextures.
-                const tex = new THREE.TextureLoader().load(def.texture.data, settle, undefined, () => {
+                const tex = new THREE.TextureLoader().load(texRef.data, settle, undefined, () => {
                     tex.userData.exportFailed = true;
                     settle();
                 });
@@ -79,15 +81,27 @@
                 tex.minFilter = THREE.NearestFilter;
                 tex.wrapS = THREE.RepeatWrapping;
                 tex.wrapT = THREE.RepeatWrapping;
-                tex.name = 'tex_' + def.id;
+                tex.name = name || 'tex';
                 return tex;
+            }
+
+            function exportTextureFor(def, faceKey) {
+                if (!def) return null;
+                const texRef = (faceKey && typeof textureForFace === 'function')
+                    ? textureForFace(def, faceKey)
+                    : (def.texture || null);
+                if (!texRef || !texRef.data) return null;
+                const name = faceKey ? ('tex_' + def.id + '_' + faceKey) : ('tex_' + def.id);
+                return exportTextureFromRef(texRef, name);
             }
 
             // Decora un materiale (statico o riggato) col contenuto del token.
             // `fallbackColor` e' il colore PROPRIO del voxel: senza di lui un id
             // materiale orfano (file aperto senza le sue definizioni) uscirebbe grigio
             // neutro invece che nella sua tinta piatta.
-            function applyExportMaterial(m, token, fallbackColor) {
+            // `faceKey` (px/nx/...) seleziona la texture di una faccia su un
+            // materiale a 6 facce; assente, usa la texture unica.
+            function applyExportMaterial(m, token, fallbackColor, faceKey) {
                 const dec = decodeToken(token, fallbackColor);
                 // materialById, non `dec.material`: su un id orfano l'id resta
                 // valorizzato di proposito ma la definizione non esiste.
@@ -115,14 +129,17 @@
                 // alphaTest confronta l'alpha FINALE, cioe' opacity per l'alpha del
                 // texel, quindi con opacity 0.4 e soglia 0.5 spariscono anche i pixel
                 // pieni. A opacita' piena si usa il taglio, sotto la fusione.
+                const faceTex = (faceKey && def && typeof textureForFace === 'function')
+                    ? textureForFace(def, faceKey)
+                    : (def && def.texture);
                 if (def && def.opacity < 1) {
                     m.transparent = true;
                     m.opacity = def.opacity;
-                } else if (def && def.texture && def.texture.alpha) {
+                } else if (faceTex && faceTex.alpha) {
                     m.transparent = true;
                     m.alphaTest = 0.5;
                 }
-                const tex = exportTextureFor(def);
+                const tex = exportTextureFor(def, faceKey || null);
                 if (tex) {
                     m.map = tex;
                     // Le UV del materiale valgono anche in export: il greedy mesher
@@ -141,7 +158,7 @@
                     m.userData.exportBaseColor = dec.color;
                     exportTexturedMaterials.push(m);
                 }
-                m.name = token;
+                m.name = faceKey ? (token + '_' + faceKey) : token;
                 return m;
             }
 
@@ -227,6 +244,45 @@
                     const geom = new THREE.BufferGeometry();
 
                     Object.keys(byColor).forEach((token) => {
+                        // Materiale a 6 facce: un gruppo (e un materiale) PER
+                        // direzione, altrimenti le 6 texture non si possono
+                        // assegnare. Ordine = CUBE_FACES = MATERIAL_FACE_KEYS.
+                        const def = isMaterialToken(token)
+                            ? materialById(token.slice(1)) : null;
+                        const multi = def && typeof materialHasFaceTextures === 'function'
+                            && materialHasFaceTextures(def);
+                        const faceKeys = (typeof MATERIAL_FACE_KEYS !== 'undefined')
+                            ? MATERIAL_FACE_KEYS
+                            : ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+
+                        if (multi) {
+                            CUBE_FACES.forEach((f, fi) => {
+                                const groupStart = indices.length;
+                                byColor[token].forEach(v => {
+                                    const nx = v.x + f.n[0];
+                                    const ny = v.y + f.n[1];
+                                    const nz = v.z + f.n[2];
+                                    if (partData.voxelSet.has(`${nx},${ny},${nz}`)) return;
+                                    for (let k = 0; k < 4; k++) {
+                                        const vt = f.v[k];
+                                        positions.push((v.x + vt[0] * s - o.x) * K,
+                                            (v.y + vt[1] * s - o.y) * K,
+                                            (v.z + vt[2] * s - o.z) * K);
+                                        normals.push(f.n[0], f.n[1], f.n[2]);
+                                        uvs.push(UV_UNIT[k][0], UV_UNIT[k][1]);
+                                    }
+                                    indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3); vbase += 4;
+                                });
+                                const count = indices.length - groupStart;
+                                if (count === 0) return;
+                                const mat = applyExportMaterial(new THREE.MeshStandardMaterial({}),
+                                    token, fallbackOf[token], faceKeys[fi]);
+                                materials.push(mat);
+                                geom.addGroup(groupStart, count, materials.length - 1);
+                            });
+                            return;
+                        }
+
                         const groupStart = indices.length;
                         byColor[token].forEach(v => {
                             CUBE_FACES.forEach(f => {
@@ -337,8 +393,12 @@
                             // il colore VERO del gruppo: serve da fallback se il token
                             // e' un materiale orfano. Da qui arrivano anche texture,
                             // ruvidita', metallicita', emissione e FrontSide.
+                            // `userData.face` (px/nx/...) c'e' solo sui gruppi multi-face
+                            // (faceMode:'six'): senza, applyExportMaterial usa la texture
+                            // unica come prima.
                             applyExportMaterial(m, (m.userData && m.userData.token) || (m.userData && m.userData.hexColor),
-                                m.userData && m.userData.hexColor);
+                                m.userData && m.userData.hexColor,
+                                m.userData && m.userData.face);
                             // L'anteprima disegna i colori dai vertici; in export il
                             // colore viaggia solo sul materiale (vedi il commento sul
                             // COLOR_0 qui sopra).

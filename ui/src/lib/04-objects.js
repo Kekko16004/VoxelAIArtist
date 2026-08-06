@@ -188,7 +188,17 @@
                 objectGroups.forEach(g => {
                     g.children.slice().forEach(ch => {
                         if (ch.geometry) ch.geometry.dispose();
-                        if (ch.material) ch.material.dispose();
+                        // Un materiale a 6 facce e' un ARRAY: `.dispose` sull'array
+                        // non esiste, quindi senza il ramo i 6 MeshStandardMaterial
+                        // clonato restavano in GPU a ogni rebuild degli inattivi.
+                        // La `.map` NON si dispose: e' condivisa con la cache di
+                        // threeMaterialFor (Material.clone in r128 condivide la
+                        // texture), e liberarla qui spegnerebbe anche l'attivo.
+                        const disposeInactiveMat = m => {
+                            if (m && typeof m.dispose === 'function') m.dispose();
+                        };
+                        if (Array.isArray(ch.material)) ch.material.forEach(disposeInactiveMat);
+                        else disposeInactiveMat(ch.material);
                         g.remove(ch);
                     });
                     inactiveGroup.remove(g);
@@ -231,21 +241,34 @@
                         // clone(): l'istanza della cache e' CONDIVISA con l'oggetto
                         // attivo (userData.shared), e qui va resa semitrasparente.
                         // Mutare quella originale smorzerebbe anche il modello attivo.
+                        // Un materiale a 6 facce e' un ARRAY: si clona pezzo per pezzo.
                         let material;
                         if (typeof threeMaterialFor === 'function') {
-                            material = threeMaterialFor(token, {
+                            const src = threeMaterialFor(token, {
                                 wireframe: toggleWireframe.checked,
                                 color: (sample[token] || {}).color
-                            }).clone();
-                            material.userData = {};   // la copia NON e' della cache
+                            });
+                            if (Array.isArray(src)) {
+                                material = src.map(m => {
+                                    const c = m.clone();
+                                    c.userData = {};
+                                    c.transparent = true;
+                                    c.opacity = 0.9;
+                                    return c;
+                                });
+                            } else {
+                                material = src.clone();
+                                material.userData = {};   // la copia NON e' della cache
+                                material.transparent = true;
+                                material.opacity = 0.9;
+                            }
                         } else {
                             material = new THREE.MeshStandardMaterial({
                                 color: new THREE.Color(token), roughness: 0.2, metalness: 0.1,
-                                wireframe: toggleWireframe.checked
+                                wireframe: toggleWireframe.checked,
+                                transparent: true, opacity: 0.9
                             });
                         }
-                        material.transparent = true;
-                        material.opacity = 0.9;
                         const instMesh = new THREE.InstancedMesh(geometry, material, list.length);
                         const dummy = new THREE.Object3D();
                         list.forEach((v, i) => {

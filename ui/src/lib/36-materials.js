@@ -126,6 +126,49 @@
                 };
             }
 
+            // Ordine delle 6 facce = gruppi di BoxGeometry in Three.js r128
+            // (+X, -X, +Y, -Y, +Z, -Z) e di CUBE_FACES in 16-export-glb.js.
+            // I nomi brevi restano stabili nel JSON salvato.
+            const MATERIAL_FACE_KEYS = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+
+            function normalizeTextureRef(tex) {
+                if (!tex || !tex.data) return null;
+                return {
+                    data: tex.data,
+                    w: Number(tex.w) || 0,
+                    h: Number(tex.h) || 0,
+                    // `alpha` dice se l'immagine ha pixel non completamente opachi.
+                    // Si misura all'import (l'unico punto che ha i pixel in mano) e
+                    // si porta appresso, perche' il rendering deve saperlo senza
+                    // ridecodificare il PNG a ogni costruzione del materiale.
+                    alpha: !!(tex.alpha)
+                };
+            }
+
+            function normalizeFaces(faces) {
+                if (!faces || typeof faces !== 'object') return null;
+                const out = {};
+                let any = false;
+                MATERIAL_FACE_KEYS.forEach(k => {
+                    const t = normalizeTextureRef(faces[k]);
+                    if (t) { out[k] = t; any = true; }
+                });
+                return any ? out : null;
+            }
+
+            function materialHasFaceTextures(def) {
+                return !!(def && def.faceMode === 'six' && def.faces);
+            }
+
+            // Texture di una faccia, con ricaduta sulla texture unica. Serve al
+            // rendering e all'export: una faccia senza disegno proprio non deve
+            // restare nera, ma riusare la rappresentativa.
+            function textureForFace(def, faceKey) {
+                if (!def) return null;
+                if (materialHasFaceTextures(def) && def.faces[faceKey]) return def.faces[faceKey];
+                return def.texture || null;
+            }
+
             function normalizeMaterial(def, id) {
                 // null e '' vanno trattati come ASSENTI, non come zero: Number(null) e'
                 // 0 e isFinite lo accetta, quindi senza questa riga un roughness
@@ -138,19 +181,29 @@
                     if (!isFinite(n)) return dflt;
                     return Math.min(1, Math.max(0, n));
                 };
+                const faces = normalizeFaces(def && def.faces);
+                // faceMode 'six' solo se c'e' almeno una faccia con texture: altrimenti
+                // un JSON corrotto o un salvataggio a meta' lascerebbe un materiale
+                // "a 6 facce" senza immagini, e il rendering lo tratterebbe come
+                // multi-materiale vuoto.
+                const faceMode = (def && def.faceMode === 'six' && faces) ? 'six' : 'single';
+                let texture = normalizeTextureRef(def && def.texture);
+                // Senza texture rappresentativa ma con facce: la prima faccia dipinta
+                // diventa la card, il colore medio e il fallback di export.
+                if (!texture && faces) {
+                    for (let i = 0; i < MATERIAL_FACE_KEYS.length; i++) {
+                        if (faces[MATERIAL_FACE_KEYS[i]]) {
+                            texture = faces[MATERIAL_FACE_KEYS[i]];
+                            break;
+                        }
+                    }
+                }
                 return {
                     id: id,
                     name: (def && def.name) ? String(def.name) : id,
-                    texture: (def && def.texture && def.texture.data) ? {
-                        data: def.texture.data,
-                        w: Number(def.texture.w) || 0,
-                        h: Number(def.texture.h) || 0,
-                        // `alpha` dice se l'immagine ha pixel non completamente opachi.
-                        // Si misura all'import (l'unico punto che ha i pixel in mano) e
-                        // si porta appresso, perche' il rendering deve saperlo senza
-                        // ridecodificare il PNG a ogni costruzione del materiale.
-                        alpha: !!(def.texture.alpha)
-                    } : null,
+                    texture: texture,
+                    faceMode: faceMode,
+                    faces: faceMode === 'six' ? faces : null,
                     color: (def && typeof def.color === 'string' && MATERIAL_HEX_RE.test(def.color))
                         ? def.color.toUpperCase() : MATERIAL_FALLBACK_COLOR,
                     roughness: clamp01(def && def.roughness, 0.6),
@@ -410,11 +463,56 @@
             // l'identita' dell'oggetto: due oggetti diversi che usano '@m1' con
             // definizioni diverse si spartirebbero la prima istanza costruita.
             function clearMaterialCache() {
+                // Un materiale a 6 facce e' un ARRAY di 6 MeshStandardMaterial: va
+                // smontato pezzo per pezzo, o resterebbero 5 texture sulla GPU a ogni
+                // rebuild.
                 _materialCache.forEach(m => {
-                    if (m.map && m.map.dispose) m.map.dispose();
-                    if (m.dispose) m.dispose();
+                    const list = Array.isArray(m) ? m : [m];
+                    list.forEach(x => {
+                        if (!x) return;
+                        if (x.map && x.map.dispose) x.map.dispose();
+                        if (x.dispose) x.dispose();
+                    });
                 });
                 _materialCache = new Map();
+            }
+
+            // Costruisce UN MeshStandardMaterial da una definizione + eventuale
+            // texture di faccia. Condiviso fra threeMaterialFor (visore) e
+            // l'anteprima multi-faccia: e' l'unico posto che sa come si monta.
+            function buildStandardFromDef(def, decColor, texRef, wire) {
+                const mat = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(decColor),
+                    roughness: def ? def.roughness : 0.2,
+                    metalness: def ? def.metalness : 0.1,
+                    wireframe: !!wire
+                });
+                if (def && def.emissive > 0) {
+                    mat.emissive = new THREE.Color(decColor);
+                    mat.emissiveIntensity = def.emissive;
+                }
+                // Per la trasparenza conta anche l'alpha DELLA FACCIA: un materiale
+                // a 6 facce puo' avere buchi solo su una. Si passa un def "vista"
+                // con texture = quella della faccia.
+                const viewDef = def ? {
+                    opacity: def.opacity,
+                    texture: texRef || def.texture || null
+                } : null;
+                applyTransparency(mat, viewDef);
+                if (texRef && texRef.data) {
+                    const tex = new THREE.TextureLoader().load(texRef.data, () => {
+                        if (typeof requestRender === 'function') requestRender();
+                    });
+                    tex.magFilter = THREE.NearestFilter;
+                    tex.minFilter = THREE.NearestFilter;
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                    if (def) applyUvToTexture(tex, def.uv);
+                    mat.map = tex;
+                    // Col map, `color` moltiplica la texture: bianco = texture pura.
+                    mat.color = new THREE.Color(0xffffff);
+                }
+                return mat;
             }
 
             // `opts.color` e' il colore PROPRIO del voxel, usato solo quando il token
@@ -479,39 +577,32 @@
             function threeMaterialFor(token, opts) {
                 const wire = !!(opts && opts.wireframe);
                 const dec = decodeToken(token, (opts && opts.color) || '');
-                const key = token + '|' + dec.color + (wire ? '|w' : '');
-                const hit = _materialCache.get(key);
-                if (hit) return hit;
-
                 // materialById, non `dec.material` : su un orfano l'id resta valorizzato
                 // (e' voluto, vedi decodeToken) ma la definizione non c'e'.
                 const def = materialById(dec.material);
-                const mat = new THREE.MeshStandardMaterial({
-                    color: new THREE.Color(dec.color),
-                    roughness: def ? def.roughness : 0.2,
-                    metalness: def ? def.metalness : 0.1,
-                    wireframe: wire
-                });
-                if (def && def.emissive > 0) {
-                    mat.emissive = new THREE.Color(dec.color);
-                    mat.emissiveIntensity = def.emissive;
-                }
-                applyTransparency(mat, def);
-                if (def && def.texture && def.texture.data) {
-                    const tex = new THREE.TextureLoader().load(def.texture.data, () => {
-                        if (typeof requestRender === 'function') requestRender();
+                // La chiave include il faceMode: passare da single a six (o il
+                // contrario) sullo stesso id deve invalidare la cache, non
+                // restituire l'istanza monofaccia di prima.
+                const faceTag = materialHasFaceTextures(def) ? '|6' : '';
+                const key = token + '|' + dec.color + faceTag + (wire ? '|w' : '');
+                const hit = _materialCache.get(key);
+                if (hit) return hit;
+
+                // 6 facce: un ARRAY di 6 materiali, nell'ordine dei gruppi di
+                // BoxGeometry. InstancedMesh li assegna da solo per faccia.
+                if (materialHasFaceTextures(def)) {
+                    const mats = MATERIAL_FACE_KEYS.map(fk => {
+                        const m = buildStandardFromDef(def, dec.color, textureForFace(def, fk), wire);
+                        // `shared`: questo materiale e' CACHATO e vive in piu' mesh.
+                        m.userData.shared = true;
+                        m.userData.face = fk;
+                        return m;
                     });
-                    // Voxel art: nessuna interpolazione, e una ripetizione per voxel
-                    // (l'UV oltre 1 serve al greedy mesh dell'export).
-                    tex.magFilter = THREE.NearestFilter;
-                    tex.minFilter = THREE.NearestFilter;
-                    tex.wrapS = THREE.RepeatWrapping;
-                    tex.wrapT = THREE.RepeatWrapping;
-                    applyUvToTexture(tex, def.uv);
-                    mat.map = tex;
-                    // Col map, `color` moltiplica la texture: bianco = texture pura.
-                    mat.color = new THREE.Color(0xffffff);
+                    _materialCache.set(key, mats);
+                    return mats;
                 }
+
+                const mat = buildStandardFromDef(def, dec.color, def && def.texture, wire);
                 // `shared`: questo materiale e' CACHATO e vive in piu' mesh. Chi
                 // distrugge un mesh (disposeMesh) deve saltarlo, altrimenti il primo
                 // colore ripulito porta con se' la texture di tutti gli altri.
@@ -675,7 +766,14 @@
                 // sola faccia frontale e sembrerebbe un quadrato piatto.
                 mesh.rotation.x = 0.42;
                 scene.add(mesh);
-                _preview = { renderer, scene, camera, mesh, mat, spinning: false, angle: 0 };
+                // autoSpin: gira da sola finche' il form e' aperto. Si spegne
+                // durante un drag del mouse e riparte al rilascio. drag: stato
+                // del trascinamento (pointer capture sul canvas).
+                _preview = {
+                    renderer, scene, camera, mesh, mat,
+                    spinning: false, autoSpin: true, angle: 0,
+                    drag: null, tiltX: 0.42
+                };
                 return _preview;
             }
 
@@ -689,7 +787,11 @@
                 if (p.mesh.geometry && p.mesh.geometry.dispose) p.mesh.geometry.dispose();
                 p.mesh.geometry = previewGeometryFor(_previewShape);
                 p.dirty = true;
-                startPreviewSpin();
+                // Cambiando forma (cubo <-> sfera) va riassegnato il materiale:
+                // le 6 facce hanno senso solo sul cubo, sulla sfera si ricade
+                // sulla texture unica. applyPreviewState lo decide da solo.
+                if (materialFormIsOpen()) refreshFormPreview();
+                else startPreviewSpin();
             }
 
             // Applica al materiale d'anteprima i valori CORRENTI del form. `state` ha
@@ -701,22 +803,24 @@
             // stessa immagine (l'anteprima si aggiorna a ogni `input`). Le UV invece
             // si riapplicano sempre: sono proprieta' dell'oggetto texture, cambiarle
             // non ricarica niente.
-            function applyPreviewState(state) {
-                const p = ensurePreview();
-                if (!p) return;
-                const m = p.mat;
-                const hex = (state && MATERIAL_HEX_RE.test(state.color || '')) ? state.color : MATERIAL_FALLBACK_COLOR;
-                const texData = (state && state.texture && state.texture.data) ? state.texture.data : null;
+            // Applica texture + UV + trasparenza a UN materiale d'anteprima. Usata sia
+            // sul materiale singolo sia su ciascuna delle 6 facce.
+            function applyPreviewMatSide(m, state, texRef, hex) {
+                const texData = (texRef && texRef.data) ? texRef.data : null;
                 m.roughness = state ? state.roughness : 0.6;
                 m.metalness = state ? state.metalness : 0;
                 const emi = state ? state.emissive : 0;
                 m.emissive = new THREE.Color(emi > 0 ? hex : 0x000000);
                 m.emissiveIntensity = emi;
-                if (texData !== p.texData) {
+                // La texture si ricarica solo se il data URL cambia: ogni slider
+                // rifarebbe altrimenti un upload GPU della stessa immagine.
+                if (texData !== m.userData.texData) {
                     if (m.map && m.map.dispose) m.map.dispose();
-                    p.texData = texData;
+                    m.userData.texData = texData;
                     if (texData) {
-                        const tex = new THREE.TextureLoader().load(texData, () => { p.dirty = true; });
+                        const tex = new THREE.TextureLoader().load(texData, () => {
+                            const p = _preview; if (p) p.dirty = true;
+                        });
                         tex.magFilter = THREE.NearestFilter;
                         tex.minFilter = THREE.NearestFilter;
                         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -726,34 +830,206 @@
                     }
                 }
                 if (m.map) applyUvToTexture(m.map, state && state.uv);
-                // La trasparenza si RIAZZERA prima: applyTransparency accende i flag
-                // ma non li spegne, e su un materiale riusato fra due aperture del
-                // form l'alphaTest di prima resterebbe attivo e mangerebbe i bordi.
                 m.transparent = false;
                 m.opacity = 1;
                 m.alphaTest = 0;
-                applyTransparency(m, state);
-                // Col map, `color` moltiplica la texture: bianco = texture pura.
+                applyTransparency(m, {
+                    opacity: state ? state.opacity : 1,
+                    texture: texRef || null
+                });
                 m.color = new THREE.Color(texData ? 0xffffff : hex);
                 m.needsUpdate = true;
+            }
+
+            function applyPreviewState(state) {
+                const p = ensurePreview();
+                if (!p) return;
+                const hex = (state && MATERIAL_HEX_RE.test(state.color || ''))
+                    ? state.color : MATERIAL_FALLBACK_COLOR;
+                const multi = !!(state && state.faceMode === 'six' && state.faces
+                    && _previewShape === 'box');
+
+                if (multi) {
+                    // 6 materiali, uno per faccia del cubo. Sulla sfera non ha senso
+                    // (una sola mappatura UV avvolta): si ricade sul materiale unico.
+                    if (!Array.isArray(p.mesh.material) || p.mesh.material.length !== 6) {
+                        // Il materiale singolo resta vivo in p.mat per quando si
+                        // torna a single/sfera: non si dispose.
+                        const mats = MATERIAL_FACE_KEYS.map(() => {
+                            const m = new THREE.MeshStandardMaterial({
+                                color: 0xcccccc, roughness: 0.6, metalness: 0
+                            });
+                            m.envMap = previewEnvMap();
+                            m.side = THREE.DoubleSide;
+                            m.userData.texData = null;
+                            return m;
+                        });
+                        p.mesh.material = mats;
+                        p.faceMats = mats;
+                    }
+                    MATERIAL_FACE_KEYS.forEach((fk, i) => {
+                        applyPreviewMatSide(p.faceMats[i], state, textureForFace(state, fk), hex);
+                    });
+                } else {
+                    // Torna al materiale singolo se eravamo in multi.
+                    if (p.mesh.material !== p.mat) p.mesh.material = p.mat;
+                    applyPreviewMatSide(p.mat, state, state && state.texture, hex);
+                    // Compat: p.texData era il vecchio checkpoint; resta allineato
+                    // cosi' un lettore esterno non vede un valore stantio.
+                    p.texData = p.mat.userData.texData || null;
+                }
                 startPreviewSpin();
             }
 
             // La forma gira SOLO finche' il form e' aperto: un loop perenne terrebbe
             // sveglia la GPU per un pannello chiuso (e questa app rende on-demand di
             // proposito, vedi requestRender).
+            // autoSpin spegne l'incremento di angle durante un drag del mouse
+            // (l'utente ruota a mano); il loop resta vivo per ridisegnare i
+            // frame del trascinamento. Al rilascio autoSpin torna true e la
+            // rotazione continua da dove l'ha lasciata.
             function startPreviewSpin() {
                 const p = ensurePreview();
                 if (!p || p.spinning) return;
                 p.spinning = true;
                 const step = () => {
                     if (!materialFormIsOpen()) { p.spinning = false; return; }
-                    p.angle += 0.012;
+                    if (p.autoSpin) p.angle += 0.012;
                     p.mesh.rotation.y = p.angle;
+                    p.mesh.rotation.x = p.tiltX;
                     p.renderer.render(p.scene, p.camera);
                     requestAnimationFrame(step);
                 };
                 requestAnimationFrame(step);
+            }
+
+            // Timer del leave: senza, al bordo del wrap l'ingrandimento sposta
+            // il hit-box e mouseleave/enter oscillano grande↔piccola.
+            // ~140 ms assorbe un graffio sul bordo senza far sentire la
+            // preview pigra a uscire davvero.
+            let _previewLeaveTimer = null;
+            const PREVIEW_LEAVE_MS = 140;
+
+            // Ingrandisce l'anteprima (CSS .is-enlarged) e avvia la rotazione
+            // se non stava gia' girando. on=true e' immediato; on=false e'
+            // ritardato (hysteresis sul leave) a meno che immediate=true
+            // (chiusura form, dove non serve grazia).
+            function setPreviewEnlarged(on, immediate) {
+                const wrap = document.getElementById('materialPreviewWrap');
+                if (_previewLeaveTimer) {
+                    clearTimeout(_previewLeaveTimer);
+                    _previewLeaveTimer = null;
+                }
+                if (on) {
+                    if (wrap) wrap.classList.add('is-enlarged');
+                    startPreviewSpin();
+                    return;
+                }
+                const shrink = () => {
+                    _previewLeaveTimer = null;
+                    const w = document.getElementById('materialPreviewWrap');
+                    if (w) w.classList.remove('is-enlarged');
+                };
+                if (immediate) {
+                    shrink();
+                } else {
+                    _previewLeaveTimer = setTimeout(shrink, PREVIEW_LEAVE_MS);
+                }
+            }
+
+            // Drag sul canvas: ruota Y (orizzontale) e un po' di tilt X
+            // (verticale, clampato). pointer capture cosi' il drag non si
+            // interrompe uscendo dal canvas. Al pointerup riparte autoSpin.
+            function initPreviewInteraction() {
+                const canvas = document.getElementById('materialPreviewCanvas');
+                const wrap = document.getElementById('materialPreviewWrap');
+                if (!canvas || canvas.dataset.previewUiBound) return;
+                canvas.dataset.previewUiBound = '1';
+
+                if (wrap) {
+                    wrap.addEventListener('mouseenter', () => setPreviewEnlarged(true));
+                    wrap.addEventListener('mouseleave', () => {
+                        // Non rimpicciolire a meta' di un drag (il cursore
+                        // puo' uscire dal wrap con il tasto premuto).
+                        const p = _preview;
+                        if (p && p.drag) return;
+                        // Ritardato: se il cursore rientra dal bordo entro
+                        // PREVIEW_LEAVE_MS, mouseenter cancella il timer e
+                        // resta ingrandita — niente thrash.
+                        setPreviewEnlarged(false);
+                    });
+                }
+
+                const onMove = (ev) => {
+                    const p = _preview;
+                    if (!p || !p.drag) return;
+                    const dx = ev.clientX - p.drag.x;
+                    const dy = ev.clientY - p.drag.y;
+                    p.drag.x = ev.clientX;
+                    p.drag.y = ev.clientY;
+                    // Sensibilita' in radianti per pixel di schermo.
+                    p.angle += dx * 0.01;
+                    p.tiltX = Math.max(-0.9, Math.min(1.2, p.tiltX + dy * 0.008));
+                    // Il loop di spin ridisegna; se e' spento (form chiuso,
+                    // non dovrebbe succedere) si forza un frame.
+                    if (!p.spinning) {
+                        p.mesh.rotation.y = p.angle;
+                        p.mesh.rotation.x = p.tiltX;
+                        p.renderer.render(p.scene, p.camera);
+                    }
+                };
+                const onUp = (ev) => {
+                    const p = _preview;
+                    if (!p || !p.drag) return;
+                    p.drag = null;
+                    p.autoSpin = true;
+                    try {
+                        if (canvas.hasPointerCapture && canvas.hasPointerCapture(ev.pointerId)) {
+                            canvas.releasePointerCapture(ev.pointerId);
+                        }
+                    } catch (e) { /* ignore */ }
+                    canvas.removeEventListener('pointermove', onMove);
+                    canvas.removeEventListener('pointerup', onUp);
+                    canvas.removeEventListener('pointercancel', onUp);
+                    // Se il cursore e' gia' fuori dal wrap, rimpicciolisci
+                    // (con lo stesso delay chill del mouseleave).
+                    if (wrap && !wrap.matches(':hover')) setPreviewEnlarged(false);
+                    startPreviewSpin();
+                };
+                canvas.addEventListener('pointerdown', (ev) => {
+                    // Solo tasto sinistro / tocco primario.
+                    if (ev.button != null && ev.button !== 0) return;
+                    const p = ensurePreview();
+                    if (!p) return;
+                    ev.preventDefault();
+                    p.autoSpin = false;
+                    p.drag = { x: ev.clientX, y: ev.clientY };
+                    setPreviewEnlarged(true);
+                    try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+                    canvas.addEventListener('pointermove', onMove);
+                    canvas.addEventListener('pointerup', onUp);
+                    canvas.addEventListener('pointercancel', onUp);
+                    startPreviewSpin();
+                });
+            }
+
+            // L'anteprima vive dentro #materialFaceModeRow (sotto le facce)
+            // quando si disegna, e in #materialPreviewHomeFlat in tinta unita
+            // (materialDrawSection e' display:none). Un solo nodo, spostato:
+            // un secondo canvas aprirebbe un secondo WebGL context e a lungo
+            // andare il browser spegne quello del viewport.
+            function placePreviewWrap(src) {
+                const wrap = document.getElementById('materialPreviewWrap');
+                if (!wrap) return;
+                const faceRow = document.getElementById('materialFaceModeRow');
+                const flatHome = document.getElementById('materialPreviewHomeFlat');
+                if (src === 'flat') {
+                    if (flatHome && wrap.parentElement !== flatHome) flatHome.appendChild(wrap);
+                    if (flatHome) flatHome.style.display = '';
+                } else {
+                    if (faceRow && wrap.parentElement !== faceRow) faceRow.appendChild(wrap);
+                    if (flatHome) flatHome.style.display = 'none';
+                }
             }
 
             // Elimina chiedendo conferma, poi svuota la cache e ridisegna: i voxel che
@@ -869,7 +1145,11 @@
                 editingId: null,
                 pendingTexture: null,
                 crop: null,
-                source: 'flat'
+                source: 'flat',
+                // 'single' = una texture su tutte le facce; 'six' = una per faccia.
+                faceMode: 'single',
+                // Faccia attiva nell'editor (solo in faceMode 'six').
+                activeFace: 'px'
             };
 
             function materialFormIsOpen() {
@@ -918,12 +1198,12 @@
                 put('materialUvRotationValue', Math.round(uv.rotation) + '°');
             }
 
-            // Colore del materiale che il form sta descrivendo. Sulla "Tinta unita" e'
-            // SEMPRE il pennello, anche se la tela ha ancora una texture pendente:
-            // formDefinition scarta la texture in quel caso, e se qui si leggesse
-            // la tinta media della texture il materiale salvato finirebbe col
-            // colore sbagliato (misurato: si sceglieva #CC3311 e si salvava il
-            // ciano del riempimento di prova).
+            // Colore del materiale che il form sta descrivendo.
+            //
+            // "Tinta unita": e' lo SFONDO della tela (materialSolidColor /
+            // materialCanvasBg), NON il pennello. Il pennello serve solo a
+            // disegnare; confonderli faceva cambiare la tinta del materiale
+            // quando si sceglieva un colore da dipingere.
             //
             // Con una texture (draw/image) il colore e' la tinta media della
             // texture: e' quello che serve a .vox/.schem e alle swatch, e
@@ -932,7 +1212,36 @@
                 if (_formState.source !== 'flat' && _formState.pendingTexture) {
                     return _formState.pendingTexture.color;
                 }
-                return MATERIAL_HEX_RE.test(_art.pen) ? _art.pen : MATERIAL_FALLBACK_COLOR;
+                return solidFormColor();
+            }
+
+            // Valore grezzo del picker della tinta unita / sfondo. NON passa da
+            // artBackgroundColor(): quella torna null col checkbox "trasparente"
+            // spuntato, e un materiale flat non puo' avere colore null.
+            function solidFormColor() {
+                const solid = document.getElementById('materialSolidColor');
+                if (solid && MATERIAL_HEX_RE.test(solid.value || '')) {
+                    return solid.value.toUpperCase();
+                }
+                const bg = document.getElementById('materialCanvasBg');
+                if (bg && MATERIAL_HEX_RE.test(bg.value || '')) {
+                    return bg.value.toUpperCase();
+                }
+                return MATERIAL_FALLBACK_COLOR;
+            }
+
+            // Un solo valore, due picker: tinta unita e sfondo della tela. Non
+            // tocca il pennello (che e' un'altra cosa).
+            function setSolidColor(hex) {
+                if (!MATERIAL_HEX_RE.test(hex || '')) return;
+                const h = hex.toUpperCase();
+                const solid = document.getElementById('materialSolidColor');
+                if (solid) solid.value = h;
+                const solidHex = document.getElementById('materialSolidHex');
+                if (solidHex) solidHex.textContent = h;
+                const bg = document.getElementById('materialCanvasBg');
+                if (bg) bg.value = h;
+                if (materialFormIsOpen() && _formState.source === 'flat') refreshFormPreview();
             }
 
             // La definizione che il form sta descrivendo ADESSO. Unico punto che la
@@ -945,10 +1254,33 @@
             function formDefinition() {
                 const v = formSliderValues();
                 const nameEl = document.getElementById('materialName');
-                const tex = (_formState.source === 'flat') ? null : _formState.pendingTexture;
+                const flat = _formState.source === 'flat';
+                const tex = flat ? null : _formState.pendingTexture;
+                const faceMode = (!flat && _formState.faceMode === 'six') ? 'six' : 'single';
+                let faces = null;
+                if (faceMode === 'six') {
+                    // Snapshot di ogni faccia: la faccia attiva e' gia' in
+                    // pendingTexture (commitArtToTexture la tiene aggiornata), le
+                    // altre stanno nei buffer offscreen.
+                    faces = {};
+                    MATERIAL_FACE_KEYS.forEach(fk => {
+                        let t = null;
+                        if (fk === _formState.activeFace && tex) {
+                            t = { data: tex.data, w: tex.w, h: tex.h, alpha: !!tex.alpha };
+                        } else if (_art.faceBuffers && _art.faceBuffers[fk]
+                            && _art.faceBuffers[fk].tex) {
+                            const ft = _art.faceBuffers[fk].tex;
+                            t = { data: ft.data, w: ft.w, h: ft.h, alpha: !!ft.alpha };
+                        }
+                        if (t) faces[fk] = t;
+                    });
+                    if (!Object.keys(faces).length) faces = null;
+                }
                 return {
                     name: nameEl ? nameEl.value.trim() : '',
                     texture: tex ? { data: tex.data, w: tex.w, h: tex.h, alpha: !!tex.alpha } : null,
+                    faceMode: faceMode,
+                    faces: faces,
                     color: currentFormColor(),
                     roughness: v.roughness,
                     metalness: v.metalness,
@@ -970,7 +1302,24 @@
                 if (artEditorIsOpen()) closeArtEditor();
                 const form = document.getElementById('materialForm');
                 if (form) form.style.display = 'none';
-                _formState = { editingId: null, pendingTexture: null, crop: null, source: 'flat' };
+                _formState = {
+                    editingId: null, pendingTexture: null, crop: null, source: 'flat',
+                    faceMode: 'single', activeFace: 'px'
+                };
+                // I buffer per-faccia sono dello stato del form: a form chiuso non
+                // devono restare in memoria (e a riapertura ripartono da zero).
+                _art.faceBuffers = null;
+                // Invalida eventuali onload ancora in volo (loadArtFromTexture):
+                // senza, un load ritardato ridipingerebbe la tela del form
+                // successivo. Stesso contatore di switchActiveFace.
+                _artLoadGen++;
+                // Anteprima: rimpicciolisci subito (niente delay: il form non c'e'
+                // piu') e ferma un eventuale drag rimasto appeso.
+                if (_preview) {
+                    _preview.drag = null;
+                    _preview.autoSpin = true;
+                }
+                setPreviewEnlarged(false, true);
             }
 
             // Mostra/nasconde i blocchi in base alla sorgente scelta. La sezione UV
@@ -991,6 +1340,28 @@
                 show('materialCanvasSetup', src !== 'flat' || artEditorIsOpen());
                 show('materialDrawSection', src !== 'flat');
                 show('materialUvSection', src !== 'flat' && !!_formState.pendingTexture);
+                // Anteprima: sotto le facce in draw/image, host flat in tinta unita.
+                placePreviewWrap(src);
+                // Lo switcher delle facce vive dentro #materialArtTools (che viaggia
+                // nella finestra grande): si mostra solo in draw/image + faceMode six.
+                const faceRow = document.getElementById('materialFaceModeRow');
+                if (faceRow) faceRow.style.display = (src !== 'flat') ? 'flex' : 'none';
+                const switcher = document.getElementById('materialFaceSwitcher');
+                if (switcher) {
+                    switcher.style.display = (src !== 'flat' && _formState.faceMode === 'six')
+                        ? 'flex' : 'none';
+                }
+                const faceSeg = document.getElementById('materialFaceModeSeg');
+                if (faceSeg) {
+                    faceSeg.querySelectorAll('.seg-btn').forEach(b => {
+                        b.classList.toggle('active', b.dataset.facemode === _formState.faceMode);
+                    });
+                }
+                if (switcher) {
+                    switcher.querySelectorAll('[data-face]').forEach(b => {
+                        b.classList.toggle('active', b.dataset.face === _formState.activeFace);
+                    });
+                }
                 const seg = document.getElementById('materialSourceSeg');
                 if (seg) {
                     seg.querySelectorAll('.seg-btn').forEach(b => {
@@ -1031,8 +1402,11 @@
                     editingId: editingId || null,
                     pendingTexture: null,
                     crop: null,
-                    source: 'flat'
+                    source: 'flat',
+                    faceMode: 'single',
+                    activeFace: 'px'
                 };
+                _art.faceBuffers = null;
 
                 const setSlider = (id, val) => {
                     const el = document.getElementById(id);
@@ -1055,6 +1429,60 @@
                         };
                         _formState.source = 'draw';
                     }
+                    // 6 facce: ripristina i buffer e carica la faccia attiva.
+                    if (def.faceMode === 'six' && def.faces) {
+                        _formState.faceMode = 'six';
+                        _formState.source = 'draw';
+                        ensureFaceBuffers();
+                        MATERIAL_FACE_KEYS.forEach(fk => {
+                            // Faccia assente: ricade sulla texture rappresentativa
+                            // (stesso contratto di textureForFace a runtime).
+                            const t = def.faces[fk] || def.texture;
+                            if (t && t.data) {
+                                _art.faceBuffers[fk] = {
+                                    undo: [], redo: [],
+                                    tex: {
+                                        data: t.data, w: t.w, h: t.h,
+                                        color: def.color, alpha: !!t.alpha
+                                    },
+                                    // snap lazy: si ricostruisce al primo switch
+                                    snap: null
+                                };
+                            }
+                        });
+                        // activeFace: 'px' se c'e', altrimenti la prima faccia
+                        // con texture. Senza, un materiale salvato senza px
+                        // aprirebbe una tela vuota lasciando i disegni altrove.
+                        let startFace = 'px';
+                        if (!(_art.faceBuffers.px && _art.faceBuffers.px.tex)) {
+                            for (let i = 0; i < MATERIAL_FACE_KEYS.length; i++) {
+                                const fk = MATERIAL_FACE_KEYS[i];
+                                if (_art.faceBuffers[fk] && _art.faceBuffers[fk].tex) {
+                                    startFace = fk;
+                                    break;
+                                }
+                            }
+                        }
+                        _formState.activeFace = startFace;
+                        const startBuf = _art.faceBuffers[startFace];
+                        if (startBuf && startBuf.tex) {
+                            _formState.pendingTexture = {
+                                data: startBuf.tex.data,
+                                w: startBuf.tex.w,
+                                h: startBuf.tex.h,
+                                color: def.color,
+                                alpha: !!startBuf.tex.alpha
+                            };
+                        } else if (def.texture && def.texture.data) {
+                            _formState.pendingTexture = {
+                                data: def.texture.data,
+                                w: def.texture.w,
+                                h: def.texture.h,
+                                color: def.color,
+                                alpha: !!def.texture.alpha
+                            };
+                        }
+                    }
                 } else {
                     nameEl.value = '';
                     setSlider('materialRoughness', 0.6);
@@ -1067,13 +1495,19 @@
                     setSlider('materialUvRotation', 0);
                     resetArtCanvas();
                 }
-                // Il colore del form (pennello E tinta unita, vedi setPenColor):
-                // in modifica quello del materiale, in creazione il colore attivo
-                // dell'editor -- che e' quello che l'utente sta gia' usando, quindi
-                // l'aspettativa e' di ritrovarlo qui.
-                if (def && !def.texture) {
-                    setPenColor(def.color, false);
-                } else if (!def && typeof activeColorHex === 'string'
+                // Tinta unita / sfondo: in modifica il colore del materiale (anche
+                // con texture o faceMode six: e' lo sfondo delle facce ancora
+                // vuote e la tinta media di fallback). In creazione il colore
+                // attivo dell'editor. Il pennello resta a se'.
+                if (def) {
+                    setSolidColor(def.color);
+                } else if (typeof activeColorHex === 'string'
+                    && MATERIAL_HEX_RE.test(activeColorHex)) {
+                    setSolidColor(activeColorHex);
+                }
+                // Il pennello: in creazione parte dal colore attivo, in modifica
+                // resta quello che c'era (non e' una proprieta' del materiale).
+                if (!def && typeof activeColorHex === 'string'
                     && MATERIAL_HEX_RE.test(activeColorHex)) {
                     setPenColor(activeColorHex, false);
                 }
@@ -1102,7 +1536,15 @@
                 form.style.display = 'flex';
 
                 // La texture in modifica finisce nella tela: da qui si puo' ridisegnare.
-                if (_formState.pendingTexture) loadArtFromTexture(_formState.pendingTexture);
+                // In faceMode six si carica la faccia attiva (con i suoi buffer).
+                if (_formState.faceMode === 'six') {
+                    const buf = _art.faceBuffers && _art.faceBuffers[_formState.activeFace];
+                    const tex = (buf && buf.tex) || _formState.pendingTexture;
+                    if (tex) loadArtFromTexture(tex);
+                    else if (!_art.canvas) newArtCanvas(artSelectedSize(), artBackgroundColor());
+                } else if (_formState.pendingTexture) {
+                    loadArtFromTexture(_formState.pendingTexture);
+                }
                 refreshSourceUI();
                 refreshFormPreview();
                 renderPenSwatches();
@@ -1292,7 +1734,15 @@
                 lastCell: null,
                 zoom: 8,           // px di schermo per pixel della texture (finestra grande)
                 spaceHeld: false,
-                panning: null
+                panning: null,
+                // Griglia visibile: l'utente la spegne da checkbox. Sotto i 5 px
+                // per cella resta comunque spenta (layoutArtStage), o le linee
+                // coprirebbero il disegno.
+                gridOn: true,
+                // Buffer per-faccia (solo in faceMode 'six'): { px: {undo,redo,tex,snap}, ... }
+                // La tela visibile e' SEMPRE una sola; allo switch si salva lo
+                // snapshot della faccia uscente e si ripristina quella entrante.
+                faceBuffers: null
             };
 
             function artSelectedSize() {
@@ -1331,7 +1781,11 @@
                 updateArtHistoryBtns();
             }
 
-            function newArtCanvas(size, bgHex) {
+            // `resetAllFaces` e' solo per "Nuova tela": le altre chiamate (setFormSource,
+            // setFaceMode, resize senza canvas, openMaterialForm fallback) devono
+            // creare/svuotare SOLO la faccia attiva. Senza il flag, un switch a six
+            // con seed gia' copiato su tutte le facce le riazzererebbe al blank.
+            function newArtCanvas(size, bgHex, resetAllFaces) {
                 const ctx = ensureArtCtx(size, size);
                 if (!ctx) return;
                 ctx.clearRect(0, 0, size, size);
@@ -1344,6 +1798,35 @@
                 updateArtHistoryBtns();
                 layoutArtStage();
                 commitArtToTexture();
+                // In faceMode six "Nuova tela" riparte da zero su TUTTE le facce:
+                // lasciare i buffer vecchi mescolerebbe un'attiva bianca con
+                // disegni stantii sulle altre cinque.
+                if (resetAllFaces && _formState.faceMode === 'six') {
+                    ensureFaceBuffers();
+                    const blank = _formState.pendingTexture
+                        ? {
+                            data: _formState.pendingTexture.data,
+                            w: _formState.pendingTexture.w,
+                            h: _formState.pendingTexture.h,
+                            color: _formState.pendingTexture.color,
+                            alpha: !!_formState.pendingTexture.alpha
+                        }
+                        : null;
+                    const snap = artSnapshot();
+                    MATERIAL_FACE_KEYS.forEach(fk => {
+                        _art.faceBuffers[fk] = {
+                            undo: [],
+                            redo: [],
+                            tex: blank ? {
+                                data: blank.data, w: blank.w, h: blank.h,
+                                color: blank.color, alpha: !!blank.alpha
+                            } : null,
+                            // snap solo sulla faccia attiva (e' la tela corrente);
+                            // le altre lo ricostruiscono da tex al primo switch.
+                            snap: (fk === _formState.activeFace) ? snap : null
+                        };
+                    });
+                }
             }
 
             // Ricampiona la tela a una nuova dimensione tenendo il disegno. Passa da un
@@ -1364,16 +1847,103 @@
                 ctx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, size, size);
                 layoutArtStage();
                 commitArtToTexture();
+                // In faceMode six le altre facce restano alla vecchia dimensione:
+                // si ricampionano anche loro, o il cubo avrebbe lati a risoluzioni
+                // diverse e in export le UV non tornerebbero.
+                // Preferenza al percorso SINCRONO (snap ImageData): createImageBitmap
+                // / Image.onload lascerebbero le facce a risoluzione vecchia se
+                // l'utente salva a meta' del load. Con lo snap il resize e' immediato.
+                if (_formState.faceMode === 'six' && _art.faceBuffers) {
+                    MATERIAL_FACE_KEYS.forEach(fk => {
+                        if (fk === _formState.activeFace) return;
+                        const buf = _art.faceBuffers[fk];
+                        if (!buf) return;
+                        if (buf.snap && buf.snap.data) {
+                            try {
+                                const off = document.createElement('canvas');
+                                off.width = size; off.height = size;
+                                const octx = off.getContext('2d');
+                                // Canvas d'appoggio alla vecchia dimensione: putImageData
+                                // non ricampiona, drawImage si'.
+                                const src = document.createElement('canvas');
+                                src.width = buf.snap.w; src.height = buf.snap.h;
+                                src.getContext('2d').putImageData(buf.snap.data, 0, 0);
+                                octx.imageSmoothingEnabled = false;
+                                octx.clearRect(0, 0, size, size);
+                                octx.drawImage(src, 0, 0, size, size);
+                                const t = textureFromCanvasCtx(off, octx);
+                                buf.tex = {
+                                    data: t.data, w: t.w, h: t.h,
+                                    color: t.color, alpha: !!t.alpha
+                                };
+                                buf.snap = {
+                                    w: size, h: size,
+                                    data: octx.getImageData(0, 0, size, size)
+                                };
+                                buf.undo = [];
+                                buf.redo = [];
+                            } catch (e) { /* lascia com'e' */ }
+                            return;
+                        }
+                        if (!buf.tex || !buf.tex.data) return;
+                        // Nessuno snap: ricampiona da dataURL. Il gen del load
+                        // principale non c'entra (non tocca la tela), ma se il
+                        // form si chiude i buffer spariscono e l'onload no-op.
+                        const img = new Image();
+                        const faceKey = fk;
+                        img.onload = () => {
+                            if (!_art.faceBuffers || !_art.faceBuffers[faceKey]) return;
+                            const b = _art.faceBuffers[faceKey];
+                            const off = document.createElement('canvas');
+                            off.width = size; off.height = size;
+                            const octx = off.getContext('2d');
+                            octx.imageSmoothingEnabled = false;
+                            octx.clearRect(0, 0, size, size);
+                            octx.drawImage(img, 0, 0, size, size);
+                            try {
+                                const t = textureFromCanvasCtx(off, octx);
+                                b.tex = {
+                                    data: t.data, w: t.w, h: t.h,
+                                    color: t.color, alpha: !!t.alpha
+                                };
+                                b.snap = {
+                                    w: size, h: size,
+                                    data: octx.getImageData(0, 0, size, size)
+                                };
+                                b.undo = [];
+                                b.redo = [];
+                            } catch (e) { /* lascia com'e' */ }
+                            refreshFormPreview();
+                        };
+                        img.src = buf.tex.data;
+                    });
+                    refreshFormPreview();
+                }
             }
 
             // Riversa una texture esistente nella tela (modifica di un materiale). La
             // dimensione della tela diventa quella della texture, e il select si
             // allinea al preset piu' vicino: mostrare 16 mentre la tela e' 128
             // farebbe credere di star disegnando su una griglia grossa.
+            //
+            // `_artLoadGen` scarta i load superati: in faceMode six lo switch fra
+            // facce lancia un Image() per ognuna, e senza il contatore un load
+            // lento della faccia A finirebbe DOPO aver gia' mostrato B, coprendo
+            // il disegno sbagliato (e un pennello nel frattempo dipingerebbe
+            // sopra pixel che stanno per sparire). Stesso contatore in
+            // closeMaterialForm / switchActiveFace.
+            let _artLoadGen = 0;
             function loadArtFromTexture(tex) {
                 if (!tex || !tex.data) return;
+                const gen = ++_artLoadGen;
+                // Faccia attesa al momento del load: se l'utente switcha prima
+                // dell'onload, gen !== _artLoadGen (bump in switch) basta a
+                // scartare. Qui si memorizza anche per aggiornare lo snap della
+                // faccia giusta se nel frattempo faceMode e' six.
+                const faceAtStart = _formState.activeFace;
                 const img = new Image();
                 img.onload = () => {
+                    if (gen !== _artLoadGen) return;
                     const w = img.width || tex.w || 16;
                     const h = img.height || tex.h || 16;
                     const ctx = ensureArtCtx(w, h);
@@ -1385,9 +1955,34 @@
                     updateArtHistoryBtns();
                     syncSizeSelectTo(Math.max(w, h));
                     layoutArtStage();
-                    // NON si richiama commitArtToTexture: la texture e' gia' quella,
-                    // e ricalcolarla la ricomprimerebbe in PNG senza guadagno.
+                    // pendingTexture allineato alla texture caricata: senza, un
+                    // setFaceMode('six') subito dopo (commit non e' chiamato qui
+                    // di proposito: ricomprimerebbe il PNG) seminerebbe da un
+                    // pending stantio. Si riusa tex.data, non toDataURL.
+                    _formState.pendingTexture = {
+                        data: tex.data, w: w, h: h,
+                        color: tex.color, alpha: !!tex.alpha
+                    };
+                    // In six: congela lo snap della faccia appena caricata, cosi'
+                    // i prossimi switch usano artRestore sincrono invece di un
+                    // altro Image.onload (e la race sparisce al secondo passaggio).
+                    if (_formState.faceMode === 'six'
+                        && faceAtStart === _formState.activeFace) {
+                        ensureFaceBuffers();
+                        const buf = _art.faceBuffers[faceAtStart] || {
+                            undo: [], redo: [], tex: null, snap: null
+                        };
+                        buf.tex = {
+                            data: tex.data, w: w, h: h,
+                            color: tex.color, alpha: !!tex.alpha
+                        };
+                        buf.snap = artSnapshot();
+                        buf.undo = [];
+                        buf.redo = [];
+                        _art.faceBuffers[faceAtStart] = buf;
+                    }
                     refreshSourceUI();
+                    refreshFormPreview();
                 };
                 img.onerror = () => { /* texture illeggibile: la tela resta com'e' */ };
                 img.src = tex.data;
@@ -1434,24 +2029,46 @@
             // un texel su un numero non intero di pixel dello schermo, e con
             // image-rendering: pixelated si vedrebbero colonne di larghezza diversa.
             // Nella finestra grande lo zoom lo sceglie l'utente.
+            //
+            // C'e' un secondo livello di snap: il cell CSS deve coprire un numero
+            // INTERO di device pixel. Con dpr frazionario (zoom del browser a 90%,
+            // 110%...) un cell di 48 CSS px occupa 43.2 device px e le colonne
+            // alternano 43/44 -- la griglia "buggata" del report. artCellCssSize
+            // snappa il cell a interi device px e layoutArtStage lo usa ovunque.
             function artInlineZoom(w, h) {
                 return Math.max(1, Math.floor(ART_INLINE_MAX / Math.max(w, h)));
+            }
+
+            // Cell size in CSS px, snappato a interi device pixel. `z` e' lo zoom
+            // logico (passi ART_ZOOMS o artInlineZoom). Ritorna lo stesso valore
+            // per stage, griglia e cursore: se divergessero le celle non
+            // coinciderebbero piu' coi texel.
+            function artCellCssSize(z) {
+                const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+                const zDev = Math.max(1, Math.round(z * dpr));
+                return zDev / dpr;
             }
 
             function layoutArtStage() {
                 const stage = document.getElementById('materialArtStage');
                 if (!stage || !_art.canvas) return;
                 const w = _art.canvas.width, h = _art.canvas.height;
-                const z = artEditorIsOpen() ? _art.zoom : artInlineZoom(w, h);
-                stage.style.width = (w * z) + 'px';
-                stage.style.height = (h * z) + 'px';
+                const zLogic = artEditorIsOpen() ? _art.zoom : artInlineZoom(w, h);
+                const cell = artCellCssSize(zLogic);
+                stage.style.width = (w * cell) + 'px';
+                stage.style.height = (h * cell) + 'px';
                 const grid = document.getElementById('materialArtGrid');
                 if (grid) {
-                    grid.style.setProperty('--cell', z + 'px');
+                    grid.style.setProperty('--cell', cell + 'px');
+                    // 1 device pixel di spessore, espresso in CSS: a dpr 2 la linea
+                    // resta di 1 px fisico invece di 2 CSS (che a retina sembrerebbe
+                    // grossa il doppio).
+                    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+                    grid.style.setProperty('--line-w', (1 / dpr) + 'px');
                     // Sotto i 5 px per cella le linee sarebbero fitte quanto i pixel e
                     // la tela diventerebbe un reticolo grigio in cui non si vede piu'
-                    // il disegno.
-                    grid.classList.toggle('hidden', z < 5);
+                    // il disegno. Il toggle utente (_art.gridOn) ha la precedenza.
+                    grid.classList.toggle('hidden', !_art.gridOn || cell < 5);
                 }
                 // Il riquadro dell'anteprima e' misurato in px: cambiando zoom va
                 // rimesso in scala, o resterebbe grande quanto una cella di prima.
@@ -1473,10 +2090,17 @@
                     // "Si puo' spostare" = la tela non ci sta tutta. Serve al cursore
                     // a manina: mostrarlo quando non c'e' niente da spostare
                     // prometterebbe un'azione che non fa nulla.
-                    const over = _art.canvas.width * _art.zoom > vp.clientWidth
-                        || _art.canvas.height * _art.zoom > vp.clientHeight;
+                    // Si usa la cella CSS snappata (non _art.zoom grezzo): e' la
+                    // dimensione REALE dello stage, quella che decide se scorre.
+                    const cell = artCellCssSize(_art.zoom);
+                    const over = _art.canvas.width * cell > vp.clientWidth
+                        || _art.canvas.height * cell > vp.clientHeight;
                     vp.classList.toggle('pannable', over || _art.spaceHeld);
                 }
+                // Allinea il checkbox della griglia allo stato (il nodo viaggia
+                // fra pannello e finestra grande, ma e' sempre lo stesso).
+                const gTog = document.getElementById('materialArtGridToggle');
+                if (gTog) gTog.checked = !!_art.gridOn;
             }
 
             // Imposta lo zoom tenendo fermo un punto: senza ancora, ingrandire porta
@@ -1492,10 +2116,13 @@
                 const vpBox = vp.getBoundingClientRect();
                 const ax = anchor ? anchor.clientX : vpBox.left + vp.clientWidth / 2;
                 const ay = anchor ? anchor.clientY : vpBox.top + vp.clientHeight / 2;
-                // Il texel sotto l'ancora, PRIMA di cambiare zoom.
+                // Il texel sotto l'ancora, PRIMA di cambiare zoom. Si usa la
+                // cella CSS snappata (non _art.zoom grezzo): e' la dimensione
+                // reale dello stage, e con dpr frazionario le due divergono.
+                const cellBefore = artCellCssSize(_art.zoom);
                 const stBox = stage.getBoundingClientRect();
-                const tx = (ax - stBox.left) / _art.zoom;
-                const ty = (ay - stBox.top) / _art.zoom;
+                const tx = (ax - stBox.left) / cellBefore;
+                const ty = (ay - stBox.top) / cellBefore;
 
                 _art.zoom = next;
                 layoutArtStage();
@@ -1503,11 +2130,12 @@
                 // Rimettere quel texel sotto l'ancora. Lo stage e' centrato da
                 // `margin: auto` finche' ci sta, quindi l'offset dentro il contenuto
                 // scorrevole non e' zero e va rimesso nel conto.
-                const w = _art.canvas.width * next, h = _art.canvas.height * next;
+                const cellAfter = artCellCssSize(next);
+                const w = _art.canvas.width * cellAfter, h = _art.canvas.height * cellAfter;
                 const offX = Math.max(0, (vp.clientWidth - w) / 2);
                 const offY = Math.max(0, (vp.clientHeight - h) / 2);
-                vp.scrollLeft = offX + tx * next - (ax - vpBox.left);
-                vp.scrollTop = offY + ty * next - (ay - vpBox.top);
+                vp.scrollLeft = offX + tx * cellAfter - (ax - vpBox.left);
+                vp.scrollTop = offY + ty * cellAfter - (ay - vpBox.top);
                 updateZoomUI();
             }
 
@@ -1684,17 +2312,21 @@
                 _art.tool = ['pencil', 'eraser', 'fill', 'pick'].indexOf(tool) >= 0 ? tool : 'pencil';
                 const row = document.getElementById('materialArtTools');
                 if (row && row.querySelectorAll) {
-                    row.querySelectorAll('.pixel-tool-btn').forEach(b => {
+                    // Solo i bottoni strumento (data-pixeltool): lo switcher delle
+                    // facce riusa `.pixel-tool-btn` con data-face, e senza questo
+                    // filtro un cambio matita/gomma spegneva l'highlight della
+                    // faccia attiva fino al prossimo refreshSourceUI.
+                    row.querySelectorAll('.pixel-tool-btn[data-pixeltool]').forEach(b => {
                         b.classList.toggle('active', b.dataset.pixeltool === _art.tool);
                     });
                 }
                 updateArtCursorEl();
             }
 
-            // Un solo colore per il pennello E per la "Tinta unita": i due picker
-            // sono due facce della stessa cosa. Sceglierlo in un posto lo porta
-            // nell'altro, cosi' chi resta sulla tinta piatta non deve passare dal
-            // disegno per cambiarla, e chi disegna non deve tornare indietro.
+            // Colore del PENNELLO. Non tocca la tinta unita / lo sfondo della tela:
+            // sono due valori distinti (il pennello dipinge, lo sfondo e' il
+            // colore del materiale flat). Prima erano sincronizzati, e
+            // scegliere un colore da disegnare cambiava la tinta del materiale.
             //
             // `remember` lo mette fra le tinte recenti (usato dopo una pennellata
             // o un prelievo, non a ogni movimento del picker: altrimenti la
@@ -1706,13 +2338,6 @@
                 if (picker) picker.value = _art.pen;
                 const label = document.getElementById('materialPenHex');
                 if (label) label.textContent = _art.pen;
-                // Il picker della "Tinta unita" e' lo stesso colore: si aggiorna
-                // sempre, anche se la sezione e' nascosta, cosi' al rientro non
-                // mostra un valore stantio.
-                const solid = document.getElementById('materialSolidColor');
-                if (solid) solid.value = _art.pen;
-                const solidHex = document.getElementById('materialSolidHex');
-                if (solidHex) solidHex.textContent = _art.pen;
                 if (remember) {
                     // La tinta usata va in testa e le doppie si tolgono: una tavolozza
                     // che ripete lo stesso colore sei volte non aiuta a ritrovarlo.
@@ -1720,9 +2345,6 @@
                         .slice(0, ART_RECENT_MAX);
                 }
                 renderPenSwatches();
-                // Anche l'anteprima live (sfera/cubo) deve seguire: in "Tinta unita"
-                // il colore del materiale e' proprio questo.
-                if (materialFormIsOpen() && _formState.source === 'flat') refreshFormPreview();
                 updateArtCursorEl();
             }
 
@@ -1759,9 +2381,12 @@
                     cur.classList.remove('visible');
                     return;
                 }
-                const z = artEditorIsOpen()
+                // Stessa cella snappata di layoutArtStage: se divergesse, il
+                // riquadro non coprirebbe piu' il texel sotto il puntatore.
+                const zLogic = artEditorIsOpen()
                     ? _art.zoom
                     : artInlineZoom(_art.canvas.width, _art.canvas.height);
+                const z = artCellCssSize(zLogic);
                 cur.classList.add('visible');
                 cur.style.left = (_artHoverCell.x * z) + 'px';
                 cur.style.top = (_artHoverCell.y * z) + 'px';
@@ -1899,12 +2524,193 @@
             // La tela diventa la texture del form. Si chiama alla FINE di un tratto,
             // non a ogni cella: toDataURL comprime un PNG, che a ogni movimento del
             // puntatore bloccherebbe il thread.
+            //
+            // In faceMode 'six' aggiorna anche il buffer della faccia attiva: e'
+            // l'unica sorgente da cui formDefinition legge le facce non attive.
             function commitArtToTexture() {
                 const cv = _art.canvas, ctx = _art.ctx;
                 if (!cv || !ctx) return;
+                let tex;
                 try {
-                    _formState.pendingTexture = textureFromCanvasCtx(cv, ctx);
+                    tex = textureFromCanvasCtx(cv, ctx);
                 } catch (e) { return; }
+                _formState.pendingTexture = tex;
+                if (_formState.faceMode === 'six') {
+                    ensureFaceBuffers();
+                    const buf = _art.faceBuffers[_formState.activeFace] || {
+                        undo: [], redo: [], tex: null, snap: null
+                    };
+                    buf.tex = {
+                        data: tex.data, w: tex.w, h: tex.h,
+                        color: tex.color, alpha: !!tex.alpha
+                    };
+                    _art.faceBuffers[_formState.activeFace] = buf;
+                }
+                refreshSourceUI();
+                refreshFormPreview();
+            }
+
+            // --- facce del cubo (single / six) --------------------------------------
+            // La tela visibile e' SEMPRE una sola: allo switch si salva lo snapshot
+            // (ImageData + texture) della faccia uscente e si ripristina quella
+            // entrante. Cosi' non esistono 6 canvas da tenere allineati, che e' il
+            // posto dove questi editor divergono.
+            function ensureFaceBuffers() {
+                if (_art.faceBuffers) return;
+                _art.faceBuffers = {};
+                MATERIAL_FACE_KEYS.forEach(fk => {
+                    _art.faceBuffers[fk] = { undo: [], redo: [], tex: null, snap: null };
+                });
+            }
+
+            // Salva lo stato corrente della tela nel buffer della faccia attiva
+            // (ImageData per undo/redo per-faccia + texture per formDefinition).
+            function stashActiveFace() {
+                if (_formState.faceMode !== 'six') return;
+                ensureFaceBuffers();
+                const fk = _formState.activeFace;
+                const buf = _art.faceBuffers[fk] || {
+                    undo: [], redo: [], tex: null, snap: null
+                };
+                buf.snap = artSnapshot();
+                buf.undo = _art.undo.slice();
+                buf.redo = _art.redo.slice();
+                if (_art.canvas && _art.ctx) {
+                    try {
+                        const tex = textureFromCanvasCtx(_art.canvas, _art.ctx);
+                        buf.tex = {
+                            data: tex.data, w: tex.w, h: tex.h,
+                            color: tex.color, alpha: !!tex.alpha
+                        };
+                    } catch (e) { /* lascia tex com'e' */ }
+                }
+                _art.faceBuffers[fk] = buf;
+            }
+
+            function switchActiveFace(faceKey) {
+                if (MATERIAL_FACE_KEYS.indexOf(faceKey) < 0) return;
+                if (faceKey === _formState.activeFace && _formState.faceMode === 'six') {
+                    refreshSourceUI();
+                    return;
+                }
+                // Prima di lasciare la faccia attuale se ne salva lo stato, o
+                // tornandoci si ritroverebbe il disegno di un'altra.
+                if (_formState.faceMode === 'six') stashActiveFace();
+                _formState.activeFace = faceKey;
+                _formState.faceMode = 'six';
+                ensureFaceBuffers();
+                // Invalida qualunque loadArtFromTexture ancora in volo: se la
+                // faccia entrante ha uno snap (sync) o e' vuota, un onload
+                // tardivo della faccia uscente riscriverebbe la tela sbagliata.
+                _artLoadGen++;
+                const buf = _art.faceBuffers[faceKey];
+                if (buf && buf.snap) {
+                    // Ripristina ImageData + pile undo/redo di quella faccia.
+                    // artRestore chiama commitArtToTexture, che aggiorna
+                    // pendingTexture e faceBuffers[activeFace] dalla tela.
+                    artRestore(buf.snap);
+                    _art.undo = (buf.undo || []).slice();
+                    _art.redo = (buf.redo || []).slice();
+                    updateArtHistoryBtns();
+                } else if (buf && buf.tex && buf.tex.data) {
+                    // Prima visita di una faccia caricata da un materiale salvato:
+                    // c'e' la texture ma non lo snapshot (lazy). loadArtFromTexture
+                    // e' async: pendingTexture va impostato SUBITO, altrimenti
+                    // l'anteprima e formDefinition resterebbero sulla faccia
+                    // precedente finche' l'immagine non arriva.
+                    _formState.pendingTexture = {
+                        data: buf.tex.data, w: buf.tex.w, h: buf.tex.h,
+                        color: buf.tex.color, alpha: !!buf.tex.alpha
+                    };
+                    loadArtFromTexture(buf.tex);
+                    _art.undo = [];
+                    _art.redo = [];
+                    updateArtHistoryBtns();
+                } else {
+                    // Faccia ancora vuota: tela nuova con lo sfondo corrente.
+                    // NON si chiama newArtCanvas(..., true) perche' quello azzera
+                    // TUTTE le facce; qui serve solo la attiva.
+                    const size = artSelectedSize();
+                    const ctx = ensureArtCtx(size, size);
+                    if (ctx) {
+                        ctx.clearRect(0, 0, size, size);
+                        const bg = artBackgroundColor();
+                        if (bg) {
+                            ctx.fillStyle = bg;
+                            ctx.fillRect(0, 0, size, size);
+                        }
+                        _art.undo = [];
+                        _art.redo = [];
+                        updateArtHistoryBtns();
+                        layoutArtStage();
+                        commitArtToTexture();
+                    }
+                }
+                // pendingTexture = faccia attiva (per UV section e formDefinition).
+                // Si rilegge il buffer DOPO restore/commit: il `buf` preso sopra
+                // puo' avere un tex stantio (o null su faccia vuota), mentre
+                // commitArtToTexture ha appena scritto quello fresco.
+                const fresh = _art.faceBuffers && _art.faceBuffers[faceKey];
+                if (fresh && fresh.tex) _formState.pendingTexture = fresh.tex;
+                refreshSourceUI();
+                refreshFormPreview();
+            }
+
+            function setFaceMode(mode) {
+                const next = (mode === 'six') ? 'six' : 'single';
+                if (next === _formState.faceMode) {
+                    refreshSourceUI();
+                    return;
+                }
+                if (next === 'six') {
+                    // Da single a six: la texture corrente diventa il punto di
+                    // partenza di TUTTE le facce (l'utente le differenzia dopo).
+                    // Senza, le 5 facce non attive resterebbero vuote e il cubo
+                    // apparirebbe a pezzi.
+                    //
+                    // stashActiveFace e' un no-op finche' faceMode non e' 'six',
+                    // quindi si forza un commit della tela ORA: altrimenti un
+                    // disegno ancora solo sul canvas (es. loadArtFromTexture non
+                    // richiama commit) non entrerebbe nel seed e le 5 facce
+                    // copiate resterebbero vuote / sulla texture stantia.
+                    // Poi si alza faceMode e si fa stash vero (snap+undo), cosi'
+                    // la faccia attiva ha anche lo snapshot sincrono, non solo tex.
+                    if (_art.canvas && _art.ctx) commitArtToTexture();
+                    ensureFaceBuffers();
+                    const seed = _formState.pendingTexture
+                        || (_art.faceBuffers[_formState.activeFace]
+                            && _art.faceBuffers[_formState.activeFace].tex)
+                        || null;
+                    _formState.faceMode = 'six';
+                    if (_art.canvas && _art.ctx) stashActiveFace();
+                    if (seed) {
+                        MATERIAL_FACE_KEYS.forEach(fk => {
+                            if (!_art.faceBuffers[fk].tex) {
+                                _art.faceBuffers[fk].tex = {
+                                    data: seed.data, w: seed.w, h: seed.h,
+                                    color: seed.color, alpha: !!seed.alpha
+                                };
+                            }
+                        });
+                        _formState.pendingTexture = {
+                            data: seed.data, w: seed.w, h: seed.h,
+                            color: seed.color, alpha: !!seed.alpha
+                        };
+                    }
+                    // Se non c'e' ancora una tela: con un seed si carica quello
+                    // (newArtCanvas in six mode azzera TUTTE le facce, e qui
+                    // le abbiamo appena seminate). Senza seed si parte bianchi.
+                    if (!_art.canvas) {
+                        if (seed) loadArtFromTexture(seed);
+                        else newArtCanvas(artSelectedSize(), artBackgroundColor());
+                    }
+                } else {
+                    // Da six a single: la faccia attiva diventa LA texture.
+                    stashActiveFace();
+                    _formState.faceMode = 'single';
+                    // I buffer restano in memoria finche' il form e' aperto: tornare
+                    // a six non deve perdere i disegni. Si liberano in closeMaterialForm.
+                }
                 refreshSourceUI();
                 refreshFormPreview();
             }
@@ -1915,6 +2721,10 @@
             // ramo addMaterial vale solo per la creazione (o per un id svanito sotto i
             // piedi), non e' una via che una modifica normale possa prendere.
             function saveMaterialFromForm() {
+                // In faceMode six la faccia attiva potrebbe non essere ancora
+                // finita nei buffer (ultimo tratto gia' in pendingTexture, ma
+                // snap/undo no): si fa stash prima di leggere formDefinition.
+                if (_formState.faceMode === 'six') stashActiveFace();
                 const def = formDefinition();
                 if (!def.name) { alert(t('materials.nameRequired')); return; }
                 let mat;
@@ -1943,6 +2753,10 @@
             // Si salva una COPIA normalizzata: il materiale del progetto puo' essere
             // modificato o eliminato, la voce in libreria no.
             function saveFormToLibrary() {
+                // Stesso stash di saveMaterialFromForm: senza, la faccia attiva
+                // resterebbe solo in pendingTexture e la copia in libreria
+                // perderebbe l'ultimo tratto.
+                if (_formState.faceMode === 'six') stashActiveFace();
                 const def = formDefinition();
                 if (!def.name) { alert(t('materials.nameRequired')); return; }
                 const lib = loadMaterialLibrary();
@@ -1994,7 +2808,8 @@
                     });
                 }
 
-                // Forma dell'anteprima.
+                // Forma dell'anteprima + drag/hover (una volta sola).
+                initPreviewInteraction();
                 const shapeSeg = document.getElementById('materialPreviewShape');
                 if (shapeSeg) {
                     shapeSeg.addEventListener('click', ev => {
@@ -2143,7 +2958,8 @@
 
                 on('materialCanvasNewBtn', 'click', () => {
                     if (_art.canvas && !confirm(t('matcreate.confirmNewCanvas'))) return;
-                    newArtCanvas(artSelectedSize(), artBackgroundColor());
+                    // true = azzera anche le altre 5 facce (vedi newArtCanvas).
+                    newArtCanvas(artSelectedSize(), artBackgroundColor(), true);
                 });
 
                 on('materialArtUndoBtn', 'click', artUndo);
@@ -2168,15 +2984,38 @@
                 }
 
                 on('materialPenColor', 'input', ev => setPenColor(ev.target.value, false));
-                // Il picker della "Tinta unita" scrive lo STESSO colore del pennello:
-                // e' un solo valore mostrato in due posti, non due impostazioni che
-                // possono divergere.
-                on('materialSolidColor', 'input', ev => setPenColor(ev.target.value, false));
                 // A rilascio avvenuto la tinta entra fra le recenti: durante il
                 // trascinamento del picker si passa per decine di colori intermedi
                 // che non ha senso ricordare.
                 on('materialPenColor', 'change', ev => setPenColor(ev.target.value, true));
-                on('materialSolidColor', 'change', ev => setPenColor(ev.target.value, true));
+                // Tinta unita = sfondo della tela, NON il pennello.
+                on('materialSolidColor', 'input', ev => setSolidColor(ev.target.value));
+                on('materialSolidColor', 'change', ev => setSolidColor(ev.target.value));
+                on('materialCanvasBg', 'input', ev => setSolidColor(ev.target.value));
+                on('materialCanvasBg', 'change', ev => setSolidColor(ev.target.value));
+
+                // Griglia on/off: il checkbox vive in #materialArtTools, che viaggia
+                // nella finestra grande. Sotto i 5 px/cella resta comunque spenta.
+                on('materialArtGridToggle', 'change', ev => {
+                    _art.gridOn = !!(ev.target && ev.target.checked);
+                    layoutArtStage();
+                });
+
+                // Facce del cubo: single vs six, e switcher per-faccia.
+                const faceSeg = document.getElementById('materialFaceModeSeg');
+                if (faceSeg) {
+                    faceSeg.addEventListener('click', ev => {
+                        const b = ev.target.closest ? ev.target.closest('.seg-btn') : null;
+                        if (b && b.dataset.facemode) setFaceMode(b.dataset.facemode);
+                    });
+                }
+                const faceSwitch = document.getElementById('materialFaceSwitcher');
+                if (faceSwitch) {
+                    faceSwitch.addEventListener('click', ev => {
+                        const b = ev.target.closest ? ev.target.closest('[data-face]') : null;
+                        if (b && b.dataset.face) switchActiveFace(b.dataset.face);
+                    });
+                }
 
                 on('materialFillTolerance', 'input', () => {
                     const el = document.getElementById('materialFillToleranceValue');
@@ -2349,13 +3188,28 @@
                     updateZoomUI();
                 }, true);
 
-                // Ridimensionando la finestra del browser cambia quanto ci sta nel
-                // viewport, quindi il cursore "si puo' spostare" va rideciso.
+                // Ridimensionando la finestra del browser (o cambiando lo zoom del
+                // browser, che sposta devicePixelRatio) va risnappata la cella
+                // della griglia: senza, a dpr frazionario le colonne tornano
+                // irregolari. Si richiama layoutArtStage, non solo updateZoomUI.
                 window.addEventListener('resize', () => {
-                    if (artEditorIsOpen()) updateZoomUI();
+                    if (_art.canvas) layoutArtStage();
+                    else if (artEditorIsOpen()) updateZoomUI();
                 });
 
                 setArtTool('pencil');
                 setPenColor(_art.pen, false);
+                // Allinea etichetta hex / picker tinta unita allo sfondo della
+                // tela (o al default del solid picker) una sola volta all'avvio.
+                (function syncSolidColorOnce() {
+                    const bg = document.getElementById('materialCanvasBg');
+                    const solid = document.getElementById('materialSolidColor');
+                    const hex = (bg && MATERIAL_HEX_RE.test(bg.value || ''))
+                        ? bg.value
+                        : (solid && MATERIAL_HEX_RE.test(solid.value || ''))
+                            ? solid.value
+                            : MATERIAL_FALLBACK_COLOR;
+                    setSolidColor(hex);
+                })();
                 renderMaterialsPanel();
             })();

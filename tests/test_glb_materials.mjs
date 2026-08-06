@@ -380,6 +380,50 @@ ok(rmats.every(m => m.userData.materialId === null || typeof m.userData.material
 ok(rgeo.groups.every(g => g.count > 0),
     'riggato: nessun gruppo con count 0 (una primitiva senza indices e\' veleno, vedi 15-rig.js)');
 
+// ===== B2. faceMode six: 6 gruppi per token in export riggato ==============
+// Stesso schema dello statico: senza split per direzione le 6 texture non
+// si possono assegnare (un materiale glTF ha una sola map). Solo forExport:
+// l'anteprima resta un materiale per token.
+console.log('\n== riggato multi-face (faceMode six): 6 gruppi per token ==');
+const FACE_KEYS = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+const TEX_BY_FACE = {};
+FACE_KEYS.forEach((fk, i) => {
+    TEX_BY_FACE[fk] = { data: TEX_PNG + String(i), w: 8, h: 8 };
+});
+const multiMat = {
+    id: 'm6', name: 'SeiFacce', color: '#AABBCC', roughness: 0.5, metalness: 0.2,
+    emissive: 0, faceMode: 'six', faces: { ...TEX_BY_FACE },
+    // texture "unica" di ricaduta: non deve finire su tutte le facce al posto
+    // di quelle per-direzione.
+    texture: { data: TEX_PNG + 'FALLBACK', w: 8, h: 8 },
+};
+const multiVox = body().map(v => ({ ...v, material: 'm6', color: '#AABBCC' }));
+global.currentModelData = {
+    metadata: { materials: [multiMat] },
+    voxels: multiVox,
+};
+const multiOut = rigApi.buildHumanoidSkeleton(multiVox);
+rigApi.setRig(multiOut);
+const multiAssign = rigApi.bindVoxels(multiVox, multiOut.bones);
+const multiSkin = rigApi.bindSkin ? rigApi.bindSkin(multiVox, multiOut.bones, multiAssign) : null;
+const multiExp = rigApi.buildSkinnedMesh(multiVox, multiOut.bones, multiAssign, multiSkin, { forExport: true });
+const multiMats = Array.isArray(multiExp.mesh.material) ? multiExp.mesh.material : [multiExp.mesh.material];
+const multiGeo = multiExp.mesh.geometry;
+const faceTags = multiMats.map(m => m.userData.face).filter(Boolean).sort();
+ok(multiMats.length === 6,
+    `riggato multi: 6 materiali (uno per faccia), non 1 (${multiMats.length})`);
+ok(FACE_KEYS.every(fk => faceTags.includes(fk)),
+    `riggato multi: userData.face copre px..nz (${faceTags.join(',')})`);
+ok(multiMats.every(m => m.userData.token === '@m6'),
+    'riggato multi: tutti i gruppi condividono il token @m6');
+ok(multiGeo.groups.length === 6 && multiGeo.groups.every(g => g.count > 0),
+    `riggato multi: 6 gruppi non vuoti (${multiGeo.groups.length})`);
+// Anteprima: multi NON deve scattare (forExport false) — un solo materiale.
+const multiPrev = rigApi.buildSkinnedMesh(multiVox, multiOut.bones, multiAssign, multiSkin, {});
+const prevMats = Array.isArray(multiPrev.mesh.material) ? multiPrev.mesh.material : [multiPrev.mesh.material];
+ok(prevMats.length === 1 && !prevMats[0].userData.face,
+    `riggato multi anteprima: un solo materiale senza face (${prevMats.length}, face=${prevMats[0].userData.face})`);
+
 // ===== C. exportGLB, il cablaggio vero ==================================
 console.log('\n== exportGLB riggato: COLOR_0 via, texture dentro, FrontSide ==');
 global.currentModelData = { metadata: { name: 'Prova', materials: MATERIALS.map(m => ({ ...m })) }, voxels: rvox };

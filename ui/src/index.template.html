@@ -706,6 +706,45 @@
             color: var(--text-secondary);
         }
 
+        /* Righe con un cursore. `.control-row` da sola e' flex + space-between:
+           l'etichetta e' larga quanto il suo testo, quindi ogni riga fa partire
+           il cursore da una x DIVERSA — e le etichette cambiano lunghezza a ogni
+           lingua ("Ruvidita" vs "Scorrimento U" vs "Desplazamiento U"). Con una
+           griglia a tre colonne fisse le righe si allineano fra loro comunque:
+           stessa colonna dell'etichetta, stesso inizio e stessa larghezza del
+           cursore, stessa colonna del valore.
+           La larghezza dell'etichetta e' una variabile e non un numero sparso:
+           le righe stanno in contenitori diversi (la sezione UV e' un blocco a
+           parte) e il CSS non sa far condividere un `max-content` fra griglie
+           separate, quindi l'unico modo di tenerle allineate e' che leggano lo
+           stesso valore. Un'etichetta piu' lunga va a capo invece di sfondare la
+           colonna: la riga cresce in altezza, ma l'allineamento regge. */
+        .control-row.slider-row {
+            display: grid;
+            grid-template-columns: var(--slider-label-w, 96px) 1fr var(--slider-value-w, 34px);
+            gap: 8px;
+            align-items: center;
+        }
+
+        .control-row.slider-row > label {
+            min-width: 0;
+            line-height: 1.2;
+        }
+
+        /* input[type=range] ha `width: 100px` fisso: qui deve invece riempire la
+           colonna, o le righe avrebbero sì lo stesso inizio ma non la stessa fine.
+           min-width: 0 perche' dentro una griglia la larghezza minima di default
+           e' quella intrinseca e sforerebbe la colonna su pannelli stretti. */
+        .control-row.slider-row > input[type="range"] {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .control-row.slider-row > .slider-value {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
         /* Custom Switch */
         .switch {
             position: relative;
@@ -1043,9 +1082,12 @@
             opacity: .45;
         }
 
-        /* Anteprima live: una sfera renderizzata con il materiale in costruzione.
+        /* Anteprima live: un cubo/sfera con il materiale in costruzione.
            Il canvas ha un renderer THREE dedicato (vedi 36-materials.js), perche'
-           quello della scena e' legato al viewport principale. */
+           quello della scena e' legato al viewport principale.
+           Hover: si ingrandisce con transizione lenta; il leave e' ritardato
+           in JS cosi' il bordo non oscilla grande/piccola. Drag sul canvas:
+           ruota a mano; al rilascio riprende la rotazione automatica. */
         .material-preview-wrap {
             display: flex;
             gap: 10px;
@@ -1054,6 +1096,10 @@
             border-radius: var(--radius-md);
             background: var(--hover-bg);
             border: 1px solid var(--glass-border);
+            position: relative;
+            /* ease-out lungo: l'ingrandimento non "scatta" e il leave delay
+               (JS) ha tempo di cancellarsi se il cursore rientra dal bordo. */
+            transition: box-shadow .3s ease, border-color .3s ease, background .3s ease;
         }
 
         #materialPreviewCanvas {
@@ -1063,13 +1109,67 @@
             border-radius: var(--radius-sm);
             background: #1a1a1f;
             display: block;
+            cursor: grab;
+            touch-action: none;
+            transition: width .3s cubic-bezier(.22, .61, .36, 1),
+                        height .3s cubic-bezier(.22, .61, .36, 1),
+                        flex-basis .3s cubic-bezier(.22, .61, .36, 1);
+        }
+
+        #materialPreviewCanvas:active {
+            cursor: grabbing;
+        }
+
+        /* Ingrandita: z-index sopra il form, ombra soft. Il canvas cresce;
+           la colonna info tiene la larghezza (min-width) anche senza testi,
+           cosi' il wrap non SI RESTRINGE sotto al cursore — quella era la
+           causa del thrash grande/piccola sul bordo destro. */
+        .material-preview-wrap.is-enlarged {
+            z-index: 20;
+            border-color: var(--accent-primary, #6c8cff);
+            box-shadow: 0 10px 32px rgba(0, 0, 0, .4);
+        }
+
+        .material-preview-wrap.is-enlarged #materialPreviewCanvas {
+            width: 176px;
+            height: 176px;
+            flex-basis: 176px;
+        }
+
+        /* Ingrandita: solo canvas + bottoni (Cubo/Sfera). I testi restano
+           nel flusso a altezza 0 / opacity 0 (non display:none): toglierli
+           dal layout faceva collassare l'info e il bordo saltava via da
+           sotto al mouse. */
+        .material-preview-wrap.is-enlarged .material-preview-info > :not(.segmented) {
+            opacity: 0;
+            max-height: 0;
+            margin: 0 !important;
+            padding: 0;
+            overflow: hidden;
+            pointer-events: none;
+            transition: opacity .2s ease, max-height .25s ease;
         }
 
         .material-preview-info {
             font-size: 10px;
             color: var(--text-secondary);
             line-height: 1.5;
-            min-width: 0;
+            /* Larghezza minima stabile: nascondere i testi non deve
+               stringere il wrap (bordo destro = zona thrash tipica). */
+            min-width: 140px;
+            flex: 1;
+        }
+
+        .material-preview-info > :not(.segmented) {
+            max-height: 6em;
+            opacity: 1;
+            transition: opacity .2s ease, max-height .25s ease;
+        }
+
+        .material-preview-drag-hint {
+            margin-top: 4px;
+            opacity: .75;
+            font-size: 9px;
         }
 
         /* Ritaglio della texture: il canvas mostra l'immagine intera e sopra ci
@@ -1190,18 +1290,21 @@
 
         /* La griglia e' un GRADIENTE, non un canvas: resta netta a ogni zoom senza
            ridisegnarsi e senza allocare un buffer che a 64x sarebbe enorme.
-           `--cell` (il passo in px) lo scrive layoutArtStage; il colore cambia col
-           tema perche' su una texture chiara le linee bianche sparirebbero.
+           `--cell` (il passo in px CSS) e `--line-w` (spessore di 1 device pixel)
+           li scrive layoutArtStage. Il cell e' snappato a interi device pixel:
+           con un dpr frazionario (zoom del browser) un cell "16 CSS" occuperebbe
+           14.4 device px e le colonne alternerebbero 14/15, un reticolo irregolare.
            pointer-events: none e' obbligatorio: sta SOPRA la tela. */
         .pixel-grid {
             position: absolute;
             inset: 0;
             pointer-events: none;
             --cell: 16px;
+            --line-w: 1px;
             --line: rgba(255, 255, 255, 0.16);
             background-image:
-                repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--cell)),
-                repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px var(--cell));
+                repeating-linear-gradient(to right, var(--line) 0 var(--line-w), transparent var(--line-w) var(--cell)),
+                repeating-linear-gradient(to bottom, var(--line) 0 var(--line-w), transparent var(--line-w) var(--cell));
         }
 
         :root[data-theme="light"] .pixel-grid {
@@ -2983,20 +3086,20 @@
                                 <button class="seg-btn" data-source="image" data-i18n="matcreate.srcImage">Da immagine</button>
                             </div>
 
-                            <!-- Sorgente "Tinta unita": il colore del materiale.
-                                 E' LO STESSO colore del pennello (vedi setPenColor):
-                                 sceglierlo qui lo porta nella tela e viceversa, cosi'
-                                 chi vuole restare sulla tinta piatta non deve passare
-                                 dal disegno per cambiarla. -->
+                            <!-- Sorgente "Tinta unita": il colore del materiale. E' lo SFONDO
+                                 della tela (materialCanvasBg), non il pennello: in flat
+                                 non c'e' niente da disegnare, e confonderlo col pennello
+                                 faceva cambiare la tinta del materiale quando si sceglieva
+                                 un colore da disegnare. -->
                             <div id="materialSolidSetup" style="display:none; flex-direction:column; gap:8px;">
                                 <div class="control-row">
                                     <label data-i18n="matcreate.solidColor">Colore</label>
-                                    <input type="color" id="materialSolidColor" class="accent-swatch" value="#E8C39E"
+                                    <input type="color" id="materialSolidColor" class="accent-swatch" value="#8B5A2B"
                                         style="width:26px; height:26px;">
                                     <span class="hint-text" id="materialSolidHex" style="font-variant-numeric:tabular-nums;"></span>
                                 </div>
                                 <div class="hint-text" data-i18n="matcreate.solidHint">
-                                    E' lo stesso colore del pennello: cambiarlo qui lo cambia anche nella tela.
+                                    E' il colore di sfondo della tela: in tinta unita e' il colore del materiale.
                                 </div>
                             </div>
 
@@ -3115,17 +3218,76 @@
                                         <button class="btn btn-secondary" id="materialArtClearBtn" style="padding:6px; font-size:11px;"
                                             data-i18n="matcreate.clear">Svuota</button>
                                     </div>
+                                    <!-- Griglia on/off: sta QUI (non fuori) perche' questo
+                                         nodo viaggia nella finestra grande. Sotto i 5 px
+                                         per cella resta comunque spenta (vedi layoutArtStage). -->
+                                    <label class="hint-text" style="display:flex; align-items:center; gap:6px; cursor:pointer;"
+                                        data-i18n-title="matcreate.gridToggleTitle" title="Mostra o nasconde la griglia dei pixel sulla tela">
+                                        <input type="checkbox" id="materialArtGridToggle" checked style="width:auto; margin:0;">
+                                        <span data-i18n="matcreate.gridToggle">Mostra griglia</span>
+                                    </label>
                                     <!-- Tolleranza del riempimento: su un'immagine
                                          importata due pixel "dello stesso colore"
                                          differiscono di qualche unita', e senza
                                          soglia il riempimento si fermava dopo pochi. -->
-                                    <div class="control-row" id="materialFillTolRow">
+                                    <div class="control-row slider-row" id="materialFillTolRow">
                                         <label data-i18n="matcreate.fillTolerance">Tolleranza</label>
                                         <input type="range" id="materialFillTolerance" min="0" max="128" step="1" value="24">
-                                        <span id="materialFillToleranceValue" class="hint-text" style="min-width:28px; text-align:right;">24</span>
+                                        <span id="materialFillToleranceValue" class="hint-text slider-value">24</span>
+                                    </div>
+                                    <!-- Facce: una texture condivisa o 6 personalizzate.
+                                         In modalita' "6" lo switcher sotto sceglie quale
+                                         faccia del cubo si sta disegnando. -->
+                                    <div id="materialFaceModeRow" style="display:flex; flex-direction:column; gap:6px;">
+                                        <div class="section-title" style="font-size:11px; margin:0;" data-i18n="matcreate.faceModeTitle">Facce del cubo</div>
+                                        <div class="segmented" id="materialFaceModeSeg" style="grid-template-columns:repeat(2,1fr);">
+                                            <button class="seg-btn active" data-facemode="single"
+                                                data-i18n="matcreate.faceModeSingle" data-i18n-title="matcreate.faceModeSingleTitle"
+                                                title="Una sola texture su tutte e 6 le facce">Una texture</button>
+                                            <button class="seg-btn" data-facemode="six"
+                                                data-i18n="matcreate.faceModeSix" data-i18n-title="matcreate.faceModeSixTitle"
+                                                title="Una texture diversa per ogni faccia del cubo">6 facce</button>
+                                        </div>
+                                        <div id="materialFaceSwitcher" style="display:none; flex-wrap:wrap; gap:4px;">
+                                            <button type="button" class="pixel-tool-btn active" data-face="px"
+                                                data-i18n="matcreate.faceRight">Destra</button>
+                                            <button type="button" class="pixel-tool-btn" data-face="nx"
+                                                data-i18n="matcreate.faceLeft">Sinistra</button>
+                                            <button type="button" class="pixel-tool-btn" data-face="py"
+                                                data-i18n="matcreate.faceTop">Sopra</button>
+                                            <button type="button" class="pixel-tool-btn" data-face="ny"
+                                                data-i18n="matcreate.faceBottom">Sotto</button>
+                                            <button type="button" class="pixel-tool-btn" data-face="pz"
+                                                data-i18n="matcreate.faceFront">Davanti</button>
+                                            <button type="button" class="pixel-tool-btn" data-face="nz"
+                                                data-i18n="matcreate.faceBack">Dietro</button>
+                                        </div>
+                                        <!-- Anteprima sotto le facce: viaggia con
+                                             #materialArtTools nella finestra grande.
+                                             Un solo canvas (un solo contesto WebGL). -->
+                                        <div class="material-preview-wrap" id="materialPreviewWrap">
+                                            <canvas id="materialPreviewCanvas" class="alpha-checker" width="176" height="176"
+                                                data-i18n-title="materials.previewDragTitle"
+                                                title="Trascina per ruotare; al rilascio continua da sola"></canvas>
+                                            <div class="material-preview-info">
+                                                <strong data-i18n="materials.previewTitle">Anteprima</strong>
+                                                <div data-i18n="materials.previewHint">Il cubo mostra la texture come la vedrai sul voxel.</div>
+                                                <div class="material-preview-drag-hint" data-i18n="materials.previewDragHint">Trascina per ruotare · passa sopra per ingrandire</div>
+                                                <div class="segmented" id="materialPreviewShape" style="grid-template-columns:repeat(2,1fr); margin-top:6px;">
+                                                    <button class="seg-btn active" data-shape="box" data-i18n="matcreate.shapeBox">Cubo</button>
+                                                    <button class="seg-btn" data-shape="sphere" data-i18n="matcreate.shapeSphere">Sfera</button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Host dell'anteprima in tinta unita: materialDrawSection
+                                 (e quindi materialFaceModeRow) e' nascosta su "flat",
+                                 ma l'anteprima deve restare. refreshSourceUI sposta
+                                 #materialPreviewWrap qui o di nuovo sotto le facce. -->
+                            <div id="materialPreviewHomeFlat" style="display:none;"></div>
 
                             <!-- Mappatura UV: quante volte la texture si ripete su una
                                  faccia, dove comincia e di quanto e' ruotata -->
@@ -3134,60 +3296,47 @@
                                 <div class="hint-text" data-i18n="matcreate.uvHint">
                                     Ripetizioni per faccia del voxel: 1 = l'immagine intera su ogni faccia, 2 = quattro copie.
                                 </div>
-                                <div class="control-row">
+                                <div class="control-row slider-row">
                                     <label data-i18n="matcreate.uvRepeat">Ripetizioni</label>
                                     <input type="range" id="materialUvRepeat" min="0.25" max="8" step="0.25" value="1">
-                                    <span id="materialUvRepeatValue" class="hint-text" style="min-width:30px; text-align:right;">1.00</span>
+                                    <span id="materialUvRepeatValue" class="hint-text slider-value">1.00</span>
                                 </div>
-                                <div class="control-row">
+                                <div class="control-row slider-row">
                                     <label data-i18n="matcreate.uvOffsetU">Scorrimento U</label>
                                     <input type="range" id="materialUvOffsetU" min="0" max="1" step="0.05" value="0">
-                                    <span id="materialUvOffsetUValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
+                                    <span id="materialUvOffsetUValue" class="hint-text slider-value">0.00</span>
                                 </div>
-                                <div class="control-row">
+                                <div class="control-row slider-row">
                                     <label data-i18n="matcreate.uvOffsetV">Scorrimento V</label>
                                     <input type="range" id="materialUvOffsetV" min="0" max="1" step="0.05" value="0">
-                                    <span id="materialUvOffsetVValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
+                                    <span id="materialUvOffsetVValue" class="hint-text slider-value">0.00</span>
                                 </div>
-                                <div class="control-row">
+                                <div class="control-row slider-row">
                                     <label data-i18n="matcreate.uvRotation">Rotazione</label>
                                     <input type="range" id="materialUvRotation" min="0" max="270" step="90" value="0">
-                                    <span id="materialUvRotationValue" class="hint-text" style="min-width:30px; text-align:right;"></span>
+                                    <span id="materialUvRotationValue" class="hint-text slider-value"></span>
                                 </div>
                             </div>
 
-                            <!-- Anteprima live -->
-                            <div class="material-preview-wrap">
-                                <canvas id="materialPreviewCanvas" class="alpha-checker" width="176" height="176"></canvas>
-                                <div class="material-preview-info">
-                                    <strong data-i18n="materials.previewTitle">Anteprima</strong>
-                                    <div data-i18n="materials.previewHint">Il cubo mostra la texture come la vedrai sul voxel.</div>
-                                    <div class="segmented" id="materialPreviewShape" style="grid-template-columns:repeat(2,1fr); margin-top:6px;">
-                                        <button class="seg-btn active" data-shape="box" data-i18n="matcreate.shapeBox">Cubo</button>
-                                        <button class="seg-btn" data-shape="sphere" data-i18n="matcreate.shapeSphere">Sfera</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="control-row">
+                            <div class="control-row slider-row">
                                 <label data-i18n="materials.roughness">Ruvidita</label>
                                 <input type="range" id="materialRoughness" min="0" max="1" step="0.05" value="0.6">
-                                <span id="materialRoughnessValue" class="hint-text" style="min-width:30px; text-align:right;">0.60</span>
+                                <span id="materialRoughnessValue" class="hint-text slider-value">0.60</span>
                             </div>
-                            <div class="control-row">
+                            <div class="control-row slider-row">
                                 <label data-i18n="materials.metalness">Metallicita</label>
                                 <input type="range" id="materialMetalness" min="0" max="1" step="0.05" value="0">
-                                <span id="materialMetalnessValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
+                                <span id="materialMetalnessValue" class="hint-text slider-value">0.00</span>
                             </div>
-                            <div class="control-row">
+                            <div class="control-row slider-row">
                                 <label data-i18n="materials.emissive">Emissivo</label>
                                 <input type="range" id="materialEmissive" min="0" max="1" step="0.05" value="0">
-                                <span id="materialEmissiveValue" class="hint-text" style="min-width:30px; text-align:right;">0.00</span>
+                                <span id="materialEmissiveValue" class="hint-text slider-value">0.00</span>
                             </div>
-                            <div class="control-row">
+                            <div class="control-row slider-row">
                                 <label data-i18n="matcreate.opacity">Opacita</label>
                                 <input type="range" id="materialOpacity" min="0" max="1" step="0.05" value="1">
-                                <span id="materialOpacityValue" class="hint-text" style="min-width:30px; text-align:right;">1.00</span>
+                                <span id="materialOpacityValue" class="hint-text slider-value">1.00</span>
                             </div>
                             <div class="hint-text" data-i18n="matcreate.opacityHint">
                                 Opacita sotto 1 rende il materiale trasparente (vetro, acqua, foglie). I pixel trasparenti della texture lo sono comunque.

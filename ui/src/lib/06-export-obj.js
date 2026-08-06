@@ -97,12 +97,33 @@
 
             // Material name for a TOKEN, sanitized so it's a valid OBJ/MTL token
             // (Blender is picky: no '#', no '@', no stray chars).
-            function matNameFor(token) {
-                if (isMaterialToken(token)) return `mat_${token.slice(1)}`;
-                return `mat_${String(token).replace('#', '').toUpperCase()}`;
+            // `faceKey` (px/nx/...) aggiunge il suffisso per i materiali a 6 facce:
+            // senza, le 6 texture condividerebbero lo stesso usemtl e Blender
+            // mostrerebbe solo l'ultima.
+            function matNameFor(token, faceKey) {
+                let base;
+                if (isMaterialToken(token)) base = `mat_${token.slice(1)}`;
+                else base = `mat_${String(token).replace('#', '').toUpperCase()}`;
+                return faceKey ? `${base}_${faceKey}` : base;
             }
 
-            function textureFileName(id) { return `tex_${id}.png`; }
+            function textureFileName(id, faceKey) {
+                return faceKey ? `tex_${id}_${faceKey}.png` : `tex_${id}.png`;
+            }
+
+            // Mappa la normale di un quad greedy (asse ±1) sulla chiave di faccia
+            // usata dai materiali a 6 texture. Ordine allineato a CUBE_FACES /
+            // BoxGeometry (+X -X +Y -Y +Z -Z).
+            function faceKeyFromNormal(n) {
+                if (!n || n.length < 3) return null;
+                if (n[0] === 1) return 'px';
+                if (n[0] === -1) return 'nx';
+                if (n[1] === 1) return 'py';
+                if (n[1] === -1) return 'ny';
+                if (n[2] === 1) return 'pz';
+                if (n[2] === -1) return 'nz';
+                return null;
+            }
 
             // Build the .mtl text for every TOKEN used in the model.
             // `voxelsOverride` permette di esportare un modello DIVERSO da quello
@@ -119,16 +140,14 @@
                     const tok = tokenOf(v);
                     if (!seen.has(tok)) seen.set(tok, v.color);
                 });
-                seen.forEach((voxelColor, token) => {
-                    const dec = decodeToken(token, voxelColor);
-                    // materialById, non `dec.material`: su un orfano l'id resta
-                    // valorizzato ma la definizione non c'e'.
-                    const def = materialById(dec.material);
-                    const hex = dec.color.replace('#', '');
+                // Scrive un blocco newmtl. `faceKey` null = materiale unico;
+                // altrimenti e' una delle 6 facce (map_Kd punta al PNG di quella).
+                const writeMtl = (token, def, decColor, faceKey, texRef) => {
+                    const hex = decColor.replace('#', '');
                     const r = parseInt(hex.substring(0, 2), 16) / 255.0;
                     const g = parseInt(hex.substring(2, 4), 16) / 255.0;
                     const b = parseInt(hex.substring(4, 6), 16) / 255.0;
-                    mtlText += `newmtl ${matNameFor(token)}\n`;
+                    mtlText += `newmtl ${matNameFor(token, faceKey)}\n`;
                     // Kd resta anche con la texture: un .mtl aperto SENZA i PNG accanto
                     // mostra allora la tinta media invece del bianco.
                     mtlText += `Kd ${r.toFixed(4)} ${g.toFixed(4)} ${b.toFixed(4)}\n`;
@@ -153,10 +172,29 @@
                     // il 2, che e' il modello che i loader collegano alla
                     // dissolvenza.
                     mtlText += `illum ${alpha < 1 ? 2 : 1}\n`;
-                    if (def && def.texture && def.texture.data) {
-                        mtlText += `map_Kd ${textureFileName(def.id)}\n`;
+                    if (texRef && texRef.data && def) {
+                        mtlText += `map_Kd ${textureFileName(def.id, faceKey)}\n`;
                     }
                     mtlText += `\n`;
+                };
+                seen.forEach((voxelColor, token) => {
+                    const dec = decodeToken(token, voxelColor);
+                    // materialById, non `dec.material`: su un orfano l'id resta
+                    // valorizzato ma la definizione non c'e'.
+                    const def = materialById(dec.material);
+                    if (def && typeof materialHasFaceTextures === 'function'
+                        && materialHasFaceTextures(def)) {
+                        // Una voce MTL per faccia: l'OBJ le richiama da usemtl
+                        // in base alla normale del quad.
+                        MATERIAL_FACE_KEYS.forEach(fk => {
+                            const tex = (typeof textureForFace === 'function')
+                                ? textureForFace(def, fk) : (def.faces[fk] || def.texture);
+                            writeMtl(token, def, dec.color, fk, tex);
+                        });
+                    } else {
+                        writeMtl(token, def, dec.color, null,
+                            def && def.texture ? def.texture : null);
+                    }
                 });
                 return mtlText;
             }
@@ -192,10 +230,20 @@
                     return id;
                 };
 
-                // Group quad face lines by material.
+                // Group quad face lines by material. Su un materiale a 6 facce il
+                // nome include la chiave di faccia derivata dalla normale: cosi'
+                // ogni lato del voxel punta al PNG giusto.
                 const facesByMat = {};
                 quads.forEach(q => {
-                    const mat = matNameFor(q.token);
+                    let faceKey = null;
+                    if (isMaterialToken(q.token)) {
+                        const def = materialById(q.token.slice(1));
+                        if (def && typeof materialHasFaceTextures === 'function'
+                            && materialHasFaceTextures(def)) {
+                            faceKey = faceKeyFromNormal(q.normal);
+                        }
+                    }
+                    const mat = matNameFor(q.token, faceKey);
                     const ni = nId(q.normal);
                     const ids = q.verts.map(p => vId(p));
                     // UV 0..uw / 0..uh con wrap `repeat`: un quad che copre 3x2 voxel
@@ -224,9 +272,39 @@
                     // materialById, non l'id nudo: un id ORFANO non ha PNG da
                     // impacchettare e non deve far scattare lo ZIP da solo.
                     const def = materialById(id);
-                    if (def && def.texture && def.texture.data) out.push(def);
+                    if (!def) return;
+                    if (def.texture && def.texture.data) { out.push(def); return; }
+                    // Materiale a 6 facce senza texture rappresentativa: conta
+                    // lo stesso, ha PNG da impacchettare.
+                    if (typeof materialHasFaceTextures === 'function'
+                        && materialHasFaceTextures(def)) out.push(def);
                 });
                 return out;
+            }
+
+            // Elenca i PNG da mettere nello ZIP: uno per materiale single, fino
+            // a 6 per un materiale a facce custom. Ritorna {name, dataUrl}.
+            function textureFilesForDef(def) {
+                if (!def) return [];
+                const files = [];
+                if (typeof materialHasFaceTextures === 'function'
+                    && materialHasFaceTextures(def)) {
+                    const seen = new Set();
+                    MATERIAL_FACE_KEYS.forEach(fk => {
+                        const tex = (typeof textureForFace === 'function')
+                            ? textureForFace(def, fk) : (def.faces[fk] || def.texture);
+                        if (!tex || !tex.data) return;
+                        const name = textureFileName(def.id, fk);
+                        if (seen.has(name)) return;
+                        seen.add(name);
+                        files.push({ name: name, data: tex.data });
+                    });
+                    return files;
+                }
+                if (def.texture && def.texture.data) {
+                    files.push({ name: textureFileName(def.id), data: def.texture.data });
+                }
+                return files;
             }
 
             // La data URL torna in BYTE: createZipBlob scrive tale e quale solo un
@@ -257,7 +335,15 @@
                     { name: `${name}.obj`, data: buildObjText(`${name}.mtl`) },
                     { name: `${name}.mtl`, data: buildMtlText() }
                 ];
-                textured.forEach(def => files.push({ name: textureFileName(def.id), data: dataUrlToBytes(def.texture.data) }));
+                // Per-faccia o singola: textureFilesForDef elenca tutti i PNG.
+                const seenNames = new Set();
+                textured.forEach(def => {
+                    textureFilesForDef(def).forEach(f => {
+                        if (seenNames.has(f.name)) return;
+                        seenNames.add(f.name);
+                        files.push({ name: f.name, data: dataUrlToBytes(f.data) });
+                    });
+                });
                 downloadBlob(createZipBlob(files), `${name}.zip`);
             });
 

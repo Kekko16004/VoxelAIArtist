@@ -1093,136 +1093,171 @@
                 // ogni pennellata costerebbe un rebuild completo (secondi su modelli grandi).
                 const vertexRanges = new Int32Array(voxels.length * 2);
 
+                // Materiale a 6 facce: in EXPORT un gruppo (e un materiale) PER
+                // direzione, come buildStaticExportMesh. Senza, le 6 texture non
+                // si possono assegnare. A schermo resta un solo materiale per
+                // token: l'anteprima non usa la multi-group skinned path, il
+                // visore le texture per-faccia le mette su InstancedMesh.
+                // Ordine = faces locali = MATERIAL_FACE_KEYS = CUBE_FACES.
+                const FACE_KEYS = (typeof MATERIAL_FACE_KEYS !== 'undefined')
+                    ? MATERIAL_FACE_KEYS
+                    : ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+
                 for (const token in byColor) {
-                    const groupStart = indices.length;
                     // Il colore del voxel resta il fallback: su un id materiale orfano
                     // il gruppo esce nella sua tinta piatta, non in grigio neutro.
                     const dec = decodeToken(token, hexOfToken[token]);
                     const col = new THREE.Color(dec.color);
-                    for (const i of byColor[token]) {
-                        const v = voxels[i];
-                        const bi = assignments[i];
-                        const bc = boneColor(bi, bones.length);
-                        // 4 influenze reali del voxel; senza `skin` (chiamate legacy) si
-                        // ricade sul rigido 1/0/0/0 sull'osso dominante.
-                        const base = i * M;
-                        const si0 = skin ? skin.indices[base] : bi;
-                        const si1 = skin ? skin.indices[base + 1] : 0;
-                        const si2 = skin ? skin.indices[base + 2] : 0;
-                        const si3 = skin ? skin.indices[base + 3] : 0;
-                        const sw0 = skin ? skin.weights[base] : 1;
-                        const sw1 = skin ? skin.weights[base + 1] : 0;
-                        const sw2 = skin ? skin.weights[base + 2] : 0;
-                        const sw3 = skin ? skin.weights[base + 3] : 0;
-                        // Rampa Blender del peso dell'osso selezionato (0 = blu).
-                        let wSel = 0;
-                        if (refBone >= 0) {
-                            if (si0 === refBone) wSel = sw0;
-                            else if (si1 === refBone && sw1 > 0) wSel = sw1;
-                            else if (si2 === refBone && sw2 > 0) wSel = sw2;
-                            else if (si3 === refBone && sw3 > 0) wSel = sw3;
-                        }
-                        const wc = weightColor(wSel);
-                        const vStart = vbase;
-                        for (const f of faces) {
-                            const nx = v.x + f.n[0];
-                            const ny = v.y + f.n[1];
-                            const nz = v.z + f.n[2];
-                            const nkey = `${nx},${ny},${nz}`;
-                            if (!allFaces && voxelAssign.has(nkey)) {
-                                if (forExport) {
-                                    // IN EXPORT la faccia fra due voxel si toglie SOLO se i
-                                    // due si deformano IDENTICI: allora resta interna in
-                                    // ogni posa e non la vedra' mai nessuno.
-                                    //
-                                    // Se si deformano diversamente quella faccia e' una
-                                    // GIUNZIONE. A riposo i due quad (il +X di uno, il -X
-                                    // dell'altro) sono coincidenti e sepolti nel guscio;
-                                    // appena la posa muove le ossa i due voxel si separano
-                                    // e quei quad diventano le PARETI della fessura.
-                                    // Toglierli lascia il guscio APERTO: con i materiali
-                                    // FrontSide (= backface culling in Blender) si guarda
-                                    // dentro il modello vuoto e si vedono buchi passanti.
-                                    // Misurato sul modello dell'utente (24 ossa, binding
-                                    // 'parts'): 1268 giunzioni, che nella posa salvata si
-                                    // aprono in media 5.3 mm e fino a 55 mm (5.5 voxel);
-                                    // Blender contava 0 spigoli di bordo a riposo e 936
-                                    // sulla mesh POSATA. Tenendole, ogni gruppo di voxel
-                                    // che si deforma allo stesso modo e' un solido CHIUSO
-                                    // in qualunque posa e la fessura si legge come un
-                                    // giunto, non come un buco — cioe' cio' che mostra
-                                    // l'anteprima.
-                                    // Lo z-fighting per cui erano state tolte lo risolve
-                                    // FrontSide, non la cull: di due quad coplanari a
-                                    // orientamento OPPOSTO il backface culling ne disegna
-                                    // sempre e solo uno.
-                                    if (deformsAlike(i, voxelIndexAt.get(nkey))) continue;
-                                } else {
-                                    // A SCHERMO la faccia fra due ossa DIVERSE si tiene:
-                                    // e' il bordo che fa vedere dove finisce un osso e
-                                    // comincia l'altro mentre si dipingono i pesi. Il
-                                    // resto si toglie: l'anteprima e' DoubleSide, quindi
-                                    // le fessure mostrano comunque la parete di fondo e
-                                    // non serve pagare le facce interne.
-                                    if (voxelAssign.get(nkey) === assignments[i]) continue;
-                                }
-                            }
+                    const def = isMaterialToken(token)
+                        ? materialById(token.slice(1)) : null;
+                    const multi = forExport && def
+                        && typeof materialHasFaceTextures === 'function'
+                        && materialHasFaceTextures(def);
 
-                            for (let ci = 0; ci < f.c.length; ci++) {
-                                const off = f.c[ci];
-                                positions.push((v.x + off[0] - O.x) * K,
-                                    (v.y + off[1] - O.y) * K,
-                                    (v.z + off[2] - O.z) * K);
-                                normals.push(f.n[0], f.n[1], f.n[2]);
-                                uvs.push(UV_QUAD[ci][0], UV_QUAD[ci][1]);
-                                vColors.push(col.r, col.g, col.b);
-                                bColors.push(bc.r, bc.g, bc.b);
-                                wColors.push(wc.r, wc.g, wc.b);
-                                skinIndices.push(si0, si1, si2, si3);
-                                skinWeights.push(sw0, sw1, sw2, sw3);
+                    // multi: un passaggio per direzione (6 gruppi). Altrimenti un
+                    // solo passaggio su tutte le facce, come prima.
+                    const passes = multi
+                        ? faces.map((f, fi) => ({ faceList: [f], faceKey: FACE_KEYS[fi] }))
+                        : [{ faceList: faces, faceKey: null }];
+
+                    for (const pass of passes) {
+                        const groupStart = indices.length;
+                        for (const i of byColor[token]) {
+                            const v = voxels[i];
+                            const bi = assignments[i];
+                            const bc = boneColor(bi, bones.length);
+                            // 4 influenze reali del voxel; senza `skin` (chiamate legacy) si
+                            // ricade sul rigido 1/0/0/0 sull'osso dominante.
+                            const base = i * M;
+                            const si0 = skin ? skin.indices[base] : bi;
+                            const si1 = skin ? skin.indices[base + 1] : 0;
+                            const si2 = skin ? skin.indices[base + 2] : 0;
+                            const si3 = skin ? skin.indices[base + 3] : 0;
+                            const sw0 = skin ? skin.weights[base] : 1;
+                            const sw1 = skin ? skin.weights[base + 1] : 0;
+                            const sw2 = skin ? skin.weights[base + 2] : 0;
+                            const sw3 = skin ? skin.weights[base + 3] : 0;
+                            // Rampa Blender del peso dell'osso selezionato (0 = blu).
+                            let wSel = 0;
+                            if (refBone >= 0) {
+                                if (si0 === refBone) wSel = sw0;
+                                else if (si1 === refBone && sw1 > 0) wSel = sw1;
+                                else if (si2 === refBone && sw2 > 0) wSel = sw2;
+                                else if (si3 === refBone && sw3 > 0) wSel = sw3;
                             }
-                            indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3);
-                            vbase += 4;
+                            const wc = weightColor(wSel);
+                            // multi e' solo forExport: vertexRanges serve all'anteprima
+                            // (isPreview sotto) e li' multi e' sempre false, quindi il
+                            // range resta contiguo come prima. Con multi i vertici di
+                            // un voxel sono sparsi su 6 gruppi e non servono al paint.
+                            const vStart = vbase;
+                            for (const f of pass.faceList) {
+                                const nx = v.x + f.n[0];
+                                const ny = v.y + f.n[1];
+                                const nz = v.z + f.n[2];
+                                const nkey = `${nx},${ny},${nz}`;
+                                if (!allFaces && voxelAssign.has(nkey)) {
+                                    if (forExport) {
+                                        // IN EXPORT la faccia fra due voxel si toglie SOLO se i
+                                        // due si deformano IDENTICI: allora resta interna in
+                                        // ogni posa e non la vedra' mai nessuno.
+                                        //
+                                        // Se si deformano diversamente quella faccia e' una
+                                        // GIUNZIONE. A riposo i due quad (il +X di uno, il -X
+                                        // dell'altro) sono coincidenti e sepolti nel guscio;
+                                        // appena la posa muove le ossa i due voxel si separano
+                                        // e quei quad diventano le PARETI della fessura.
+                                        // Toglierli lascia il guscio APERTO: con i materiali
+                                        // FrontSide (= backface culling in Blender) si guarda
+                                        // dentro il modello vuoto e si vedono buchi passanti.
+                                        // Misurato sul modello dell'utente (24 ossa, binding
+                                        // 'parts'): 1268 giunzioni, che nella posa salvata si
+                                        // aprono in media 5.3 mm e fino a 55 mm (5.5 voxel);
+                                        // Blender contava 0 spigoli di bordo a riposo e 936
+                                        // sulla mesh POSATA. Tenendole, ogni gruppo di voxel
+                                        // che si deforma allo stesso modo e' un solido CHIUSO
+                                        // in qualunque posa e la fessura si legge come un
+                                        // giunto, non come un buco — cioe' cio' che mostra
+                                        // l'anteprima.
+                                        // Lo z-fighting per cui erano state tolte lo risolve
+                                        // FrontSide, non la cull: di due quad coplanari a
+                                        // orientamento OPPOSTO il backface culling ne disegna
+                                        // sempre e solo uno.
+                                        if (deformsAlike(i, voxelIndexAt.get(nkey))) continue;
+                                    } else {
+                                        // A SCHERMO la faccia fra due ossa DIVERSE si tiene:
+                                        // e' il bordo che fa vedere dove finisce un osso e
+                                        // comincia l'altro mentre si dipingono i pesi. Il
+                                        // resto si toglie: l'anteprima e' DoubleSide, quindi
+                                        // le fessure mostrano comunque la parete di fondo e
+                                        // non serve pagare le facce interne.
+                                        if (voxelAssign.get(nkey) === assignments[i]) continue;
+                                    }
+                                }
+
+                                for (let ci = 0; ci < f.c.length; ci++) {
+                                    const off = f.c[ci];
+                                    positions.push((v.x + off[0] - O.x) * K,
+                                        (v.y + off[1] - O.y) * K,
+                                        (v.z + off[2] - O.z) * K);
+                                    normals.push(f.n[0], f.n[1], f.n[2]);
+                                    uvs.push(UV_QUAD[ci][0], UV_QUAD[ci][1]);
+                                    vColors.push(col.r, col.g, col.b);
+                                    bColors.push(bc.r, bc.g, bc.b);
+                                    wColors.push(wc.r, wc.g, wc.b);
+                                    skinIndices.push(si0, si1, si2, si3);
+                                    skinWeights.push(sw0, sw1, sw2, sw3);
+                                }
+                                indices.push(vbase, vbase + 1, vbase + 2, vbase, vbase + 2, vbase + 3);
+                                vbase += 4;
+                            }
+                            if (!multi) {
+                                vertexRanges[i * 2] = vStart;
+                                vertexRanges[i * 2 + 1] = vbase - vStart;
+                            }
                         }
-                        vertexRanges[i * 2] = vStart;
-                        vertexRanges[i * 2 + 1] = vbase - vStart;
+                        // Gruppo (e materiale) SOLO se quel colore ha prodotto facce.
+                        // Un colore usato esclusivamente da voxel sepolti (tutti e 6 i
+                        // vicini occupati) non ne emette nessuna nel guscio, e un gruppo
+                        // con count 0 e' veleno per il GLTFExporter r128: processAccessor
+                        // restituisce null sul range vuoto ("Skip creating an accessor if
+                        // the attribute doesn't have data") e l'exporter risponde con
+                        // `delete primitive.indices`. Per la specifica glTF una primitiva
+                        // senza indices si disegna prendendo i vertici IN SEQUENZA: non i
+                        // suoi, tutti quelli della mesh. Misurato sul modello dell'utente
+                        // (un solo colore su 31): 12098 triangoli fantasma, 3265 piu'
+                        // larghi di due voxel e 51 con un lato fino a 0.90 m, cioe'
+                        // l'altezza intera del personaggio. Da qui sia le linee che
+                        // attraversano il modello sia le "macchie" che sporcano i colori:
+                        // sono schegge sottili in un materiale scuro spalmate su tutto il
+                        // corpo. Il materiale si crea qui accanto al gruppo perche' i due
+                        // devono restare allineati: `matIndex` e' un indice in `materials`.
+                        // Con multi una direzione senza facce visibili (es. cubo sepolto
+                        // su +Y) salta solo quel gruppo: le altre 5 restano.
+                        const count = indices.length - groupStart;
+                        if (count === 0) continue;
+                        const mat = new THREE.MeshStandardMaterial({
+                            color: 0xffffff,
+                            vertexColors: true,
+                            roughness: 0.35,
+                            metalness: 0.0,
+                            skinning: true,
+                            side: THREE.DoubleSide
+                        });
+                        mat.userData.hexColor = dec.color;
+                        // Il token e l'id del materiale servono all'export, che da qui
+                        // ricava texture, ruvidita', metallicita' ed emissione
+                        // (applyExportMaterial in 16-export-glb.js). `hexColor` resta un hex
+                        // VERO anche quando il token e' '@m1': chi legge quel campo lo passa
+                        // a THREE.Color, e '@m1' diventerebbe nero.
+                        mat.userData.token = token;
+                        mat.userData.materialId = dec.material;
+                        // faceKey solo in multi-export: exportGLB lo passa a
+                        // applyExportMaterial per scegliere la texture di quella faccia.
+                        if (pass.faceKey) mat.userData.face = pass.faceKey;
+                        materials.push(mat);
+                        groups.push({ start: groupStart, count, matIndex: materials.length - 1 });
                     }
-                    // Gruppo (e materiale) SOLO se quel colore ha prodotto facce.
-                    // Un colore usato esclusivamente da voxel sepolti (tutti e 6 i
-                    // vicini occupati) non ne emette nessuna nel guscio, e un gruppo
-                    // con count 0 e' veleno per il GLTFExporter r128: processAccessor
-                    // restituisce null sul range vuoto ("Skip creating an accessor if
-                    // the attribute doesn't have data") e l'exporter risponde con
-                    // `delete primitive.indices`. Per la specifica glTF una primitiva
-                    // senza indices si disegna prendendo i vertici IN SEQUENZA: non i
-                    // suoi, tutti quelli della mesh. Misurato sul modello dell'utente
-                    // (un solo colore su 31): 12098 triangoli fantasma, 3265 piu'
-                    // larghi di due voxel e 51 con un lato fino a 0.90 m, cioe'
-                    // l'altezza intera del personaggio. Da qui sia le linee che
-                    // attraversano il modello sia le "macchie" che sporcano i colori:
-                    // sono schegge sottili in un materiale scuro spalmate su tutto il
-                    // corpo. Il materiale si crea qui accanto al gruppo perche' i due
-                    // devono restare allineati: `matIndex` e' un indice in `materials`.
-                    const count = indices.length - groupStart;
-                    if (count === 0) continue;
-                    const mat = new THREE.MeshStandardMaterial({
-                        color: 0xffffff,
-                        vertexColors: true,
-                        roughness: 0.35,
-                        metalness: 0.0,
-                        skinning: true,
-                        side: THREE.DoubleSide
-                    });
-                    mat.userData.hexColor = dec.color;
-                    // Il token e l'id del materiale servono all'export, che da qui
-                    // ricava texture, ruvidita', metallicita' ed emissione
-                    // (applyExportMaterial in 16-export-glb.js). `hexColor` resta un hex
-                    // VERO anche quando il token e' '@m1': chi legge quel campo lo passa
-                    // a THREE.Color, e '@m1' diventerebbe nero.
-                    mat.userData.token = token;
-                    mat.userData.materialId = dec.material;
-                    materials.push(mat);
-                    groups.push({ start: groupStart, count, matIndex: materials.length - 1 });
                 }
                 // Le mappe di anteprima descrivono la mesh SUL SCHERMO. Una mesh costruita
                 // per l'export (allFaces, oppure forExport) ha un'altra geometria:
