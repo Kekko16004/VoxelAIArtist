@@ -3281,6 +3281,93 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Generazione AI della texture. Resta NEL PANNELLO
+                                     quando la tela trasloca nella finestra grande: il
+                                     canvas e' il buffer ovunque si trovi, quindi
+                                     generare da qui funziona lo stesso. -->
+                                <div id="materialAiSection" style="display:flex; flex-direction:column; gap:6px;">
+                                    <div class="section-title" style="font-size:11px; margin:0;"
+                                        data-i18n="matai.title">Genera con l'AI</div>
+                                    <textarea id="materialAiPrompt" rows="2" maxlength="400"
+                                        placeholder="Descrivi la texture (es. pietra muschiosa, cassa di legno)"
+                                        data-i18n-placeholder="matai.promptPlaceholder"
+                                        style="resize:vertical; padding:7px; font-size:11px; font-family:inherit;
+                                               background:var(--inset-bg); color:var(--text-primary);
+                                               border:1px solid var(--glass-border); border-radius:var(--radius-sm);"></textarea>
+                                    <!-- Ambito: una faccia, tutte, o una scelta. In modalita'
+                                         "una texture" non c'e' nulla da scegliere e la riga
+                                         sparisce. -->
+                                    <div id="materialAiScopeRow" style="display:none; flex-direction:column; gap:4px;">
+                                        <div class="segmented" id="materialAiScopeSeg" style="grid-template-columns:repeat(3,1fr);">
+                                            <button class="seg-btn active" data-aiscope="active"
+                                                data-i18n="matai.scopeActive" data-i18n-title="matai.scopeActiveTitle"
+                                                title="Genera solo la faccia che stai disegnando">Questa</button>
+                                            <button class="seg-btn" data-aiscope="all"
+                                                data-i18n="matai.scopeAll" data-i18n-title="matai.scopeAllTitle"
+                                                title="Genera tutte e sei le facce in una volta">Tutte</button>
+                                            <button class="seg-btn" data-aiscope="choose"
+                                                data-i18n="matai.scopeChoose" data-i18n-title="matai.scopeChooseTitle"
+                                                title="Scegli quali facce generare">Scegli</button>
+                                        </div>
+                                        <div id="materialAiFacePick" style="display:none; flex-wrap:wrap; gap:4px;">
+                                            <button type="button" class="pixel-tool-btn" data-aiface="px"
+                                                data-i18n="matcreate.faceRight">Destra</button>
+                                            <button type="button" class="pixel-tool-btn" data-aiface="nx"
+                                                data-i18n="matcreate.faceLeft">Sinistra</button>
+                                            <button type="button" class="pixel-tool-btn" data-aiface="py"
+                                                data-i18n="matcreate.faceTop">Sopra</button>
+                                            <button type="button" class="pixel-tool-btn" data-aiface="ny"
+                                                data-i18n="matcreate.faceBottom">Sotto</button>
+                                            <button type="button" class="pixel-tool-btn" data-aiface="pz"
+                                                data-i18n="matcreate.faceFront">Davanti</button>
+                                            <button type="button" class="pixel-tool-btn" data-aiface="nz"
+                                                data-i18n="matcreate.faceBack">Dietro</button>
+                                        </div>
+                                    </div>
+                                    <div class="control-row" id="materialAiContextRow" style="display:none;">
+                                        <label data-i18n="matai.context" data-i18n-title="matai.contextTitle"
+                                            title="L'AI vede le facce gia' disegnate e resta nello stesso stile">Usa le altre facce come contesto</label>
+                                        <label class="switch">
+                                            <input type="checkbox" id="materialAiContextToggle" checked>
+                                            <span class="slider"></span>
+                                        </label>
+                                    </div>
+                                    <button id="materialAiGenerateBtn" class="btn btn-primary"
+                                        style="padding:7px; font-size:11px;"
+                                        data-i18n="matai.generate">Genera texture</button>
+                                    <p class="hint-text" id="materialAiStatus" style="margin:0; display:none;"></p>
+                                </div>
+
+                                <!-- Esporta / importa PNG. Sta QUI e non dentro
+                                     #materialArtTools: quel nodo trasloca nella finestra
+                                     grande, e questi comandi devono restare nel pannello.
+                                     Il giro e' completo: si porta fuori una faccia, la si
+                                     ritocca in un editor esterno e la si rimette dentro. -->
+                                <div id="materialPngSection" style="display:flex; flex-direction:column; gap:6px;">
+                                    <div class="section-title" style="font-size:11px; margin:0;"
+                                        data-i18n="matpng.title">Esporta e importa PNG</div>
+                                    <div class="btn-group" id="materialPngBtnRow"
+                                        style="grid-template-columns:1fr; margin-top:0;">
+                                        <button class="btn btn-secondary" id="materialPngExportBtn"
+                                            style="padding:6px; font-size:11px;"
+                                            data-i18n="matpng.export" data-i18n-title="matpng.exportTitle"
+                                            title="Salva la faccia attiva come immagine PNG">Esporta PNG</button>
+                                        <!-- Sei facce sono sei file e i browser bloccano i
+                                             download multipli: questo bottone si mostra solo
+                                             in modalita' "6 facce" e produce un solo ZIP. -->
+                                        <button class="btn btn-secondary" id="materialPngExportAllBtn"
+                                            style="padding:6px; font-size:11px; display:none;"
+                                            data-i18n="matpng.exportAll" data-i18n-title="matpng.exportAllTitle"
+                                            title="Salva le sei facce in un archivio ZIP">Esporta tutte (ZIP)</button>
+                                    </div>
+                                    <label class="hint-text" for="materialPngImportInput"
+                                        data-i18n="matpng.import">Importa PNG</label>
+                                    <input type="file" id="materialPngImportInput" accept="image/png,image/*"
+                                        class="field-file" data-i18n-title="matpng.importTitle"
+                                        title="Sostituisci la faccia attiva con un PNG modificato fuori">
+                                    <p class="hint-text" id="materialPngStatus" style="margin:0; display:none;"></p>
+                                </div>
                             </div>
 
                             <!-- Host dell'anteprima in tinta unita: materialDrawSection

@@ -286,6 +286,22 @@ run "Guida i18n: testo dal dizionario (Node)" node tests/test_help_i18n.mjs
 # 4d. Scrittore ZIP: archivio valido, verificato anche da Python zipfile.
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 
+# 4e. Texture AI in pixel art. Due meta' che non si sovrappongono:
+#     - l'ESPANSORE delle ops 2D vive solo in JS (la tela sta nel browser, non
+#       c'e' un consumatore server-side come per le ops dei voxel: nessuna
+#       parita' da mantenere, per scelta);
+#     - il SERVER valida solo la forma della risposta AI e costruisce il prompt.
+run "Ops 2D pixel art (Node)" node tests/test_pixel_ops.mjs
+run "Texture AI: prompt, normalizzazione e /api/texture" python3 tests/test_texture_ai.py
+
+# 4e-bis. Le due decisioni del PANNELLO: quali facce generare e dove finisce cio'
+#     che l'AI ha risposto. Un errore qui e' invisibile - si legge come "mi ha
+#     rifatto una faccia che non gli avevo chiesto" o "ha cancellato il disegno"
+#     molti clic dopo. L'ambito scelto e' un LIMITE: una faccia in piu' nella
+#     risposta non va applicata, e una faccia nominata ma NON disegnata
+#     (painted 0) va scartata invece di riversata, o cancella cio' che c'era.
+run "Texture AI: facce e destinazioni (Node)" node tests/test_material_ai.mjs
+
 # 5. La build rigenera ui/index.html e il bundle e' sintatticamente valido.
 run "Build UI e sintassi bundle" bash -c '
   node ui/build.mjs >/dev/null || exit 1

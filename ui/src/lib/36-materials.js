@@ -1313,6 +1313,9 @@
                 // senza, un load ritardato ridipingerebbe la tela del form
                 // successivo. Stesso contatore di switchActiveFace.
                 _artLoadGen++;
+                resetMaterialAiState();
+                setMaterialAiStatus('');
+                setMaterialPngStatus('');
                 // Anteprima: rimpicciolisci subito (niente delay: il form non c'e'
                 // piu') e ferma un eventuale drag rimasto appeso.
                 if (_preview) {
@@ -1368,6 +1371,34 @@
                         b.classList.toggle('active', b.dataset.source === src);
                     });
                 }
+                refreshMaterialAiUI();
+                refreshMaterialPngUI();
+            }
+
+            // L'ambito e il contesto esistono solo con sei facce: con una texture unica
+            // non c'e' ne' un ambito da scegliere ne' altre facce da guardare, e tre
+            // comandi inerti fanno sospettare che siano loro a non funzionare.
+            // #materialAiSection sta dentro #materialDrawSection, quindi in tinta unita
+            // sparisce da se' insieme alla tela.
+            function refreshMaterialAiUI() {
+                const six = (_formState.faceMode === 'six');
+                const scopeRow = document.getElementById('materialAiScopeRow');
+                if (scopeRow) scopeRow.style.display = six ? 'flex' : 'none';
+                const ctxRow = document.getElementById('materialAiContextRow');
+                if (ctxRow) ctxRow.style.display = six ? 'flex' : 'none';
+                const seg = document.getElementById('materialAiScopeSeg');
+                if (seg) {
+                    seg.querySelectorAll('.seg-btn').forEach(b => {
+                        b.classList.toggle('active', b.dataset.aiscope === _matAi.scope);
+                    });
+                }
+                const pick = document.getElementById('materialAiFacePick');
+                if (pick) {
+                    pick.style.display = (six && _matAi.scope === 'choose') ? 'flex' : 'none';
+                    pick.querySelectorAll('[data-aiface]').forEach(b => {
+                        b.classList.toggle('active', _matAi.pick.indexOf(b.dataset.aiface) >= 0);
+                    });
+                }
             }
 
             function setFormSource(src) {
@@ -1407,6 +1438,20 @@
                     activeFace: 'px'
                 };
                 _art.faceBuffers = null;
+                // La richiesta precedente non si eredita: e' del materiale che si era
+                // aperto prima, e ritrovarla su un altro fa generare la texture
+                // sbagliata con un clic solo.
+                resetMaterialAiState();
+                setMaterialAiStatus('');
+                // Anche la riga di stato del PNG: "Faccia sostituita" riferita al
+                // materiale di prima sarebbe una conferma per un'altra faccia.
+                setMaterialPngStatus('');
+                const pngInEl = document.getElementById('materialPngImportInput');
+                if (pngInEl) pngInEl.value = '';
+                const aiPromptEl = document.getElementById('materialAiPrompt');
+                if (aiPromptEl) aiPromptEl.value = '';
+                const aiCtxEl = document.getElementById('materialAiContextToggle');
+                if (aiCtxEl) aiCtxEl.checked = true;
 
                 const setSlider = (id, val) => {
                     const el = document.getElementById(id);
@@ -2715,6 +2760,436 @@
                 refreshFormPreview();
             }
 
+            // --- esporta / importa PNG ------------------------------------------------
+            // Il giro completo: si porta una faccia fuori, la si ritocca in Aseprite o
+            // Photoshop e la si rimette dentro. Il ritorno passa dalla TELA, non da un
+            // ramo suo: un'immagine reimportata deve restare ridisegnabile pixel per
+            // pixel e annullabile con Ctrl+Z, esattamente come un tratto di pennello.
+            // Metterla direttamente in pendingTexture darebbe un blocco intoccabile,
+            // che e' il difetto che l'import da file aveva prima del ricampionamento
+            // nella tela.
+            //
+            // Il nome del file segue il nome del materiale, cosi' sei facce scaricate
+            // insieme si riconoscono senza aprirle. Si passa da una sanificazione
+            // perche' il nome e' testo libero e '/' o ':' dentro un nome di file (o di
+            // voce ZIP) sono un percorso, non un carattere.
+            function materialPngBaseName() {
+                const el = document.getElementById('materialName');
+                const raw = (el && el.value ? el.value : '').trim();
+                const safe = raw.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+                return safe || 'texture';
+            }
+
+            function setMaterialPngStatus(msg) {
+                const el = document.getElementById('materialPngStatus');
+                if (!el) return;
+                el.textContent = msg || '';
+                el.style.display = msg ? 'block' : 'none';
+            }
+
+            // Il data-URL PNG di una faccia. La faccia attiva si legge dalla TELA (e'
+            // la sorgente autorevole: il buffer viene riscritto solo alla fine del
+            // tratto), le altre dal loro buffer -- e li' lo snapshot ha la precedenza
+            // sulla texture, la stessa regola di switchActiveFace. Prendere buf.tex
+            // quando esiste uno snap piu' recente esporterebbe il disegno vecchio.
+            function materialPngFaceData(fk) {
+                const isActive = (_formState.faceMode !== 'six') || (fk === _formState.activeFace);
+                if (isActive && _art.canvas && _art.ctx) {
+                    try {
+                        return textureFromCanvasCtx(_art.canvas, _art.ctx).data;
+                    } catch (e) { /* tela illeggibile: si prova sotto */ }
+                }
+                const buf = (!isActive && _art.faceBuffers) ? _art.faceBuffers[fk] : null;
+                if (buf && buf.snap && buf.snap.data) {
+                    try {
+                        const cv = document.createElement('canvas');
+                        cv.width = buf.snap.w; cv.height = buf.snap.h;
+                        cv.getContext('2d').putImageData(buf.snap.data, 0, 0);
+                        return cv.toDataURL('image/png');
+                    } catch (e) { /* si prova la texture */ }
+                }
+                if (buf && buf.tex && buf.tex.data) return buf.tex.data;
+                // Una faccia mai toccata mostra la texture del materiale: la stessa
+                // ricaduta di textureForFace, cosi' l'esportazione riflette il cubo.
+                const pend = _formState.pendingTexture;
+                return (pend && pend.data) ? pend.data : null;
+            }
+
+            function exportActiveFacePng() {
+                const six = (_formState.faceMode === 'six');
+                const fk = six ? _formState.activeFace : MATERIAL_FACE_KEYS[0];
+                const data = materialPngFaceData(fk);
+                if (!data) { setMaterialPngStatus(t('matpng.errRead')); return; }
+                let bytes;
+                try { bytes = dataUrlToBytes(data); } catch (e) {
+                    setMaterialPngStatus(t('matpng.errRead'));
+                    return;
+                }
+                const name = materialPngBaseName() + (six ? '_' + fk : '') + '.png';
+                downloadBlob(new Blob([bytes], { type: 'image/png' }), name);
+                setMaterialPngStatus('');
+            }
+
+            // Sei facce sono sei file, e i browser bloccano i download multipli (e'
+            // lo stesso motivo per cui l'export OBJ con texture diventa un archivio):
+            // quindi un solo ZIP, con la sigla della faccia nel nome.
+            function exportAllFacesZip() {
+                const files = [];
+                const base = materialPngBaseName();
+                MATERIAL_FACE_KEYS.forEach(fk => {
+                    const data = materialPngFaceData(fk);
+                    if (!data) return;
+                    try {
+                        files.push({ name: base + '_' + fk + '.png', data: dataUrlToBytes(data) });
+                    } catch (e) { /* faccia illeggibile: si esportano le altre */ }
+                });
+                if (!files.length) { setMaterialPngStatus(t('matpng.errRead')); return; }
+                // Nome neutro come gli altri export (tex_<id>_<faccia>.png,
+                // VoxelAI_Pack_<data>.zip): i nomi di file non si traducono, e una
+                // parola italiana qui sarebbe l'unica del repo.
+                downloadBlob(createZipBlob(files), base + '_faces.zip');
+                setMaterialPngStatus(t('matpng.exportedZip', { n: files.length }));
+            }
+
+            // Sostituisce la faccia attiva con un PNG ritoccato fuori. Ricalca il ramo
+            // attivo di materialAiApplyFace, e non per somiglianza: e' la sequenza che
+            // rende la modifica una modifica come le altre (snapshot -> tela -> commit).
+            function importPngIntoActiveFace(file) {
+                if (!file) return;
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    const iw = img.naturalWidth || img.width;
+                    const ih = img.naturalHeight || img.height;
+                    if (!iw || !ih) { setMaterialPngStatus(t('matpng.errRead')); return; }
+                    // Un loadArtFromTexture ancora in volo riscriverebbe la tela un
+                    // istante dopo, cancellando l'immagine appena importata.
+                    _artLoadGen++;
+                    const side = artSelectedSize();
+                    const tw = _art.canvas ? _art.canvas.width : side;
+                    const th = _art.canvas ? _art.canvas.height : side;
+                    // pushArtUndo PRIMA di ensureArtCtx: assegnare width/height AZZERA
+                    // il canvas, quindi uno snapshot preso dopo sarebbe una tela vuota e
+                    // Ctrl+Z riporterebbe al nulla invece che al disegno precedente.
+                    // artRestore ripristina le dimensioni dello snapshot, percio'
+                    // annullare attraverso un cambio di lato resta sicuro.
+                    pushArtUndo();
+                    const ctx = ensureArtCtx(tw, th);
+                    if (!ctx) { setMaterialPngStatus(t('matpng.errRead')); return; }
+                    // Niente interpolazione: su pixel art sfocherebbe i bordi, ed e'
+                    // proprio il ritocco esterno che si vuole conservare nitido.
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.clearRect(0, 0, tw, th);
+                    ctx.drawImage(img, 0, 0, iw, ih, 0, 0, tw, th);
+                    syncSizeSelectTo(Math.max(tw, th));
+                    layoutArtStage();
+                    commitArtToTexture();
+                    // {size} compare due volte in matpng.resized ("{size}x{size}"),
+                    // quindi quel messaggio dice il vero solo su tela quadrata -- il
+                    // caso normale. Su una tela rettangolare (ci si arriva solo da un
+                    // ritaglio non quadrato) si dice soltanto che la faccia e' cambiata,
+                    // invece di stampare una misura sbagliata.
+                    if (iw !== tw || ih !== th) {
+                        setMaterialPngStatus(tw === th
+                            ? t('matpng.resized', { w: iw, h: ih, size: tw })
+                            : t('matpng.imported'));
+                    } else {
+                        setMaterialPngStatus(t('matpng.imported'));
+                    }
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    setMaterialPngStatus(t('matpng.errRead'));
+                };
+                img.src = url;
+            }
+
+            // "Esporta tutte" ha senso solo con 6 facce. Nascondendolo il riquadro passa
+            // a una colonna: lasciarne due con un bottone solo stamperebbe un buco
+            // largo come il bottone mancante.
+            function refreshMaterialPngUI() {
+                const six = (_formState.faceMode === 'six');
+                const all = document.getElementById('materialPngExportAllBtn');
+                // .btn e' display:flex (centra icona e testo): rimostrarlo con 'block'
+                // gli toglierebbe la centratura.
+                if (all) all.style.display = six ? 'flex' : 'none';
+                const row = document.getElementById('materialPngBtnRow');
+                if (row) row.style.gridTemplateColumns = six ? '1fr 1fr' : '1fr';
+            }
+
+            // --- generazione AI della texture ----------------------------------------
+            // L'AI non riceve pixel e non ne restituisce: scrive OPS COMPATTE (vedi
+            // 37-pixel-ops.js) ed e' `expandPixelOps` a disegnarle qui, sulla tela che
+            // esiste gia'. Cosi' il risultato e' una texture come tutte le altre --
+            // ridisegnabile pixel per pixel un istante dopo -- invece di un'immagine
+            // intoccabile arrivata dalla rete.
+            //
+            // Lo stato sta FUORI da _formState perche' quello viene riscritto per
+            // intero in tre punti (dichiarazione, apertura, chiusura): aggiungerci
+            // campi vorrebbe dire ricordarsene in tutti e tre, e una dimenticanza li'
+            // non da' errore -- solo un ambito che torna in silenzio a "questa faccia".
+            let _matAi = { scope: 'active', pick: [], context: true, busy: false };
+
+            function resetMaterialAiState() {
+                _matAi = { scope: 'active', pick: [], context: true, busy: false };
+            }
+
+            function materialAiUrl() {
+                return (window.__API_BASE__ ? window.__API_BASE__ : '') + '/api/texture';
+            }
+
+            function setMaterialAiStatus(msg) {
+                const el = document.getElementById('materialAiStatus');
+                if (!el) return;
+                el.textContent = msg || '';
+                el.style.display = msg ? 'block' : 'none';
+            }
+
+            // Le facce da generare. Pura di proposito (lo stato arriva come
+            // argomenti): e' una delle due decisioni in cui un errore non si vede
+            // subito -- si manifesta come "mi ha rifatto una faccia che non gli avevo
+            // chiesto" molti clic dopo. Vedi tests/test_material_ai.mjs.
+            //
+            // Con una texture unica non c'e' scelta da fare: la faccia e' `all`, la
+            // stessa chiave che il server e l'espansore usano per quel caso.
+            function materialAiTargets(mode, scope, pick, activeFace) {
+                const active = (MATERIAL_FACE_KEYS.indexOf(activeFace) >= 0)
+                    ? activeFace : MATERIAL_FACE_KEYS[0];
+                if (mode !== 'six') return ['all'];
+                if (scope === 'all') return MATERIAL_FACE_KEYS.slice();
+                if (scope === 'choose') {
+                    const picked = (Array.isArray(pick) ? pick : [])
+                        .filter(fk => MATERIAL_FACE_KEYS.indexOf(fk) >= 0);
+                    // Nessuna spunta valida non e' un'intenzione: si genera quella che
+                    // si sta guardando, invece di non fare niente e far rileggere un
+                    // errore. Ritornare [] qui diventerebbe "l'AI non ha disegnato
+                    // niente" nel messaggio finale, che e' una bugia.
+                    return picked.length ? picked : [active];
+                }
+                return [active];
+            }
+
+            function currentAiTargets() {
+                return materialAiTargets(_formState.faceMode, _matAi.scope,
+                                         _matAi.pick, _formState.activeFace);
+            }
+
+            // Dove finisce cio' che l'AI ha risposto: coppie [facciaReale, chiaveNellaRisposta].
+            // Si itera sulle facce CHIESTE, non su quelle risposte: cosi' l'ambito
+            // scelto dall'utente e' un limite e non un suggerimento, e una faccia in
+            // piu' nella risposta non sovrascrive un disegno che non si voleva rifare.
+            function materialAiPlan(out, targets, activeFace) {
+                const plan = [];
+                if (!out || typeof out !== 'object') return plan;
+                const faces = out.faces, painted = out.painted;
+                if (!faces || typeof faces !== 'object' || !painted) return plan;
+                // painted a 0: faccia nominata e non disegnata. Riversarla cancellerebbe
+                // il disegno che c'era, che e' peggio del non aver generato niente.
+                const has = k => !!faces[k] && painted[k] > 0;
+                (Array.isArray(targets) ? targets : []).forEach(fk => {
+                    if (has(fk)) { plan.push([fk, fk]); return; }
+                    // Una texture sola in risposta a una richiesta di sei facce e' il
+                    // caso piu' frequente: si applica a tutte quelle chieste, invece di
+                    // lasciare la tela intatta senza dire perche'.
+                    if (has('all')) { plan.push([fk, 'all']); return; }
+                    // Texture unica: la tela e' una sola, quindi qualunque cosa abbia
+                    // disegnato E' la texture, anche se l'ha battezzata `pz`. Il
+                    // ripiego vale SOLO qui: su sei facce, prendere il disegno di una
+                    // faccia per un'altra sarebbe rispondere a una domanda diversa.
+                    if (fk === 'all') {
+                        const any = Object.keys(faces).find(has);
+                        if (any) plan.push([fk, any]);
+                    }
+                });
+                return plan;
+            }
+
+            // Pixel RGBA di una faccia, per il contesto. Tre sorgenti in ordine di
+            // preferenza: la tela visibile (faccia attiva), lo snapshot ImageData
+            // (faccia gia' visitata), il PNG della texture (faccia mai aperta: lo
+            // snapshot e' lazy, quindi va decodificata -- ed e' l'unica ragione per cui
+            // questa funzione e' asincrona anche quando non le serve).
+            function materialAiFacePixels(fk) {
+                if (_formState.faceMode !== 'six' || fk === _formState.activeFace) {
+                    if (!_art.ctx || !_art.canvas) return Promise.resolve(null);
+                    try {
+                        const im = _art.ctx.getImageData(0, 0, _art.canvas.width, _art.canvas.height);
+                        return Promise.resolve({ data: im.data, w: im.width, h: im.height });
+                    } catch (e) { return Promise.resolve(null); }
+                }
+                const buf = _art.faceBuffers && _art.faceBuffers[fk];
+                if (buf && buf.snap && buf.snap.data) {
+                    return Promise.resolve({
+                        data: buf.snap.data.data, w: buf.snap.w, h: buf.snap.h
+                    });
+                }
+                if (!buf || !buf.tex || !buf.tex.data) return Promise.resolve(null);
+                return new Promise(resolve => {
+                    const img = new Image();
+                    img.onload = () => {
+                        try {
+                            const cv = document.createElement('canvas');
+                            cv.width = img.width; cv.height = img.height;
+                            const c = cv.getContext('2d');
+                            c.imageSmoothingEnabled = false;
+                            c.drawImage(img, 0, 0);
+                            const im = c.getImageData(0, 0, cv.width, cv.height);
+                            resolve({ data: im.data, w: im.width, h: im.height });
+                        } catch (e) { resolve(null); }
+                    };
+                    // Faccia illeggibile: si genera senza il suo contesto, che e' molto
+                    // meglio che non generare.
+                    img.onerror = () => resolve(null);
+                    img.src = buf.tex.data;
+                });
+            }
+
+            // Il blocco di contesto per il prompt: le facce GIA' disegnate che NON si
+            // stanno rigenerando. Includere anche quelle in rigenerazione sarebbe
+            // controproducente -- l'AI copierebbe il disegno che le si sta chiedendo di
+            // rifare.
+            function materialAiContext(targets) {
+                if (!_matAi.context || _formState.faceMode !== 'six') {
+                    return Promise.resolve(null);
+                }
+                const others = MATERIAL_FACE_KEYS.filter(fk => targets.indexOf(fk) < 0);
+                return Promise.all(others.map(fk =>
+                    materialAiFacePixels(fk).then(px => ({ fk: fk, px: px }))
+                )).then(list => {
+                    const ctx = {};
+                    list.forEach(({ fk, px }) => {
+                        if (!px || !px.w || !px.h) return;
+                        // Una faccia interamente trasparente non e' contesto: e' una
+                        // faccia vuota, e descriverla occupa righe di prompt per dire
+                        // "qui non c'e' niente".
+                        let opaque = false;
+                        for (let i = 3; i < px.data.length; i += 4) {
+                            if (px.data[i] > 7) { opaque = true; break; }
+                        }
+                        if (!opaque) return;
+                        ctx[fk] = pixelContextBlock(fk, pixelsToRleRows(px.data, px.w, px.h));
+                    });
+                    return Object.keys(ctx).length ? ctx : null;
+                });
+            }
+
+            // Scrive una faccia generata. Quella attiva passa dalla TELA (con snapshot
+            // per l'annulla: una generazione e' una modifica come un'altra e deve
+            // potersi annullare); le altre vanno dritte nel loro buffer. Lo snap va
+            // azzerato insieme alla tex, o al prossimo switch verrebbe ripristinato il
+            // disegno vecchio -- lo snapshot ha la precedenza sulla texture.
+            function materialAiApplyFace(fk, buf, w, h) {
+                const isActive = (_formState.faceMode !== 'six') || (fk === _formState.activeFace);
+                if (isActive) {
+                    const ctx = ensureArtCtx(w, h);
+                    if (!ctx) return false;
+                    pushArtUndo();
+                    pixelBufferToCtx(ctx, buf, w, h);
+                    syncSizeSelectTo(Math.max(w, h));
+                    layoutArtStage();
+                    commitArtToTexture();
+                    return true;
+                }
+                ensureFaceBuffers();
+                let tex;
+                try { tex = pixelBufferToTexture(buf, w, h); } catch (e) { return false; }
+                const b = _art.faceBuffers[fk] || { undo: [], redo: [], tex: null, snap: null };
+                b.tex = { data: tex.data, w: tex.w, h: tex.h, color: tex.color, alpha: !!tex.alpha };
+                b.snap = null;
+                b.undo = [];
+                b.redo = [];
+                _art.faceBuffers[fk] = b;
+                return true;
+            }
+
+            function generateMaterialTexture() {
+                if (_matAi.busy) return;
+                const promptEl = document.getElementById('materialAiPrompt');
+                const desc = promptEl ? promptEl.value.trim() : '';
+                if (!desc) {
+                    setMaterialAiStatus(t('matai.errNoPrompt'));
+                    if (promptEl) promptEl.focus();
+                    return;
+                }
+                // La tela deve esistere prima di chiedere: e' lei a dettare la
+                // dimensione, e senza si genererebbe su una misura inventata.
+                if (!_art.canvas || !_art.ctx) {
+                    newArtCanvas(artSelectedSize(), artBackgroundColor());
+                    if (!_art.canvas) { setMaterialAiStatus(t('matai.errNoCanvas')); return; }
+                }
+                const targets = currentAiTargets();
+                const size = Math.max(_art.canvas.width, _art.canvas.height);
+                const btn = document.getElementById('materialAiGenerateBtn');
+                const origHtml = btn ? btn.innerHTML : '';
+                _matAi.busy = true;
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner"></span> ' + t('matai.working');
+                }
+                setMaterialAiStatus(t('matai.working'));
+
+                materialAiContext(targets)
+                    .then(context => fetch(materialAiUrl(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            prompt: desc, faces: targets, size: size, context: context
+                        })
+                    }))
+                    .then(res => res.json().catch(() => ({})).then(body => {
+                        if (res.ok) return body;
+                        const ex = new Error(body.error || t('matai.errGeneric'));
+                        ex.needsCookies = body.needsCookies === true;
+                        ex.warnings = Array.isArray(body.warnings) ? body.warnings : [];
+                        throw ex;
+                    }))
+                    .then(data => {
+                        // forceSize: la tela esiste gia' (e le altre facce sono di quel
+                        // lato). Una risposta su un lato diverso andrebbe ricampionata,
+                        // e un cubo con una faccia di misura diversa si legge come
+                        // "quella texture non si e' caricata".
+                        const out = expandPixelOps(data, { size: size, forceSize: true });
+                        const plan = materialAiPlan(out, targets, _formState.activeFace);
+                        // La faccia attiva per ULTIMA: le altre passano da un canvas
+                        // d'appoggio (pixelBufferToTexture) e non toccano la tela, ma
+                        // applicare prima l'attiva chiamerebbe commitArtToTexture con i
+                        // buffer delle altre ancora vecchi.
+                        plan.sort((a, b) => (a[0] === _formState.activeFace ? 1 : 0)
+                                          - (b[0] === _formState.activeFace ? 1 : 0));
+                        let done = 0;
+                        plan.forEach(pair => {
+                            if (materialAiApplyFace(pair[0], out.faces[pair[1]], out.w, out.h)) done++;
+                        });
+                        if (!done) throw new Error(t('matai.errEmpty'));
+                        refreshSourceUI();
+                        refreshFormPreview();
+                        // Due chiavi invece di una con {n}: in italiano "1 facce" e'
+                        // sbagliato, e il segnaposto da solo non sa fare il plurale.
+                        let msg = (done === 1)
+                            ? t('matai.done') : t('matai.doneMany', { n: done });
+                        // Gli avvisi dell'espansore sono CODICI, non frasi (vedi
+                        // 37-pixel-ops.js): qui interessa solo quanti comandi sono
+                        // caduti. Senza dirlo, una faccia mezza disegnata sembra
+                        // una texture riuscita e si cerca il difetto nel disegno.
+                        const ignored = (out.warnings || []).length;
+                        if (ignored) msg += ' - ' + t('matai.warnIgnored', { n: ignored });
+                        setMaterialAiStatus(msg);
+                    })
+                    .catch(err => {
+                        setMaterialAiStatus(t('matai.errPrefix', { error: err.message }));
+                        // Sessione scaduta: le Impostazioni sono il posto dove si
+                        // rimedia, e l'utente non ha modo di indovinarlo da un errore.
+                        if (err.needsCookies && typeof window.openSettingsModal === 'function') {
+                            window.openSettingsModal({ section: 'settingsCookiesSection' });
+                        }
+                    })
+                    .finally(() => {
+                        _matAi.busy = false;
+                        if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+                    });
+            }
+
             // --- salvataggio --------------------------------------------------------
             // In modifica SOSTITUISCE: updateMaterial muta la voce esistente, quindi la
             // lista non cresce e i voxel che citavano l'id continuano a citarlo. Il
@@ -3016,6 +3491,51 @@
                         if (b && b.dataset.face) switchActiveFace(b.dataset.face);
                     });
                 }
+
+                // --- generazione AI ------------------------------------------------
+                const aiScope = document.getElementById('materialAiScopeSeg');
+                if (aiScope) {
+                    aiScope.addEventListener('click', ev => {
+                        const b = ev.target.closest ? ev.target.closest('.seg-btn') : null;
+                        if (!b || !b.dataset.aiscope) return;
+                        _matAi.scope = b.dataset.aiscope;
+                        // Passando a "scegli" con nessuna spunta si parte dalla faccia
+                        // che si sta guardando: un elenco tutto spento sembra un
+                        // pannello rotto, e generare "niente" non e' un'intenzione.
+                        if (_matAi.scope === 'choose' && !_matAi.pick.length) {
+                            _matAi.pick = [_formState.activeFace];
+                        }
+                        refreshMaterialAiUI();
+                    });
+                }
+                const aiPick = document.getElementById('materialAiFacePick');
+                if (aiPick) {
+                    aiPick.addEventListener('click', ev => {
+                        const b = ev.target.closest ? ev.target.closest('[data-aiface]') : null;
+                        if (!b || !b.dataset.aiface) return;
+                        const fk = b.dataset.aiface;
+                        const i = _matAi.pick.indexOf(fk);
+                        if (i >= 0) _matAi.pick.splice(i, 1); else _matAi.pick.push(fk);
+                        refreshMaterialAiUI();
+                    });
+                }
+                on('materialAiContextToggle', 'change', ev => {
+                    _matAi.context = !!(ev.target && ev.target.checked);
+                });
+                on('materialAiGenerateBtn', 'click', () => generateMaterialTexture());
+
+                // --- esporta / importa PNG -----------------------------------------
+                on('materialPngExportBtn', 'click', () => exportActiveFacePng());
+                on('materialPngExportAllBtn', 'click', () => exportAllFacesZip());
+                on('materialPngImportInput', 'change', ev => {
+                    const f = ev.target && ev.target.files && ev.target.files[0];
+                    if (f) importPngIntoActiveFace(f);
+                    // Il valore si azzera SEMPRE, anche a import riuscito: rimettere
+                    // dentro lo stesso file dopo averlo ritoccato di nuovo fuori e'
+                    // proprio il caso d'uso, e col percorso invariato il browser non
+                    // emette un secondo 'change'.
+                    ev.target.value = '';
+                });
 
                 on('materialFillTolerance', 'input', () => {
                     const el = document.getElementById('materialFillToleranceValue');

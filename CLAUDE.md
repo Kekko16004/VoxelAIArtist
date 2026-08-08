@@ -407,6 +407,43 @@ una promise e l'export sparisce in silenzio, senza download e senza `restore()`)
 **L'invariante 6 resta valido anche con la texture**: `map` moltiplicato per COLOR_0
 rida' lo stesso modello quasi nero.
 
+### Texture AI (`#materialAiSection` + `#materialPngSection`)
+La texture si fa generare come i voxel: **ops compatte**, non un PNG. Il formato
+2D vive in `ui/src/lib/37-pixel-ops.js` (`fill` / `rect` / `line` / `set` / `del` /
+`mirror` / `noise`), il prompt in `assets/prompts/prompt-pixel.txt`, l'endpoint e'
+`POST /api/texture`. Un colore puo' essere `-` (trasparente): le parti invisibili
+sono normali in una texture, e tenerle come valore di QUALUNQUE op evita un'op
+"buca" dedicata. L'origine e' **in alto a sinistra** come un'immagine, non in
+basso come i voxel.
+- `expandPixelOps` accetta di proposito **piu' forme** (`faces` con lista, con
+  `{ops}`, con stringa multiriga, `ops` alla radice, sinonimi `facce`/`comandi`/
+  `w`/`h`, e una **palette dichiarata dentro la faccia** che si somma a quella
+  comune). Rifiutarne una costerebbe all'utente una rigenerazione per una virgola.
+  La palette per-faccia e' stata trovata **in GUI reale**: era ignorata in
+  silenzio, le chiavi non risolvevano e la faccia tornava vuota — che si legge
+  come "non ha generato niente", non come "ha risposto in un altro modo".
+- **Gli avvisi sono CODICI, non frasi** (`badCoords`, `badColor`, `unknownCmd`,
+  `truncated`, `noOps`, `emptyAnswer`): il modulo non ha DOM e non sa che lingua
+  parla l'utente. Traduce chi chiama (`matai.warnIgnored`). La guardia i18n li
+  contava, e aveva ragione.
+- `painted` per faccia esiste perche' chi chiama **non sovrascriva un disegno con
+  una tela vuota**: una faccia nominata e non disegnata va scartata, o cancella
+  cio' che c'era.
+- Con ambito "tutte" il **contesto non si manda**: sarebbe ripetere all'AI cio'
+  che le si sta chiedendo di rifare, a pagamento.
+- Generazione e import PNG prendono uno **snapshot di annullamento**, e nell'import
+  va preso PRIMA di `ensureArtCtx`: assegnare `width`/`height` azzera il canvas,
+  quindi uno snapshot dopo sarebbe una tela vuota.
+- Nel **pannello** l'annulla e' il bottone: la scorciatoia Ctrl+Z della tela e'
+  agganciata solo a **finestra grande aperta**. E un clic sulla tela per "darle il
+  fuoco" **dipinge** — in una prova automatica falsa il conteggio dei pixel.
+- Gli interruttori sono `.switch` con l'`<input>` a `opacity:0; width:0; height:0`
+  (tutti e 15 dell'app): in Playwright si clicca la `.slider`, o si aspetta la
+  visibilita' fino allo scadere del tempo.
+`.superpowers/check_texture_ai.py` prova le due sezioni in GUI reale (49 controlli)
+intercettando `/api/texture` con `page.route`: niente rete, niente cookie, niente
+quota. E' li' che sono emersi i tre punti qui sopra.
+
 ### Robust JSON recovery
 LLM output is unreliable, so `extract_and_parse_json()` → `extract_json_candidate()` → `parse_with_recovery()` handle: fenced ```json blocks (including unterminated ones), brace/bracket balancing, unescaped inner quotes (`repair_unescaped_quotes`), and control-char cleanup. Preserve this pipeline when touching parsing.
 
