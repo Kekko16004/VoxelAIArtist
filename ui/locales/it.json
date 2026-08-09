@@ -699,9 +699,7 @@
   "materials.saveToLibTitle": "Salva questo materiale nella libreria personale, senza aggiungerlo al progetto",
   "materials.previewTitle": "Anteprima",
   "materials.previewHint": "Il cubo mostra la texture come la vedrai sul voxel; la sfera aiuta a leggere ruvidità e metallicità.",
-  "materials.previewDragHint": "Trascina per ruotare · passa sopra per ingrandire",
-  "materials.previewDragTitle": "Trascina per ruotare; al rilascio continua da sola",
-  "materials.previewDragHint": "Trascina per ruotare · passa sopra per ingrandire",
+  "materials.previewDragHint": "Trascina per ruotare · passa sul cubo per ingrandire",
   "materials.previewDragTitle": "Trascina per ruotare; al rilascio continua da sola",
   "materials.cropLabel": "Ritaglio: trascina per scegliere la porzione di immagine da usare.",
   "materials.cropReset": "Tutta l'immagine",
@@ -924,5 +922,14 @@
   "plugins.droppedInvalid": " ({n} scartati non validi)",
   "plugins.errGeneric": "Errore plugin: {msg}",
   "plugins.errPlain": "Errore: {msg}",
-  "plugins.errRunFailed": "esecuzione fallita"
+  "plugins.errRunFailed": "esecuzione fallita",
+  "pixedit.open": "Editor completo",
+  "pixedit.openTitle": "Apri la tela nell'editor di pixel art completo",
+  "pixedit.title": "Editor di pixel art",
+  "pixedit.openTab": "Apri in una scheda",
+  "pixedit.openTabTitle": "Apri l'editor in una scheda del browser",
+  "pixedit.close": "Chiudi",
+  "pixedit.frameTitle": "Tela dell'editor di pixel art",
+  "pixedit.subtitle": "Materiale: {name}",
+  "pixedit.subtitleNoName": "Materiale senza nome"
 }

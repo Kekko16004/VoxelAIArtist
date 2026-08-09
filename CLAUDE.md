@@ -445,7 +445,11 @@ intercettando `/api/texture` con `page.route`: niente rete, niente cookie, nient
 quota. E' li' che sono emersi i tre punti qui sopra.
 
 ### Robust JSON recovery
-LLM output is unreliable, so `extract_and_parse_json()` → `extract_json_candidate()` → `parse_with_recovery()` handle: fenced ```json blocks (including unterminated ones), brace/bracket balancing, unescaped inner quotes (`repair_unescaped_quotes`), and control-char cleanup. Preserve this pipeline when touching parsing.
+LLM output is unreliable, so `extract_and_parse_json()` → `extract_json_candidate()` → `parse_with_recovery()` handle: fenced ```json blocks (including unterminated ones), brace/bracket balancing, unescaped inner quotes (`repair_unescaped_quotes`), and control-char cleanup.
+
+**2D pixel-art generation (`POST /api/texture2d`)** — PixelAIEditor and the parent's material texture AI — uses the same robust parsing (via `extract_and_parse_json`) plus a structural defense against a common AI failure: the model habitually appends `del 0 0 W-1 H-1` (or `fill 0 0 W-1 H-1 -`) believing it "cleans the transparent background", leaving the canvas EMPTY. Measured 2/12 live responses in a real campaign. Prompt prose alone was insufficient (happened twice in two rounds), so `pixelDropSuicidalOps` in both `ui/src/lib/37-pixel-ops.js` (parent) and `PixelAIEditor/ui/src/lib/14-pixel-ops.js` (child) drops a full-canvas wipe op WITH no drawing after it; a wipe followed by real ops is a legitimate restart and is preserved. The guard emits the `wipeDropped` warning code. Validated by `tests/test_pixel_ops.mjs` (9 checks including the cross-check that the child has the same defense).
+
+Preserve this pipeline when touching parsing or pixel-ops expansion.
 
 ### Frontend (`ui/index.html`, ~4300 lines, single file)
 Everything is inline in one HTML file. Major systems:
@@ -548,6 +552,150 @@ Everything is inline in one HTML file. Major systems:
   actually *move* (>40% of arm length, so an arbitrary rotation can't satisfy it) and that
   `walk` reproduces the reference clip key-for-key.
 - **UI shell**: tabbed sidebar (`Genera` / `Vista` / `Disegna` / `Rig`), `.tab-content` scrolls, `.sidebar-footer` pins export/save. `switchTab()` drops back to the `view` tool when leaving `Disegna`. Styling is a dark glassmorphism theme via `:root` CSS custom properties (`--accent-primary`, `--glass-bg`, etc.) with `backdrop-filter` blur and rounded corners.
+
+## PixelAIEditor (`PixelAIEditor/`, app separata)
+
+Editor di pixel art 2D / ritocco foto con generazione AI, con lo **stesso modus
+operandi** di VoxelAIArtist: `main.py` avvia un `ThreadingHTTPServer` locale, apre
+la UI nel browser di sistema (solo modalita' web: non c'e' il ramo Qt), e la
+generazione passa dal client web `gemini` autenticato coi cookie. Si avvia da solo
+con `run.bat` o `python PixelAIEditor/main.py`, e vive **dentro** VoxelAIArtist
+quando si allarga il creatore di materiali.
+
+- **I cookie sono CONDIVISI, le impostazioni no.** `src/settings.py` (del padre)
+  ha ora `COOKIES_APP_NAME` fisso e `set_app_name()` che sposta solo la cartella
+  delle preferenze. Un cookie e' una sessione Google, non una preferenza:
+  legandolo ad `APP_NAME` lo stesso codice vedrebbe `has_cookies: true` servito
+  dal padre e `false` avviato da solo. Gli autosalvataggi invece si separano,
+  perche' la rotazione conta i file **per cartella** e mescolarli farebbe
+  cancellare gli uni per far posto agli altri.
+- **La rotta AI e' `/api/texture2d`, sempre.** Dentro VoxelAIArtist la pagina e'
+  servita dal server del PADRE, dove `/api/texture` esiste gia' **ed e' un'altra
+  cosa** (le facce di un materiale: altro prompt, altro contratto). Chiedere
+  quel nome non darebbe un errore, darebbe una risposta plausibile e sbagliata.
+  Scegliere la rotta in base allo stato del ponte sarebbe peggio: la stretta di
+  mano e' asincrona, quindi una generazione lanciata subito la troverebbe ancora
+  spenta. Il server autonomo accetta **entrambi** i nomi, cosi' il client non
+  deve decidere niente.
+- **Il ponte e' un iframe di pari origine + `postMessage`** (`23-bridge.js` nel
+  figlio, `ui/src/lib/38-pixel-bridge.js` nel padre). Messaggi:
+  `hello` / `load` / `apply` / `applied` / `close`; le facce viaggiano come
+  `{key, dataUrl, w, h}` **nei due versi**, piu' `faceMode`, `active`,
+  `material`. Il ragionamento e' a cubo: si scelgono le facce da dare come
+  contesto all'AI.
+- **Il prompt di generazione (`assets/prompts/prompt-pixel2d.txt`) e' stato
+  riscritto misurando, non a intuito.** Gli arnesi stanno in `.superpowers/`
+  (gitignored): `gen_pixel.py` genera davvero (passa da `ai_answer_text_retrying`,
+  la stessa via dell'app), `render_pixel.mjs` espande col **modulo vero** e stampa
+  metriche oggettive (buchi per flood-fill dal bordo, pixel-filamento, componenti
+  connesse, uso della tela) piu' un PNG da guardare, `ab_pixel.py` fa una campagna
+  A/B alternando vecchio e nuovo **per caso** (il servizio deriva nel tempo: due
+  blocchi separati misurerebbero il momento, non il prompt).
+  Cosa e' emerso, e che non si vede leggendo il codice:
+  - **"invalid json" NON e' una debolezza del parser**: e' il client web di Gemini
+    che instrada la richiesta al suo **generatore di IMMAGINI** e risponde in
+    prosa. Il tempo di risposta e' la spia: **~2-3 s = immagine (fallimento),
+    ~7-19 s = risposta testuale vera**. Si cura inquadrando il compito come dati
+    ("sei un COMPILATORE di pixel art... NON generare un'immagine"): 6/6 JSON
+    validi contro 4/6.
+  - `line` produce un **filamento di 1 px**: una spada disegnata con `line` esce
+    come un graffio (era esattamente il difetto riportato). I corpi vanno con
+    `fill` di spessore >= 3.
+  - **`mirror x` ribalta sulla COLONNA CENTRALE DELLA TELA, non sul centro del
+    soggetto.** Un soggetto disegnato tutto a sinistra diventa DUE copie
+    affiancate; uno disegnato a tutta larghezza esce doppio e spaccato in mezzo
+    (misurato: 72 buchi, 2 pezzi). La regola nel prompt e' quindi condizionata, e
+    dice di non usarlo nel dubbio.
+  - Le metriche `pieces` / `strayPct` vanno lette **insieme**: una punta a scaletta
+    stacca 1-2 pixel in diagonale (4-vicini), quindi `pieces=3` con `strayPct=0.5%`
+    e' una punta affilata, non un disegno rotto.
+  - **La richiesta dell'utente deve restare l'ULTIMA riga del template**
+    (`tests/test_pixelai_server.py` lo pretende): un promemoria messo *dopo* la
+    seppellisce. Il promemoria anti-immagine va quindi *prima* del segnaposto.
+- **Il bundle si costruisce come quello del padre** (`node PixelAIEditor/ui/build.mjs`:
+  `annotate-i18n.mjs` -> concatena i moduli di `manifest.json` -> sostituisce
+  `<!--BUNDLE-->`), ma qui il segnaposto e' a **colonna 0**, quindi i moduli si
+  rientrano di **4 spazi** e non di 12.
+- I moduli `lib/NN-*.js` sono frammenti di **una sola closure**: niente
+  import/export, niente IIFE. Quindi un `const` di primo livello **ripetuto in
+  due moduli e' un SyntaxError al caricamento** e la pagina resta dipinta e
+  completamente morta, senza un messaggio. `PixelAIEditor/.check_modules.mjs` e'
+  la guardia.
+- Vale la stessa regola i18n del padre, **compresi i nomi costruiti da JS**: i
+  livelli ricordano da dove viene il loro nome (`autoKey` / `autoArgs`) invece di
+  tenere la stringa risolta. Serve a due cose: il primo livello nasce **prima**
+  di `bootI18n`, dove `t()` ritorna la chiave nuda per contratto (e infatti in
+  GUI si presentava come `pix.layer.itemName`), e un nome che l'utente non ha
+  scritto e' una didascalia, che cambiando lingua deve cambiare. Tre trappole,
+  tutte trovate coi clic veri:
+  - `autoKey`/`autoArgs` **viaggiano nello snapshot** della cronologia: un
+    annulla che li perdesse congelerebbe "Livello 2" in italiano per sempre.
+  - Gli argomenti possono essere a loro volta nomi automatici
+    (`resolveAutoArgs`): l'etichetta di una copia ha **due** parti traducibili,
+    e trattandone una sola l'elenco restava scritto in due lingue insieme
+    ("Livello 3 copia" accanto a "Layer 3"). Un argomento che non e' automatico
+    passa intatto — ed e' cosi' che "Cielo copia" diventa "Cielo copy".
+  - `relabelAutoLayers` sta **prima** di `refreshLayerList` in `I18N_REDRAW`:
+    prima si riderivano i nomi, poi si ridisegnano le righe.
+- Il caso che ha motivato l'app — "rendere trasparente" un'immagine — e'
+  `filtRemoveBg()` in `13-filters.js`: riempimento dai bordi con tolleranza,
+  solo-bordi e sfumatura, con default il pixel in alto a sinistra del composito.
+
+### Trasformazione della selezione (`PixelAIEditor/ui/src/lib/09b-transform.js`)
+Con lo strumento **Sposta** il primo trascinamento apre una **sessione**: scatola
+orientata con 8 maniglie, che sposta, ridimensiona e ruota. Non e' uno strumento
+a parte — e' lo stesso Sposta di prima, che ora tiene uno stato (`_xf`) fra un
+gesto e l'altro invece di applicare e dimenticare.
+- **Il modificatore e' Shift, e ce n'e' uno solo.** Alt e' **globalmente il
+  contagocce** (`strokeBegin`: `const tool = ev.altKey ? 'picker' : currentTool`),
+  quindi tenerlo premuto non arriverebbe mai qui. Shift ha **un** significato,
+  LIBERA: libera le proporzioni sul ridimensionamento e lo scatto di 15 gradi
+  sulla rotazione. Il difetto da evitare e' dargli due significati diversi nei due
+  gesti — chi lo tiene premuto non sa quale dei due sta facendo, e non c'e' un
+  secondo modificatore per distinguerli.
+- **Il default e' vincolato**, non libero: proporzioni mantenute e angolo a
+  scatti. E' il verso giusto perche' il vincolo e' quello che si vuole quasi
+  sempre e liberarlo e' l'eccezione (ed e' cio' che fa paint.net).
+- **La scatola non si arrotonda**: `screenToPixelF` (05-render.js) da' coordinate
+  frazionarie. Arrotondando i punti del puntatore, a zoom 1 la rotazione
+  scatterebbe di parecchi gradi fra un pixel e l'altro. Si arrotonda alla FINE,
+  quando si stampa.
+- **Ogni gesto ricampiona la sorgente ORIGINALE (`src`), non il risultato
+  precedente.** Ridimensionare tre volte non deve accumulare tre
+  ricampionamenti: una pixel art passata due volte da un nearest a fattori non
+  interi diventa un reticolo irregolare, e non si torna indietro.
+- **La soglia di presa segue lo ZOOM** (`xformHitTol` = `max(9/zoom, ...)`): e' una
+  distanza in pixel di SCHERMO. Fissarla in pixel di documento la renderebbe
+  gigante a zoom 1 e irraggiungibile a zoom 32. L'anello di rotazione sta **fuori**
+  dalla scatola, fra `tol` e `3*tol` da uno spigolo: dentro la scatola lo stesso
+  punto e' una maniglia di scala, e sono le due prese piu' vicine fra loro.
+- **`overlayNow` disegna le formiche PRIMA di `drawToolOverlay`.** Le maniglie
+  stanno sul bordo della selezione, cioe' esattamente dove passano le formiche:
+  disegnandole prima le si copre. In GUI reale l'angolo alto-sinistro non si
+  vedeva **mai** — e' l'unico dei quattro che cade su un pixel *selezionato* (la
+  scatola stringe la selezione, quindi gli altri tre cadono appena fuori) e quindi
+  l'unico su cui passa una formica. Invisibile ai test unitari, invisibile
+  leggendo il codice.
+- Le formiche si spengono **solo durante un trascinamento**
+  (`xformSuppressAnts`): a riposo servono a dire che la selezione c'e' ancora.
+- La cronologia e' agganciata dall'esterno: `pushHistory()` chiama per prima cosa
+  `xformBeforeExternalEdit()` (funzione **issata**, quindi 06-history.js puo'
+  chiamarla pur venendo prima), e `undo`/`redo`/`resetHistory` chiudono la
+  sessione. Un gesto = un annullamento: Ctrl+Z toglie l'ultimo ridimensionamento,
+  non la sessione intera.
+- `.superpowers/check_transform.py` (gitignored) la prova in **GUI reale**, 44
+  controlli. Tre trappole di misura, tutte costate una tornata di falsi negativi:
+  lo zoom non e' quello dei sorgenti (`let zoom = 8`) ma quello **adattato alla
+  finestra** (misurato 12 su 64x64), quindi ogni soglia si ricalcola dal riquadro
+  vero; le formiche **lampeggiano** a 120 ms, quindi un pixel letto due volte da'
+  due colori e si misura **una** fotografia sola; le maniglie sono blocchi 3x3 di
+  pixel di documento. La cura: si conta il **rosso** (`#FF0000` non compare
+  altrove) e si misura a **overlay spento** (`visibility: hidden` su
+  `#pixOverlay`), legittimo perche' l'overlay non e' il disegno e non finisce in
+  un export. Le maniglie si controllano a parte con `grab(overlay=True)` — che e'
+  anche l'unico modo di distinguere "la maniglia non c'e'" da "c'e' ma qualcuno le
+  sta sopra". Prevedere quali colonne l'overlay eroda **non funziona**: i valori
+  attesi cambiano a ogni ritocco di geometria.
 
 ## Conventions & gotchas
 - **`ui/index.html` is generated, but it is NOT disposable.** `node ui/build.mjs`

@@ -1085,9 +1085,10 @@
         /* Anteprima live: un cubo/sfera con il materiale in costruzione.
            Il canvas ha un renderer THREE dedicato (vedi 36-materials.js), perche'
            quello della scena e' legato al viewport principale.
-           Hover: si ingrandisce con transizione lenta; il leave e' ritardato
-           in JS cosi' il bordo non oscilla grande/piccola. Drag sul canvas:
-           ruota a mano; al rilascio riprende la rotazione automatica. */
+           Hover SUL CANVAS (non sul riquadro: comprende la colonna dei testi a
+           destra, e li' il cursore non e' sul cubo): si ingrandisce il solo
+           canvas con transizione lenta. Drag sul canvas: ruota a mano; al
+           rilascio riprende la rotazione automatica. */
         .material-preview-wrap {
             display: flex;
             gap: 10px;
@@ -1111,43 +1112,37 @@
             display: block;
             cursor: grab;
             touch-action: none;
-            transition: width .3s cubic-bezier(.22, .61, .36, 1),
-                        height .3s cubic-bezier(.22, .61, .36, 1),
-                        flex-basis .3s cubic-bezier(.22, .61, .36, 1);
+            position: relative;
+            /* Si ingrandisce con una TRASFORMAZIONE, non cambiando width/height:
+               il canvas e' un flex item, quindi crescere davvero allargherebbe il
+               wrap e spingerebbe i testi e i bottoni - che e' esattamente cio' che
+               non deve succedere ("si deve ingrandire solo il cubo"). Una scale
+               non tocca il layout: nessun altro elemento si muove di un pixel.
+               Origine a sinistra: il riquadro grande CONTIENE quello piccolo, cosi'
+               il cursore non puo' restarne fuori e non c'e' oscillazione. */
+            transform-origin: left center;
+            transition: transform .3s cubic-bezier(.22, .61, .36, 1),
+                        box-shadow .3s ease;
         }
 
         #materialPreviewCanvas:active {
             cursor: grabbing;
         }
 
-        /* Ingrandita: z-index sopra il form, ombra soft. Il canvas cresce;
-           la colonna info tiene la larghezza (min-width) anche senza testi,
-           cosi' il wrap non SI RESTRINGE sotto al cursore — quella era la
-           causa del thrash grande/piccola sul bordo destro. */
+        /* Ingrandita: cresce SOLO il canvas, e cresce con una scale, che non
+           occupa spazio. Quindi il wrap non cambia dimensione, i testi restano
+           dove sono e i bottoni Cubo/Sfera non si spostano: prima il canvas
+           cresceva davvero (width/flex-basis) e trascinava dietro tutto il
+           riquadro, che e' il difetto segnalato. Il buffer del canvas e' 176 px:
+           a scale(2) si vede 1:1, quindi nitido e non interpolato. */
         .material-preview-wrap.is-enlarged {
             z-index: 20;
-            border-color: var(--accent-primary, #6c8cff);
-            box-shadow: 0 10px 32px rgba(0, 0, 0, .4);
         }
 
         .material-preview-wrap.is-enlarged #materialPreviewCanvas {
-            width: 176px;
-            height: 176px;
-            flex-basis: 176px;
-        }
-
-        /* Ingrandita: solo canvas + bottoni (Cubo/Sfera). I testi restano
-           nel flusso a altezza 0 / opacity 0 (non display:none): toglierli
-           dal layout faceva collassare l'info e il bordo saltava via da
-           sotto al mouse. */
-        .material-preview-wrap.is-enlarged .material-preview-info > :not(.segmented) {
-            opacity: 0;
-            max-height: 0;
-            margin: 0 !important;
-            padding: 0;
-            overflow: hidden;
-            pointer-events: none;
-            transition: opacity .2s ease, max-height .25s ease;
+            transform: scale(2);
+            z-index: 21;
+            box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
         }
 
         .material-preview-info {
@@ -3181,6 +3176,14 @@
                                 <button class="btn btn-secondary" id="materialArtExpandBtn" style="padding:6px; font-size:11px;"
                                     data-i18n="matcreate.expand" data-i18n-title="matcreate.expandTitle"
                                     title="Apri la tela in una finestra grande, con zoom">Ingrandisci</button>
+                                <!-- La stessa tela dentro PixelAIEditor, che ha strumenti che
+                                     qui non ci sono. NON sostituisce la finestra grande qui
+                                     sopra: quella resta la via rapida, questa e' l'editor
+                                     completo. Torna indietro solo cio' che si e' davvero
+                                     modificato (messaggio 'apply' del ponte). -->
+                                <button class="btn btn-secondary" id="materialPixelEditorBtn" style="padding:6px; font-size:11px;"
+                                    data-i18n="pixedit.open" data-i18n-title="pixedit.openTitle"
+                                    title="Apri la tela nell'editor di pixel art completo">Editor completo</button>
                                 <!-- Segnaposto mostrato mentre la tela e i comandi sono nella
                                      finestra grande: senza, il pannello resterebbe un buco. -->
                                 <div id="materialArtDetached" style="display:none; flex-direction:column; gap:8px;">
@@ -4122,6 +4125,12 @@
                     title="Adatta la tela alla finestra">Adatta</button>
                 <button class="pixel-zoom-btn" id="materialZoomOneBtn"
                     data-i18n-title="matcreate.zoomOneTitle" title="Un pixel dello schermo per pixel della texture">1:1</button>
+                <!-- Stesso bottone del pannello: chi ha appena allargato la tela e
+                     vuole di piu' deve trovare l'editor completo a un clic, senza
+                     dover prima richiudere questa finestra. -->
+                <button class="btn btn-secondary" id="materialEditorPixelBtn" style="padding:6px 14px; font-size:12px;"
+                    data-i18n="pixedit.open" data-i18n-title="pixedit.openTitle"
+                    title="Apri la tela nell'editor di pixel art completo">Editor completo</button>
                 <button class="btn btn-secondary" id="materialEditorCloseBtn" style="padding:6px 14px; font-size:12px;"
                     data-i18n="matcreate.editorClose">Chiudi</button>
             </div>
@@ -4132,6 +4141,41 @@
             <div class="hint-text" data-i18n="matcreate.editorHint">
                 Rotella per lo zoom, tasto centrale o barra spaziatrice per spostare la tela. Ctrl+Z e Ctrl+Y annullano e ripetono il disegno.
             </div>
+        </div>
+    </div>
+
+    <!-- PixelAIEditor dentro VoxelAIArtist. L'editor NON viene avviato come
+         processo a se': la sua pagina e' servita da QUESTO server (translate_path
+         ribasa ogni richiesta su BASE_DIR), quindi l'iframe e' di STESSA ORIGINE.
+         Da li' vengono le tre cose che rendono l'iframe preferibile a window.open:
+         niente CORS, niente blocco dei popup, e funziona anche nella webview Qt,
+         dove window.open puo' non aprire nulla senza dirlo.
+         L'iframe prende tutta l'area utile perche' l'editor ha una sua barra dei
+         menu e un suo pannello: in una finestrella e' inservibile.
+         `src` resta VUOTO nel template e lo scrive il JS all'apertura: altrimenti
+         l'editor si caricherebbe (dizionari, canvas) all'avvio di VoxelAIArtist,
+         dove nessuno l'ha chiesto. z-index 97 = sopra materialEditorOverlay (96),
+         cosi' si puo' aprire anche dalla finestra grande della tela. -->
+    <div id="pixelEditorOverlay" style="display:none; position:fixed; inset:0; z-index:97; align-items:center; justify-content:center; background:var(--overlay-scrim);">
+        <div class="glass" style="width:98vw; height:96vh; padding:12px; border-radius:var(--radius-lg); display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div class="section-title" style="margin:0;" data-i18n="pixedit.title">Editor di pixel art</div>
+                <span class="hint-text" id="pixelEditorSubtitle"></span>
+                <div style="flex:1;"></div>
+                <!-- Scheda a parte: l'iframe eredita la finestra del padre, e chi
+                     lavora su due schermi vuole l'editor su uno solo. Il ponte
+                     postMessage li' non c'e' (e' un'altra finestra), quindi resta
+                     una via di servizio, non la principale. -->
+                <a class="pixel-zoom-btn" id="pixelEditorTabLink" href="/PixelAIEditor/ui/index.html"
+                    target="_blank" rel="noopener"
+                    style="text-decoration:none; display:inline-flex; align-items:center;"
+                    data-i18n="pixedit.openTab" data-i18n-title="pixedit.openTabTitle"
+                    title="Apri l'editor in una scheda del browser">Apri in una scheda</a>
+                <button class="btn btn-secondary" id="pixelEditorCloseBtn" style="padding:6px 14px; font-size:12px;"
+                    data-i18n="pixedit.close">Chiudi</button>
+            </div>
+            <iframe id="pixelEditorFrame" src="" style="flex:1; min-height:0; width:100%; border:0; border-radius:var(--radius-md); background:var(--glass-bg);"
+                data-i18n-title="pixedit.frameTitle" title="Tela dell'editor di pixel art"></iframe>
         </div>
     </div>
 

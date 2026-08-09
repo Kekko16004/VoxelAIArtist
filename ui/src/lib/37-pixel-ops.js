@@ -293,6 +293,69 @@
                 return n;
             }
 
+            // Una op che rende TRASPARENTE l'intera faccia: `del` che la copre
+            // tutta, o un `fill` a colore trasparente altrettanto largo. Il
+            // riconoscimento e' volutamente stretto (deve coprire TUTTO): una
+            // `del` parziale e' un intaglio legittimo del profilo, e scartarla
+            // toglierebbe all'AI il suo unico modo di sottrarre.
+            function pixelIsWipeOp(op, w, h, palette) {
+                if (typeof op !== 'string') return false;
+                const p = op.trim().split(/[\s,]+/).filter((s) => s.length);
+                const cmd = (p[0] || '').toLowerCase();
+                if (cmd !== 'del' && cmd !== 'fill') return false;
+                if (cmd === 'fill') {
+                    const rgba = pixelColorToRgba(p[5], palette);
+                    if (!rgba || rgba[3] !== 0) return false;
+                }
+                const n = (v) => Math.round(Number(v));
+                let x0 = n(p[1]), y0 = n(p[2]), x1 = n(p[3]), y1 = n(p[4]);
+                if (![x0, y0, x1, y1].every(isFinite)) return false;
+                if (x1 < x0) { const t = x0; x0 = x1; x1 = t; }
+                if (y1 < y0) { const t = y0; y0 = y1; y1 = t; }
+                return x0 <= 0 && y0 <= 0 && x1 >= w - 1 && y1 >= h - 1;
+            }
+
+            // L'op aggiunge colore? Solo i comandi che dipingono, e solo con un
+            // colore OPACO: `fill ... -` toglie invece di aggiungere, e `mirror`
+            // copia cio' che gia' c'e'.
+            function pixelOpPaints(op, palette) {
+                if (typeof op !== 'string') return false;
+                const p = op.trim().split(/[\s,]+/).filter((s) => s.length);
+                const cmd = (p[0] || '').toLowerCase();
+                if (cmd !== 'fill' && cmd !== 'rect' && cmd !== 'line'
+                    && cmd !== 'set' && cmd !== 'noise') return false;
+                const rgba = pixelColorToRgba(cmd === 'set' ? p[1] : p[5], palette);
+                return !!rgba && rgba[3] !== 0;
+            }
+
+            // Scarta le cancellazioni totali che NESSUNA pennellata segue.
+            //
+            // L'AI chiude spesso con `del 0 0 W-1 H-1` credendo di "ripulire lo
+            // sfondo trasparente" - ma le ops si applicano in ordine su un
+            // buffer, quindi quella cancella il disegno appena fatto e la faccia
+            // torna VUOTA. Stesso esito con `del` totale seguito solo da
+            // `mirror`, che copia il vuoto. Misurato con l'AI vera: due risposte
+            // su dodici finivano cosi', ed e' il difetto peggiore, perche' una
+            // faccia vuota non si distingue da "non ha generato niente".
+            //
+            // Una `del` totale con un vero disegno DOPO non si tocca: li' e' un
+            // "riparti da capo" legittimo, ed e' la ragione per cui la regola
+            // non puo' essere "vietato cancellare tutto".
+            function pixelDropSuicidalOps(ops, w, h, palette, warnings) {
+                const paintsAfter = [];
+                let seen = false;
+                for (let i = ops.length - 1; i >= 0; i--) {
+                    paintsAfter[i] = seen;
+                    if (pixelOpPaints(ops[i], palette)) seen = true;
+                }
+                const kept = ops.filter((op, i) =>
+                    !(pixelIsWipeOp(op, w, h, palette) && !paintsAfter[i]));
+                if (kept.length !== ops.length && warnings && warnings.length < 20) {
+                    warnings.push('wipeDropped');
+                }
+                return kept;
+            }
+
             // Espande la risposta dell'AI in un buffer RGBA per faccia.
             //
             // Forme accettate (un LLM ne produce piu' di una, e rifiutarle costerebbe
@@ -361,10 +424,11 @@
                         return;
                     }
                     const buf = new Uint8ClampedArray(w * h * 4);   // tutto trasparente
+                    const list = pixelDropSuicidalOps(entry, w, h, facePal, warnings);
                     let n = 0;
-                    for (let i = 0; i < entry.length; i++) {
+                    for (let i = 0; i < list.length; i++) {
                         if (budget-- <= 0) { warnings.push('truncated'); break; }
-                        n += applyPixelOp(entry[i], buf, w, h, facePal, warnings);
+                        n += applyPixelOp(list[i], buf, w, h, facePal, warnings);
                     }
                     faces[key] = buf;
                     painted[key] = n;

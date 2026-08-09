@@ -198,6 +198,12 @@ def _req(body, path="/api/texture", raw_body=None):
             return e.code, json.loads(e.read().decode())
         except Exception:
             return e.code, {}
+    except Exception:
+        # Connessione caduta senza risposta: e' ESATTAMENTE il sintomo che le
+        # guardie isinstance/str devono impedire (un'eccezione dentro l'handler
+        # non diventa un 500, socketserver chiude il socket e basta). Codice 0
+        # per poterlo distinguere da un 400 spiegato.
+        return 0, {}
 
 threading.Thread(target=main.start_server, daemon=True).start()
 for _ in range(200):
@@ -272,6 +278,109 @@ s, d = _req({"prompt": "pietra", "faces": ["px"]})
 body = json.dumps(d).lower()
 for probe in ("secure_1psid", "__secure", "cookies.json"):
     check(probe not in body, "nessuna credenziale nella risposta (%s)" % probe)
+
+# Corpo JSON che NON e' un oggetto: `payload.get` solleverebbe DENTRO l'handler,
+# e un'eccezione li' non diventa un 500 - socketserver stampa il traceback e
+# chiude il socket, quindi il client vede "connessione persa" senza codice ne'
+# messaggio. Il 400 e' la differenza fra un errore spiegato e un mistero.
+NEXT_ANSWER[0] = TEX
+check(_req(None, raw_body=b'[1,2,3]')[0] == 400,
+      "corpo JSON non oggetto -> 400 (non connessione chiusa)")
+check(_req(None, raw_body=b'"solo una stringa"')[0] == 400,
+      "corpo JSON stringa -> 400")
+# Stesso discorso per `.strip()` su un prompt non testuale: `str()` lo converte
+# invece di far saltare l'handler. Non si pretende un codice preciso (una lista
+# diventa una descrizione strampalata ma valida): si pretende che una RISPOSTA
+# HTTP arrivi. Il codice 0 di `_req` e' la connessione chiusa, cioe' il difetto.
+NEXT_ANSWER[0] = TEX
+check(_req({"prompt": ["a", "b"], "faces": ["px"]})[0] != 0,
+      "prompt non testuale -> risposta HTTP (non connessione chiusa)")
+check(_req({"prompt": [], "faces": ["px"]})[0] == 400,
+      "prompt lista vuota -> 400 'descrizione mancante'")
+
+# La stessa guardia su /api/animate, che e' l'handler gemello.
+check(_req(None, path="/api/animate", raw_body=b'[1,2,3]')[0] == 400,
+      "/api/animate: corpo JSON non oggetto -> 400")
+check(_req({"request": 42}, path="/api/animate")[0] == 400,
+      "/api/animate: richiesta non testuale -> 400")
+
+
+# --- rotta POST /api/texture2d (ponte con PixelAIEditor) ---------------------
+# La tela 2D dell'editor di pixel art, quando l'editor e' aperto DENTRO
+# VoxelAIArtist: la sua pagina e' servita da questo server (translate_path la
+# ribasa su BASE_DIR), quindi la sua fetch su percorso assoluto arriva qui e non
+# al suo `main.py`. Senza questa rotta la generazione AI sarebbe morta solo
+# nell'iframe -- un difetto che l'app autonoma non mostra mai.
+TEX2D = ('{"size":32,"palette":{"a":"#6E6E73","b":"-"},'
+         '"faces":{"all":["fill 0 0 31 31 a","rect 4 4 12 12 b"]}}')
+
+NEXT_ANSWER[0] = "```json\n" + TEX2D + "\n```"
+s, d = _req({"prompt": "spada", "width": 32, "height": 32}, path="/api/texture2d")
+check(s == 200, "/api/texture2d: richiesta buona -> 200")
+check(d.get("size") == 32, "/api/texture2d: la risposta porta 'size'")
+check(d.get("palette", {}).get("a") == "#6E6E73",
+      "/api/texture2d: la risposta porta 'palette'")
+check(d.get("ops") and d["ops"][0] == "fill 0 0 31 31 a",
+      "/api/texture2d: la risposta porta 'ops'")
+check(d.get("faces", {}).get("all") == d.get("ops"),
+      "/api/texture2d: 'faces.all' duplica le ops (l'espansore condiviso vuole un dizionario)")
+check("32x32" in LAST_PROMPT[0] and "spada" in LAST_PROMPT[0],
+      "/api/texture2d: prompt costruito con dimensione e richiesta")
+check("SPRITE" in LAST_PROMPT[0] or "sprite" in LAST_PROMPT[0],
+      "/api/texture2d: usa il template dell'editor (prompt-pixel2d.txt), non quello delle facce")
+
+# Una risposta divisa in facce (capita quando la descrizione parla di un cubo)
+# non e' un errore: si prende una tela e lo si dice negli avvisi.
+NEXT_ANSWER[0] = ('{"size":16,"faces":{"px":["fill 0 0 15 15 a"],'
+                  '"nx":["fill 0 0 15 15 a"]},"palette":{"a":"#FFFFFF"}}')
+s, d = _req({"prompt": "cubo", "size": 16}, path="/api/texture2d")
+check(s == 200 and d.get("ops"), "/api/texture2d: risposta a piu' facce -> 200 con una tela")
+check(any("usato" in w for w in d.get("warnings", [])),
+      "/api/texture2d: la scelta della faccia finisce negli avvisi")
+
+# Errori: ognuno un 400 spiegato, mai una connessione muta.
+check(_req(None, path="/api/texture2d", raw_body=b"")[0] == 400,
+      "/api/texture2d: corpo vuoto -> 400")
+check(_req(None, path="/api/texture2d", raw_body=b"{non json")[0] == 400,
+      "/api/texture2d: corpo non JSON -> 400")
+check(_req(None, path="/api/texture2d", raw_body=b'[1,2,3]')[0] == 400,
+      "/api/texture2d: corpo JSON non oggetto -> 400")
+check(_req({"width": 32}, path="/api/texture2d")[0] == 400,
+      "/api/texture2d: prompt mancante -> 400")
+check(_req({"prompt": 42}, path="/api/texture2d")[0] != 0,
+      "/api/texture2d: prompt non testuale -> risposta HTTP (non connessione chiusa)")
+check(_req({"prompt": []}, path="/api/texture2d")[0] == 400,
+      "/api/texture2d: prompt lista vuota -> 400")
+
+NEXT_ANSWER[0] = "Mi dispiace, non posso disegnare."
+s, d = _req({"prompt": "spada"}, path="/api/texture2d")
+check(s == 400 and "rawPreview" in d,
+      "/api/texture2d: risposta senza JSON -> 400 con anteprima")
+
+NEXT_ANSWER[0] = '{"size":32,"palette":{"a":"#FFFFFF"},"faces":{}}'
+s, d = _req({"prompt": "spada"}, path="/api/texture2d")
+check(s == 400 and "warnings" in d, "/api/texture2d: JSON senza disegno -> 400 spiegato")
+
+NEXT_ANSWER[0] = Exception("cookie non valido o scaduto")
+s, d = _req({"prompt": "spada"}, path="/api/texture2d")
+check(s == 401 and d.get("needsCookies") is True,
+      "/api/texture2d: sessione scaduta -> 401 con needsCookies")
+NEXT_ANSWER[0] = OSError("connection reset by peer")
+s, d = _req({"prompt": "spada"}, path="/api/texture2d")
+check(s == 503 and d.get("retryable") is True,
+      "/api/texture2d: errore di rete -> 503 riprovabile")
+
+# La pagina dell'editor e' servita dal server del padre senza rotte aggiuntive:
+# e' il presupposto di tutto il ponte, e va verificato invece che dato per buono.
+# Si costruisce l'handler senza farlo dialogare su un socket (translate_path e'
+# puro): __init__ di BaseHTTPRequestHandler servirebbe una richiesta vera.
+_h = object.__new__(main.VoxelAIRequestHandler)
+_h.directory = os.getcwd()
+check(_h.translate_path('/PixelAIEditor/ui/locales/it.json')
+      == os.path.join(main.BASE_DIR, 'PixelAIEditor', 'ui', 'locales', 'it.json'),
+      "translate_path ribasa /PixelAIEditor/... su BASE_DIR")
+check(os.path.exists(_h.translate_path('/PixelAIEditor/ui/locales/it.json')),
+      "il file mappato esiste davvero su disco")
 
 if fails:
     print("\n%d CHECK FALLITI" % len(fails))

@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="app.title">PixelAI Editor - editor pixel art 2D</title>
+
+    <!-- ===== ANTI-FLASH ALL'AVVIO =====
+         Il bundle JS sta in fondo al <body>: senza questo blocco il browser
+         dipinge la pagina con i default di :root e SOLO DOPO il JS applica
+         tema/accent salvati, quindi per un istante l'app si vede "vecchia" e
+         poi cambia aspetto. Questo script e' volutamente SINCRONO e inline:
+         gira prima del primo paint. Legge solo localStorage - un fetch sarebbe
+         asincrono e reintrodurrebbe esattamente il flash che elimina.
+         Le chiavi devono restare allineate a 03-prefs.js. -->
+    <script>
+        (function preventStartupFlash() {
+            var d = document.documentElement;
+            function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+            try {
+                var theme = ls('pixelai-theme');
+                if (!theme) {
+                    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+                        ? 'light' : 'dark';
+                }
+                d.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+            } catch (e) { }
+            try {
+                var hex = ls('pixelai-accent');
+                if (hex && /^#?[0-9a-fA-F]{6}$/.test(hex.trim())) {
+                    var h = hex.trim().replace('#', '');
+                    var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+                    var cl = function (n) { return Math.max(0, Math.min(255, Math.round(n))); };
+                    var hx = function (n) { n = cl(n).toString(16); return n.length === 1 ? '0' + n : n; };
+                    var mix = function (c, t, f) { return hx(c + (t - c) * f); };
+                    d.style.setProperty('--accent-primary', '#' + hx(r) + hx(g) + hx(b));
+                    d.style.setProperty('--accent-secondary', '#' + mix(r, 255, 0.20) + mix(g, 255, 0.20) + mix(b, 255, 0.20));
+                    d.style.setProperty('--accent-deep', '#' + mix(r, 0, 0.22) + mix(g, 0, 0.22) + mix(b, 0, 0.22));
+                    d.style.setProperty('--accent-soft', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.25)');
+                    d.style.setProperty('--accent-glow', 'rgba(' + r + ', ' + g + ', ' + b + ', 0.35)');
+                }
+            } catch (e) { }
+        })();
+    </script>
+
+    <style>
+        /* ============================================================
+         *  TEMA - design token. Default = SCURO; il chiaro e' un override
+         *  completo attivato da <html data-theme="light">.
+         *  Niente colori hardcoded sparsi nel CSS: sempre una var qui sotto.
+         * ============================================================ */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #09070f 0%, #120d24 50%, #05030b 100%);
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.07);
+            --glass-border-focus: rgba(71, 85, 105, 0.5);
+            --input-bg: rgba(0, 0, 0, 0.3);
+            --input-bg-strong: rgba(0, 0, 0, 0.5);
+            --inset-bg: rgba(0, 0, 0, 0.25);
+            --overlay-scrim: rgba(10, 10, 12, 0.6);
+            --hover-bg: rgba(255, 255, 255, 0.05);
+            --hover-bg-strong: rgba(255, 255, 255, 0.1);
+            --track-bg: rgba(255, 255, 255, 0.1);
+            --swatch-border: rgba(255, 255, 255, 0.2);
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #9ca3af;
+            --text-on-accent: #ffffff;
+            --accent-primary: #475569;
+            --accent-secondary: #64748b;
+            --accent-deep: #334155;
+            --accent-soft: rgba(71, 85, 105, 0.25);
+            --accent-glow: rgba(71, 85, 105, 0.35);
+            --danger: #ef4444;
+            --ok: #22c55e;
+            --warn: #f59e0b;
+            --shadow-soft: 0 4px 10px rgba(0, 0, 0, 0.3);
+            --radius-sm: 0px;
+            --radius-md: 2px;
+            --radius-lg: 3px;
+            --radius-pill: 999px;
+            --topbar-height: 46px;
+            --toolbar-width: 52px;
+            --rightpanel-width: 280px;
+            --ui-font: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            --ui-font-size: 13px;
+            /* Scacchiera della trasparenza: due grigi neutri, uguali in entrambi
+               i temi. Un fondo che cambia col tema farebbe sembrare diverso il
+               colore dei pixel semitrasparenti. */
+            --checker-a: #3a3a3e;
+            --checker-b: #2c2c30;
+            /* Passo della griglia dei pixel: lo scrive setZoom, in px di schermo. */
+            --cell: 8px;
+        }
+
+        :root[data-theme="light"] {
+            --bg-gradient: linear-gradient(135deg, #eef1f8 0%, #e4e8f2 50%, #f5f6fb 100%);
+            --glass-bg: rgba(255, 255, 255, 0.6);
+            --glass-border: rgba(15, 23, 42, 0.12);
+            --input-bg: rgba(255, 255, 255, 0.75);
+            --input-bg-strong: #ffffff;
+            --inset-bg: rgba(15, 23, 42, 0.05);
+            --overlay-scrim: rgba(226, 230, 240, 0.7);
+            --hover-bg: rgba(15, 23, 42, 0.05);
+            --hover-bg-strong: rgba(15, 23, 42, 0.1);
+            --track-bg: rgba(15, 23, 42, 0.14);
+            --swatch-border: rgba(15, 23, 42, 0.2);
+            --scrollbar-thumb: rgba(15, 23, 42, 0.2);
+            --scrollbar-thumb-hover: rgba(15, 23, 42, 0.35);
+            --text-primary: #1e293b;
+            --text-secondary: #5b6472;
+            --text-muted: #64748b;
+            --shadow-soft: 0 4px 10px rgba(15, 23, 42, 0.12);
+            --checker-a: #c8c8cc;
+            --checker-b: #b8b8be;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            font-family: var(--ui-font);
+            font-size: var(--ui-font-size);
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        ::-webkit-scrollbar { width: 9px; height: 9px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--radius-pill); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+        /* ===== Barra superiore ===== */
+        .topbar {
+            height: var(--topbar-height);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 10px;
+            background: var(--inset-bg);
+            border-bottom: 1px solid var(--glass-border);
+            z-index: 30;
+        }
+
+        .topbar-brand {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 13px; margin-right: 8px; white-space: nowrap;
+        }
+
+        .topbar-brand .logo-icon {
+            width: 24px; height: 24px; border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 12px; color: var(--text-on-accent);
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        }
+
+        .topbar-spacer { flex: 1; }
+
+        .menu { position: relative; }
+
+        .menu-trigger {
+            display: flex; align-items: center; gap: 6px;
+            padding: 7px 12px;
+            border: 1px solid transparent; border-radius: var(--radius-sm);
+            background: transparent; color: var(--text-secondary);
+            font-family: inherit; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s; white-space: nowrap;
+        }
+
+        .menu-trigger:hover, .menu.open .menu-trigger {
+            color: var(--text-primary); background: var(--hover-bg); border-color: var(--glass-border);
+        }
+
+        .menu-dropdown {
+            display: none; position: absolute; top: calc(100% + 4px); left: 0;
+            min-width: 250px; padding: 6px; flex-direction: column; gap: 2px;
+            border-radius: var(--radius-md);
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+            z-index: 50;
+        }
+
+        .menu.open .menu-dropdown { display: flex; }
+        .menu-dropdown.align-right { left: auto; right: 0; }
+
+        .menu-item {
+            display: flex; align-items: center; gap: 10px;
+            width: 100%; padding: 8px 10px;
+            border: none; border-radius: var(--radius-sm);
+            background: transparent; color: var(--text-primary);
+            font-family: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+        }
+
+        .menu-item:hover { background: var(--hover-bg-strong); }
+        .menu-item .shortcut { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+        .menu-sep { height: 1px; margin: 4px 2px; background: var(--glass-border); }
+
+        .icon-btn {
+            display: flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px;
+            border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            background: var(--input-bg); color: var(--text-secondary); cursor: pointer;
+        }
+        .icon-btn:hover { color: var(--text-primary); background: var(--hover-bg-strong); }
+        .icon-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+        /* ===== Campi: una sola definizione, usata ovunque =====
+           Una classe che non esiste in CSS lascia il campo col bianco di
+           sistema, e in tema chiaro non si nota (--input-bg-strong E' #ffffff).
+           Quindi: verificare che i campi siano identici fra loro in ENTRAMBI i
+           temi, mai che "non siano bianchi". */
+        .field-strong {
+            padding: 7px 9px;
+            border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            background: var(--input-bg-strong); color: var(--text-primary);
+            font-family: inherit; font-size: 12px; outline: none;
+        }
+        .field-strong:focus { border-color: var(--glass-border-focus); }
+        textarea.field-strong { resize: vertical; min-height: 62px; user-select: text; }
+
+        .field-file {
+            padding: 5px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            background: var(--input-bg-strong); color: var(--text-primary);
+            font-family: inherit; font-size: 12px; width: 100%;
+        }
+        .field-file::file-selector-button {
+            margin-right: 8px; padding: 5px 10px;
+            border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            background: var(--hover-bg-strong); color: var(--text-primary);
+            font-family: inherit; font-size: 12px; cursor: pointer;
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px 12px;
+            border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            background: var(--input-bg); color: var(--text-primary);
+            font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .btn:hover:not(:disabled) { background: var(--hover-bg-strong); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn.primary {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: var(--text-on-accent); border-color: transparent;
+        }
+        .btn.danger { color: var(--danger); }
+        .btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+        /* ===== Area di lavoro ===== */
+        .workspace { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+
+        /* --- Barra strumenti verticale --- */
+        .toolbar {
+            width: var(--toolbar-width); flex-shrink: 0;
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            padding: 8px 0; overflow-y: auto;
+            background: var(--inset-bg); border-right: 1px solid var(--glass-border);
+        }
+
+        .tool-btn {
+            width: 38px; height: 38px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid transparent; border-radius: var(--radius-sm);
+            background: transparent; color: var(--text-secondary); cursor: pointer;
+        }
+        .tool-btn:hover { background: var(--hover-bg); color: var(--text-primary); }
+        .tool-btn.active {
+            background: var(--accent-soft); border-color: var(--accent-primary); color: var(--text-primary);
+        }
+        .tool-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+        .tool-sep { width: 26px; height: 1px; margin: 5px 0; background: var(--glass-border); }
+
+        /* --- Colonna centrale --- */
+        .center { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+        .options-bar {
+            flex-shrink: 0; display: flex; align-items: center; gap: 14px;
+            height: 38px; padding: 0 12px; overflow-x: auto;
+            background: var(--glass-bg); border-bottom: 1px solid var(--glass-border);
+            font-size: 12px; color: var(--text-secondary);
+        }
+        .options-bar .opt { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .options-bar input[type="range"] { width: 96px; }
+        .options-bar .field-strong { padding: 4px 7px; }
+
+        /* --- Barra del ponte con VoxelAIArtist ---
+           Esiste solo quando l'editor gira DENTRO l'altra app (iframe): da
+           soli non c'e' nessun materiale a cui riportare il disegno. Sta in
+           cima, sopra le opzioni degli strumenti, perche' dice CHE COSA si sta
+           disegnando: e' un livello di contesto piu' alto di "quanto e' grosso
+           il pennello", e trovarselo in fondo alla finestra farebbe perdere di
+           vista quale faccia del cubo si ha in mano. */
+        .bridge-bar {
+            flex-shrink: 0; display: none; align-items: center; gap: 10px;
+            height: 42px; padding: 0 12px; overflow-x: auto;
+            background: var(--accent-soft); border-bottom: 1px solid var(--accent-primary);
+            font-size: 12px; color: var(--text-secondary);
+        }
+        .bridge-bar.on { display: flex; }
+        .bridge-bar .grow { flex: 1; }
+        .bridge-title { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+        .bridge-hint { color: var(--text-muted); white-space: nowrap; }
+
+        .face-list { display: flex; align-items: center; gap: 4px; }
+
+        /* La faccia e' DUE bersagli distinti: il corpo la apre per disegnarla,
+           il pallino la da'/toglie come contesto all'AI. Un solo bottone con
+           due significati costringerebbe a un modificatore da ricordare, e qui
+           i due gesti si usano a pochi secondi di distanza. Sono due <button>
+           affiancati e non annidati, che in HTML non e' valido. */
+        .face-item {
+            display: flex; align-items: stretch;
+            border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            overflow: hidden; background: var(--input-bg-strong);
+        }
+        .face-tab {
+            display: flex; align-items: center; gap: 5px;
+            padding: 4px 8px; border: none; background: transparent;
+            color: var(--text-secondary); cursor: pointer;
+            font-family: inherit; font-size: 11.5px; white-space: nowrap;
+        }
+        .face-tab:hover { background: var(--hover-bg); color: var(--text-primary); }
+        .face-item.active { border-color: var(--accent-primary); }
+        .face-item.active .face-tab { background: var(--accent-soft); color: var(--text-primary); font-weight: 700; }
+
+        /* Il pallino della modifica non e' un colore ma una FORMA piena: su un
+           tema chiaro un semplice cambio di tinta si perde, e qui distingue
+           "questa faccia tornera' al materiale" da "questa resta com'era". */
+        .face-tab .mark { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
+        .face-item.dirty .face-tab .mark { background: var(--warn); }
+
+        .face-dot {
+            width: 24px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            border: none; border-left: 1px solid var(--glass-border);
+            background: transparent; color: var(--text-muted); cursor: pointer;
+        }
+        .face-dot:hover { background: var(--hover-bg); }
+        .face-dot svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+        /* Acceso, il pallino si RIEMPIE. Il solo cambio di tinta non basta: su
+           un anello di 2 px la differenza fra grigio e colore d'accento si
+           perde, e "quali facce sto dando all'AI" va letto da lontano. */
+        .face-dot.on { color: var(--accent-primary); }
+        .face-dot.on svg { fill: currentColor; }
+
+        /* --- Viewport: contiene lo stage e scorre --- */
+        .viewport {
+            flex: 1; min-height: 0; position: relative; overflow: auto;
+            display: flex;
+            background:
+                repeating-conic-gradient(var(--checker-b) 0% 25%, var(--checker-a) 0% 50%) 50% / 16px 16px;
+        }
+
+        /* Lo stage si centra con `margin: auto`, NON con align-items: dentro un
+           flex con overflow, centrare col contenitore taglia il bordo alto e
+           sinistro quando il contenuto e' piu' grande, e la parte tagliata non
+           e' raggiungibile nemmeno scorrendo. */
+        .stage {
+            position: relative; margin: auto; flex: 0 0 auto;
+            image-rendering: pixelated;
+            box-shadow: 0 0 0 1px var(--glass-border), var(--shadow-soft);
+            background:
+                repeating-conic-gradient(#ffffff 0% 25%, #d4d4d8 0% 50%) 50% / 16px 16px;
+        }
+
+        /* Tela, griglia e overlay riempiono lo stage al 100%: la dimensione
+           dello stage e' l'UNICO punto che decide quanto grande si vede il
+           disegno, quindi i tre restano allineati al pixel a qualunque zoom. */
+        .stage > canvas, .stage > .pixel-grid {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+        }
+        .stage > canvas { image-rendering: pixelated; }
+
+        /* La griglia e' un GRADIENTE CSS sopra la tela, non un canvas: resta
+           netta a ogni zoom senza ridisegnarsi e senza allocare un buffer che a
+           64x sarebbe da decine di megabyte. Disegnarla dentro il canvas dei
+           pixel la farebbe finire nell'immagine esportata. */
+        .pixel-grid {
+            pointer-events: none;   /* sta SOPRA la tela: senza, si mangia i clic */
+            display: none;
+            background-image:
+                linear-gradient(to right, rgba(128, 128, 128, 0.45) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(128, 128, 128, 0.45) 1px, transparent 1px);
+            background-size: var(--cell) var(--cell);
+        }
+        .pixel-grid.on { display: block; }
+
+        #pixOverlay { pointer-events: none; }
+
+        /* --- Barra di stato --- */
+        .statusbar {
+            flex-shrink: 0; display: flex; align-items: center; gap: 16px;
+            height: 26px; padding: 0 12px;
+            background: var(--inset-bg); border-top: 1px solid var(--glass-border);
+            font-size: 11.5px; color: var(--text-muted);
+        }
+        .statusbar .grow { flex: 1; }
+        .statusbar .msg.warn { color: var(--warn); }
+        .statusbar .msg.err { color: var(--danger); }
+        .statusbar .msg.ok { color: var(--ok); }
+
+        /* --- Pannello destro --- */
+        .rightpanel {
+            width: var(--rightpanel-width); flex-shrink: 0;
+            display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
+            background: var(--glass-bg); border-left: 1px solid var(--glass-border);
+        }
+
+        .panel-section { border-bottom: 1px solid var(--glass-border); }
+        .panel-head {
+            display: flex; align-items: center; gap: 8px;
+            width: 100%; padding: 9px 12px;
+            border: none; background: transparent; color: var(--text-primary);
+            font-family: inherit; font-size: 11.5px; font-weight: 700;
+            letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer;
+        }
+        /* La freccetta e' un SVG, non un carattere: un glifo tipografico
+           costringerebbe a decidere la codifica del template, e una lettera "v"
+           finirebbe contata dalla guardia i18n come testo da tradurre. */
+        .panel-head .chev { margin-left: auto; display: flex; transition: transform 0.15s; }
+        .panel-head .chev svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.4; fill: none; }
+        .panel-section.collapsed .chev { transform: rotate(-90deg); }
+        .panel-section.collapsed .panel-body { display: none; }
+        .panel-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 9px; }
+
+        .row { display: flex; align-items: center; gap: 8px; }
+        .row.wrap { flex-wrap: wrap; }
+        .row .grow { flex: 1; min-width: 0; }
+        .hint { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+
+        /* --- Colori --- */
+        .color-pair { position: relative; width: 54px; height: 44px; flex-shrink: 0; }
+        .color-chip {
+            position: absolute; width: 30px; height: 30px;
+            border: 2px solid var(--swatch-border); border-radius: var(--radius-sm);
+            cursor: pointer; padding: 0;
+            background-image: repeating-conic-gradient(#ffffff 0% 25%, #d4d4d8 0% 50%);
+            background-size: 10px 10px;
+        }
+        .color-chip .fillbox { display: block; width: 100%; height: 100%; }
+        #pixColorPrimary { top: 0; left: 0; z-index: 2; }
+        #pixColorSecondary { bottom: 0; right: 0; z-index: 1; }
+
+        .swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+        .swatch {
+            width: 20px; height: 20px; padding: 0;
+            border: 1px solid var(--swatch-border); border-radius: var(--radius-sm); cursor: pointer;
+        }
+        .swatch.active { outline: 2px solid var(--accent-secondary); outline-offset: 1px; }
+
+        /* --- Livelli --- */
+        .layer-list { display: flex; flex-direction: column; gap: 3px; max-height: 280px; overflow-y: auto; }
+        .layer-item {
+            display: flex; align-items: center; gap: 7px; padding: 5px 6px;
+            border: 1px solid transparent; border-radius: var(--radius-sm);
+            background: var(--input-bg); cursor: pointer;
+        }
+        .layer-item:hover { background: var(--hover-bg-strong); }
+        .layer-item.active { border-color: var(--accent-primary); background: var(--accent-soft); }
+        .layer-item .thumb {
+            width: 30px; height: 30px; flex-shrink: 0;
+            border: 1px solid var(--glass-border);
+            background-image: repeating-conic-gradient(#ffffff 0% 25%, #d4d4d8 0% 50%);
+            background-size: 8px 8px;
+            image-rendering: pixelated;
+        }
+        .layer-item .lname {
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 12px;
+        }
+        .layer-item.hidden-layer .lname { opacity: 0.45; text-decoration: line-through; }
+        .layer-item .eye {
+            width: 22px; height: 22px; flex-shrink: 0; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            border: none; background: transparent; color: var(--text-secondary); cursor: pointer;
+        }
+        .layer-item .eye svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+        /* --- Interruttore --- */
+        .switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+        /* L'<input> e' invisibile ma presente: in una prova automatica va
+           cliccata la .slider, non l'input, o si aspetta la visibilita' fino
+           allo scadere del tempo. */
+        .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .switch .slider {
+            width: 34px; height: 18px; border-radius: var(--radius-pill);
+            background: var(--track-bg); transition: background 0.15s; position: relative;
+        }
+        .switch .slider::after {
+            content: ''; position: absolute; top: 2px; left: 2px;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #ffffff; transition: transform 0.15s;
+        }
+        .switch input:checked + .slider { background: var(--accent-primary); }
+        .switch input:checked + .slider::after { transform: translateX(16px); }
+
+        /* --- Modale --- */
+        .overlay {
+            display: none; position: fixed; inset: 0; z-index: 90;
+            align-items: center; justify-content: center;
+            background: var(--overlay-scrim);
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        }
+        .overlay.open { display: flex; }
+        .modal {
+            width: min(560px, 92vw); max-height: 88vh; overflow-y: auto;
+            padding: 18px; border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+            background: var(--bg-gradient); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .modal h2 { font-size: 15px; }
+        .modal .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+        .badge {
+            display: inline-block; padding: 2px 7px; border-radius: var(--radius-pill);
+            background: var(--accent-soft); color: var(--text-secondary); font-size: 10.5px; font-weight: 700;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body>
+    <!-- ===================== BARRA SUPERIORE ===================== -->
+    <div class="topbar">
+        <div class="topbar-brand"><span class="logo-icon">PX</span><span data-i18n="app.name">PixelAI Editor</span></div>
+
+        <!-- Le voci di menu portano SOLO l'etichetta, in uno <span> foglia che
+             l'annotatore i18n sa marcare. La scorciatoia la scrive il JS da
+             PIX_SHORTCUTS (data-sc): un'unica tabella alimenta i menu E l'aiuto
+             F1, e i nomi dei tasti non diventano 60 chiavi da tradurre sei volte
+             in stringhe identiche. -->
+        <div class="menu" id="pixMenuFile">
+            <button class="menu-trigger" data-menu-trigger><span data-i18n="pix.menu.file">File</span></button>
+            <div class="menu-dropdown">
+                <button class="menu-item" id="pixNewBtn" data-sc="newImage"><span data-i18n="pix.file.new">Nuova immagine</span></button>
+                <button class="menu-item" id="pixOpenBtn" data-sc="open"><span data-i18n="pix.file.open">Apri immagine...</span></button>
+                <button class="menu-item" id="pixOpenLayerBtn"><span data-i18n="pix.file.openLayer">Apri come nuovo livello...</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixExportBtn" data-sc="export"><span data-i18n="pix.file.export">Esporta PNG</span></button>
+                <button class="menu-item" id="pixExportLayersBtn" data-sc="exportLayers"><span data-i18n="pix.file.exportLayers">Esporta livelli (ZIP)</span></button>
+            </div>
+        </div>
+
+        <div class="menu" id="pixMenuEdit">
+            <button class="menu-trigger" data-menu-trigger><span data-i18n="pix.menu.edit">Modifica</span></button>
+            <div class="menu-dropdown">
+                <button class="menu-item" id="pixUndoBtn" data-sc="undo"><span data-i18n="pix.edit.undo">Annulla</span></button>
+                <button class="menu-item" id="pixRedoBtn" data-sc="redo"><span data-i18n="pix.edit.redo">Ripeti</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixCutBtn" data-sc="cut"><span data-i18n="pix.edit.cut">Taglia</span></button>
+                <button class="menu-item" id="pixCopyBtn" data-sc="copy"><span data-i18n="pix.edit.copy">Copia</span></button>
+                <button class="menu-item" id="pixPasteBtn" data-sc="paste"><span data-i18n="pix.edit.paste">Incolla</span></button>
+                <button class="menu-item" id="pixPasteLayerBtn" data-sc="pasteLayer"><span data-i18n="pix.edit.pasteLayer">Incolla come nuovo livello</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixSelectAllBtn" data-sc="selectAll"><span data-i18n="pix.edit.selectAll">Seleziona tutto</span></button>
+                <button class="menu-item" id="pixSelectNoneBtn" data-sc="selectNone"><span data-i18n="pix.edit.selectNone">Deseleziona</span></button>
+                <button class="menu-item" id="pixSelectInvertBtn" data-sc="selectInvert"><span data-i18n="pix.edit.selectInvert">Inverti selezione</span></button>
+            </div>
+        </div>
+
+        <div class="menu" id="pixMenuImage">
+            <button class="menu-trigger" data-menu-trigger><span data-i18n="pix.menu.image">Immagine</span></button>
+            <div class="menu-dropdown">
+                <button class="menu-item" id="pixResizeImageBtn" data-sc="resizeImage"><span data-i18n="pix.image.resizeImage">Ridimensiona immagine...</span></button>
+                <button class="menu-item" id="pixResizeCanvasBtn" data-sc="resizeCanvas"><span data-i18n="pix.image.resizeCanvas">Ridimensiona tela...</span></button>
+                <button class="menu-item" id="pixCropBtn"><span data-i18n="pix.image.crop">Ritaglia alla selezione</span></button>
+                <button class="menu-item" id="pixTrimBtn"><span data-i18n="pix.image.trim">Rifila il trasparente</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixFlipHBtn" data-sc="flipH"><span data-i18n="pix.image.flipH">Specchia orizzontale</span></button>
+                <button class="menu-item" id="pixFlipVBtn" data-sc="flipV"><span data-i18n="pix.image.flipV">Specchia verticale</span></button>
+                <button class="menu-item" id="pixRot90Btn"><span data-i18n="pix.image.rot90">Ruota 90 gradi</span></button>
+                <button class="menu-item" id="pixRot180Btn"><span data-i18n="pix.image.rot180">Ruota 180 gradi</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixRemoveBgBtn"><span data-i18n="pix.image.removeBg">Rimuovi sfondo...</span></button>
+                <button class="menu-item" id="pixAdjustBtn"><span data-i18n="pix.image.adjust">Regolazioni colore...</span></button>
+                <button class="menu-item" id="pixPaletteBtn"><span data-i18n="pix.image.palette">Palette e dithering...</span></button>
+                <button class="menu-item" id="pixOutlineBtn"><span data-i18n="pix.image.outline">Contorno...</span></button>
+            </div>
+        </div>
+
+        <div class="menu" id="pixMenuLayer">
+            <button class="menu-trigger" data-menu-trigger><span data-i18n="pix.menu.layer">Livello</span></button>
+            <div class="menu-dropdown">
+                <button class="menu-item" id="pixLayerAddBtn" data-sc="layerAdd"><span data-i18n="pix.layer.add">Nuovo livello</span></button>
+                <button class="menu-item" id="pixLayerDupBtn" data-sc="layerDup"><span data-i18n="pix.layer.dup">Duplica livello</span></button>
+                <button class="menu-item" id="pixLayerDelBtn"><span data-i18n="pix.layer.del">Elimina livello</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixLayerUpBtn" data-sc="layerUp"><span data-i18n="pix.layer.up">Sposta su</span></button>
+                <button class="menu-item" id="pixLayerDownBtn" data-sc="layerDown"><span data-i18n="pix.layer.down">Sposta giù</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixLayerMergeBtn" data-sc="layerMerge"><span data-i18n="pix.layer.merge">Unisci sotto</span></button>
+                <button class="menu-item" id="pixLayerFlattenBtn" data-sc="layerFlatten"><span data-i18n="pix.layer.flatten">Appiattisci immagine</span></button>
+            </div>
+        </div>
+
+        <div class="menu" id="pixMenuView">
+            <button class="menu-trigger" data-menu-trigger><span data-i18n="pix.menu.view">Vista</span></button>
+            <div class="menu-dropdown">
+                <button class="menu-item" id="pixZoomInBtn" data-sc="zoomIn"><span data-i18n="pix.view.zoomIn">Ingrandisci</span></button>
+                <button class="menu-item" id="pixZoomOutBtn" data-sc="zoomOut"><span data-i18n="pix.view.zoomOut">Riduci</span></button>
+                <button class="menu-item" id="pixZoomFitBtn" data-sc="zoomFit"><span data-i18n="pix.view.zoomFit">Adatta alla finestra</span></button>
+                <button class="menu-item" id="pixZoom100Btn" data-sc="zoom100"><span data-i18n="pix.view.zoom100">Zoom originale</span></button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" id="pixGridBtn" data-sc="grid"><span data-i18n="pix.view.grid">Mostra griglia</span></button>
+                <button class="menu-item" id="pixThemeBtn"><span data-i18n="pix.view.theme">Cambia tema</span></button>
+            </div>
+        </div>
+
+        <div class="menu" id="pixMenuHelp">
+            <button class="menu-trigger" data-menu-trigger><span data-i18n="pix.menu.help">Aiuto</span></button>
+            <div class="menu-dropdown align-right">
+                <button class="menu-item" id="pixShortcutsBtn" data-sc="help"><span data-i18n="pix.help.shortcuts">Scorciatoie da tastiera</span></button>
+            </div>
+        </div>
+
+        <div class="topbar-spacer"></div>
+
+        <select id="languageSelect" class="field-strong" title="Lingua dell'interfaccia" data-i18n-title="pix.settings.lang"></select>
+        <button class="icon-btn" id="pixSettingsBtn" title="Impostazioni" data-i18n-title="pix.settings.title">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+    </div>
+
+    <!-- ===================== AREA DI LAVORO ===================== -->
+    <div class="workspace">
+        <!-- --- Strumenti --- -->
+        <div class="toolbar" id="pixToolbar">
+            <button class="tool-btn active" data-tool="pencil" title="Matita" data-i18n-title="pix.tool.pencil" data-key="B">
+                <svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path></svg>
+            </button>
+            <button class="tool-btn" data-tool="eraser" title="Gomma" data-i18n-title="pix.tool.eraser" data-key="E">
+                <svg viewBox="0 0 24 24"><path d="M20 20H7L3 16a2 2 0 0 1 0-3l9-9a2 2 0 0 1 3 0l6 6a2 2 0 0 1 0 3l-7 7"></path><path d="M9 10l6 6"></path></svg>
+            </button>
+            <button class="tool-btn" data-tool="fill" title="Riempimento" data-i18n-title="pix.tool.fill" data-key="G">
+                <svg viewBox="0 0 24 24"><path d="M19 11l-8-8-8.5 8.5a2 2 0 0 0 0 3L8 20a2 2 0 0 0 3 0l8-8z"></path><path d="M5 8l6 6"></path><path d="M21 15s2 2.5 2 4a2 2 0 1 1-4 0c0-1.5 2-4 2-4z"></path></svg>
+            </button>
+            <button class="tool-btn" data-tool="picker" title="Contagocce" data-i18n-title="pix.tool.picker" data-key="I">
+                <svg viewBox="0 0 24 24"><path d="M18 2l4 4-9 9-4 1 1-4 9-9z"></path><path d="M11 8L3 16v5h5l8-8"></path></svg>
+            </button>
+            <div class="tool-sep"></div>
+            <button class="tool-btn" data-tool="line" title="Linea" data-i18n-title="pix.tool.line" data-key="L">
+                <svg viewBox="0 0 24 24"><path d="M4 20L20 4"></path></svg>
+            </button>
+            <button class="tool-btn" data-tool="rect" title="Rettangolo" data-i18n-title="pix.tool.rect" data-key="U">
+                <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14"></rect></svg>
+            </button>
+            <button class="tool-btn" data-tool="ellipse" title="Ellisse" data-i18n-title="pix.tool.ellipse" data-key="O">
+                <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="7"></ellipse></svg>
+            </button>
+            <div class="tool-sep"></div>
+            <button class="tool-btn" data-tool="select" title="Selezione rettangolare" data-i18n-title="pix.tool.select" data-key="M">
+                <svg viewBox="0 0 24 24" stroke-dasharray="3 2"><rect x="4" y="5" width="16" height="14"></rect></svg>
+            </button>
+            <button class="tool-btn" data-tool="lasso" title="Lazo" data-i18n-title="pix.tool.lasso" data-key="Q">
+                <svg viewBox="0 0 24 24"><path d="M4 11c0-4 3.6-7 8-7s8 3 8 7-3.6 7-8 7c-1.2 0-2.4-.2-3.4-.6"></path><path d="M8 18c0 2-1 3-2 3s-2-1-2-2 1-2 2-2"></path></svg>
+            </button>
+            <button class="tool-btn" data-tool="wand" title="Bacchetta magica" data-i18n-title="pix.tool.wand" data-key="W">
+                <svg viewBox="0 0 24 24"><path d="M15 4V2"></path><path d="M15 10V8"></path><path d="M12.5 6.5h-2"></path><path d="M19.5 6.5h-2"></path><path d="M3 21L14 10"></path><path d="M13 7l4 4"></path></svg>
+            </button>
+            <button class="tool-btn" data-tool="move" title="Sposta" data-i18n-title="pix.tool.move" data-key="V">
+                <svg viewBox="0 0 24 24"><path d="M12 2v20M2 12h20"></path><path d="M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"></path></svg>
+            </button>
+        </div>
+
+        <!-- --- Centro --- -->
+        <div class="center">
+            <!-- Ponte con VoxelAIArtist. Le voci delle facce NON stanno qui:
+                 quante e quali siano lo dice il messaggio del padre (una sola
+                 texture, oppure le sei facce del cubo), quindi le costruisce il
+                 JS. Scriverne sei nel template obbligherebbe a nasconderne
+                 cinque nel caso piu' comune, e a tenerne l'ordine allineato a
+                 mano con quello dell'altra app. -->
+            <div class="bridge-bar" id="pixBridgeBar">
+                <span class="bridge-title" id="pixBridgeTitle"></span>
+                <div class="face-list" id="pixBridgeFaces"></div>
+                <span class="grow"></span>
+                <span class="bridge-hint" id="pixBridgeHint" data-i18n="pix.bridge.hint">Il pallino sceglie le facce da dare all'AI come contesto</span>
+                <button class="btn primary" id="pixBridgeApplyBtn" title="Riporta le facce modificate nel materiale" data-i18n-title="pix.bridge.applyTitle" data-i18n="pix.bridge.apply">Applica al materiale</button>
+                <button class="btn" id="pixBridgeCloseBtn" title="Chiude l'editor e torna a VoxelAIArtist" data-i18n-title="pix.bridge.closeTitle" data-i18n="pix.bridge.close">Torna al modello</button>
+            </div>
+
+            <div class="options-bar" id="pixOptionsBar">
+                <div class="opt" data-opt="size">
+                    <label for="pixOptSize" data-i18n="pix.opt.size">Spessore</label>
+                    <input type="range" id="pixOptSize" min="1" max="16" step="1" value="1">
+                    <span id="pixOptSizeVal">1</span>
+                </div>
+                <div class="opt hidden" data-opt="tolerance">
+                    <label for="pixOptTolerance" data-i18n="pix.opt.tolerance">Tolleranza</label>
+                    <input type="range" id="pixOptTolerance" min="0" max="255" step="1" value="0">
+                    <span id="pixOptToleranceVal">0</span>
+                </div>
+                <div class="opt hidden" data-opt="contiguous">
+                    <label class="switch" title="Solo i pixel attaccati fra loro" data-i18n-title="pix.opt.contiguousHint">
+                        <input type="checkbox" id="pixOptContiguous" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span data-i18n="pix.opt.contiguous">Contiguo</span>
+                </div>
+                <div class="opt hidden" data-opt="fillShape">
+                    <label class="switch" title="Forma piena invece che solo contorno" data-i18n-title="pix.opt.fillShapeHint">
+                        <input type="checkbox" id="pixOptFillShape">
+                        <span class="slider"></span>
+                    </label>
+                    <span data-i18n="pix.opt.fillShape">Forma piena</span>
+                </div>
+                <div class="opt" data-opt="mirror">
+                    <label for="pixOptMirror" data-i18n="pix.opt.mirror">Simmetria</label>
+                    <select id="pixOptMirror" class="field-strong">
+                        <option value="none" data-i18n="pix.opt.mirrorNone">Nessuna</option>
+                        <option value="h" data-i18n="pix.opt.mirrorH">Orizzontale</option>
+                        <option value="v" data-i18n="pix.opt.mirrorV">Verticale</option>
+                        <option value="hv" data-i18n="pix.opt.mirrorHV">Entrambe</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="viewport" id="pixViewport">
+                <div class="stage" id="pixStage">
+                    <canvas id="pixCanvas" width="64" height="64"></canvas>
+                    <canvas id="pixOverlay" width="64" height="64"></canvas>
+                    <div class="pixel-grid" id="pixGrid"></div>
+                </div>
+            </div>
+
+            <div class="statusbar">
+                <span id="pixStatusSize">64 x 64</span>
+                <span id="pixStatusPos">-</span>
+                <span id="pixStatusZoom">100%</span>
+                <span class="grow msg" id="pixStatusMsg"></span>
+            </div>
+        </div>
+
+        <!-- --- Pannello destro --- -->
+        <div class="rightpanel">
+            <div class="panel-section" id="pixColorSection">
+                <button class="panel-head" data-section-toggle><span data-i18n="pix.color.title">Colore</span><span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></button>
+                <div class="panel-body">
+                    <div class="row">
+                        <div class="color-pair">
+                            <button class="color-chip" id="pixColorPrimary" title="Colore primario" data-i18n-title="pix.color.primary"><span class="fillbox"></span></button>
+                            <button class="color-chip" id="pixColorSecondary" title="Colore secondario" data-i18n-title="pix.color.secondary"><span class="fillbox"></span></button>
+                        </div>
+                        <div class="grow">
+                            <div class="row">
+                                <input type="color" id="pixColorInput" class="field-strong" value="#ffffff" title="Scegli il colore" data-i18n-title="pix.color.pick">
+                                <button class="btn" id="pixColorSwapBtn" title="Scambia i due colori" data-i18n-title="pix.color.swap" data-key="X">X</button>
+                            </div>
+                            <div class="row" style="margin-top:6px">
+                                <label for="pixAlphaInput" data-i18n="pix.common.opacity">Opacità</label>
+                                <input type="range" id="pixAlphaInput" class="grow" min="0" max="255" step="1" value="255">
+                                <span id="pixAlphaVal">255</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="swatches" id="pixSwatches"></div>
+                    <div class="hint" id="pixColorHint" data-i18n="pix.color.hint">Alt tiene premuto il contagocce.</div>
+                </div>
+            </div>
+
+            <div class="panel-section" id="pixLayersSection">
+                <button class="panel-head" data-section-toggle><span data-i18n="pix.layer.title">Livelli</span><span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></button>
+                <div class="panel-body">
+                    <div class="row">
+                        <label for="pixLayerOpacity" data-i18n="pix.common.opacity">Opacità</label>
+                        <input type="range" id="pixLayerOpacity" class="grow" min="0" max="100" step="1" value="100">
+                        <span id="pixLayerOpacityVal">100%</span>
+                    </div>
+                    <div class="layer-list" id="pixLayerList"></div>
+                    <div class="row wrap">
+                        <button class="btn" id="pixLayerAddBtn2" title="Nuovo livello" data-i18n-title="pix.layer.add" data-sc="layerAdd" data-i18n="pix.layer.addShort">+ Livello</button>
+                        <button class="btn" id="pixLayerDupBtn2" title="Duplica livello" data-i18n-title="pix.layer.dup" data-sc="layerDup" data-i18n="pix.layer.dupShort">Duplica</button>
+                        <button class="btn danger" id="pixLayerDelBtn2" title="Elimina livello" data-i18n-title="pix.layer.del" data-i18n="pix.layer.delShort">Elimina</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section" id="pixAiSection">
+                <button class="panel-head" data-section-toggle><span data-i18n="pix.ai.title">Generazione AI</span><span class="chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></button>
+                <div class="panel-body">
+                    <div class="row">
+                        <label for="pixAiMode" data-i18n="pix.ai.mode">Cosa fare</label>
+                        <select id="pixAiMode" class="field-strong grow">
+                            <option value="create" data-i18n="pix.ai.modeCreate">Crea da zero</option>
+                            <option value="edit" data-i18n="pix.ai.modeEdit">Modifica il disegno</option>
+                        </select>
+                    </div>
+                    <textarea id="pixAiPrompt" class="field-strong" rows="3"
+                        placeholder="Descrivi cosa disegnare, oppure la modifica da fare" data-i18n-placeholder="pix.ai.prompt"></textarea>
+                    <div class="row">
+                        <label for="pixAiScope" data-i18n="pix.ai.scope">Ambito</label>
+                        <select id="pixAiScope" class="field-strong grow">
+                            <option value="all" data-i18n="pix.ai.scopeAll">Tutta la tela</option>
+                            <option value="sel" data-i18n="pix.ai.scopeSel">Solo la selezione</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <label for="pixAiDetail" data-i18n="pix.ai.detail">Dettaglio</label>
+                        <select id="pixAiDetail" class="field-strong grow" title="Risoluzione a cui genera l'AI" data-i18n-title="pix.ai.detailHint"></select>
+                    </div>
+                    <button class="btn primary" id="pixAiGoBtn" data-i18n="pix.ai.go">Genera</button>
+                    <div class="hint" id="pixAiStatus"></div>
+                    <div class="hint" id="pixAiHint" data-i18n="pix.ai.hint">In modifica, il risultato finisce su una copia del livello attivo: l'originale resta sotto, nascosto.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== MODALI ===================== -->
+    <div class="overlay" id="pixSettingsOverlay">
+        <div class="modal">
+            <h2 data-i18n="pix.settings.title">Impostazioni</h2>
+            <div class="row">
+                <label for="pixSettingsTheme" data-i18n="pix.settings.theme">Tema</label>
+                <select id="pixSettingsTheme" class="field-strong grow">
+                    <option value="dark" data-i18n="pix.settings.themeDark">Scuro</option>
+                    <option value="light" data-i18n="pix.settings.themeLight">Chiaro</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="pixSettingsAccent" data-i18n="pix.settings.accent">Colore d'accento</label>
+                <input type="color" id="pixSettingsAccent" class="field-strong" value="#475569">
+            </div>
+            <div id="pixCookieBlock">
+                <div class="hint" id="pixCookieState"></div>
+                <textarea id="pixCookieInput" class="field-strong" rows="4"
+                    placeholder="Incolla qui i cookie di Google (JSON)" data-i18n-placeholder="pix.settings.cookiePlaceholder"></textarea>
+                <div class="row" style="margin-top:8px">
+                    <button class="btn" id="pixCookieSaveBtn" data-i18n="pix.settings.cookieSave">Salva i cookie</button>
+                    <button class="btn danger" id="pixCookieClearBtn" data-i18n="pix.settings.cookieClear">Cancella i cookie</button>
+                    <button class="btn" id="pixOpenFolderBtn" data-i18n="pix.settings.openFolder">Apri la cartella dati</button>
+                </div>
+                <div class="hint" style="margin-top:6px" data-i18n="pix.settings.cookieShared">I cookie sono condivisi con VoxelAIArtist: configurarli qui li configura anche là.</div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn" id="pixSettingsCloseBtn" data-i18n="pix.dlg.close">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="pixPromptOverlay">
+        <div class="modal">
+            <h2 id="pixPromptTitle"></h2>
+            <div id="pixPromptBody"></div>
+            <div class="modal-foot">
+                <button class="btn" id="pixPromptCancelBtn" data-i18n="pix.dlg.cancel">Annulla</button>
+                <button class="btn primary" id="pixPromptOkBtn" data-i18n="pix.dlg.ok">Conferma</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="pixHelpOverlay">
+        <div class="modal">
+            <h2 data-i18n="pix.help.shortcuts">Scorciatoie da tastiera</h2>
+            <div id="pixHelpBody" class="hint"></div>
+            <div class="modal-foot">
+                <button class="btn" id="pixHelpCloseBtn" data-i18n="pix.dlg.close">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="pixFileInput" accept="image/*" class="hidden">
+
+    <script>
+<!--BUNDLE-->
+    </script>
+</body>
+
+</html>

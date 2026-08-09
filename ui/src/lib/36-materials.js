@@ -903,10 +903,12 @@
                 requestAnimationFrame(step);
             }
 
-            // Timer del leave: senza, al bordo del wrap l'ingrandimento sposta
-            // il hit-box e mouseleave/enter oscillano grande↔piccola.
-            // ~140 ms assorbe un graffio sul bordo senza far sentire la
-            // preview pigra a uscire davvero.
+            // Timer del leave: assorbe un graffio sul bordo (uscire e rientrare
+            // di un pixel) senza far sentire la preview pigra a uscire davvero.
+            // L'oscillazione grande<->piccola non e' piu' possibile di suo: il
+            // riquadro ingrandito CONTIENE quello piccolo (scale con origine a
+            // sinistra), quindi ingrandire non porta mai via il bersaglio da
+            // sotto al cursore.
             let _previewLeaveTimer = null;
             const PREVIEW_LEAVE_MS = 140;
 
@@ -942,23 +944,24 @@
             // interrompe uscendo dal canvas. Al pointerup riparte autoSpin.
             function initPreviewInteraction() {
                 const canvas = document.getElementById('materialPreviewCanvas');
-                const wrap = document.getElementById('materialPreviewWrap');
                 if (!canvas || canvas.dataset.previewUiBound) return;
                 canvas.dataset.previewUiBound = '1';
 
-                if (wrap) {
-                    wrap.addEventListener('mouseenter', () => setPreviewEnlarged(true));
-                    wrap.addEventListener('mouseleave', () => {
-                        // Non rimpicciolire a meta' di un drag (il cursore
-                        // puo' uscire dal wrap con il tasto premuto).
-                        const p = _preview;
-                        if (p && p.drag) return;
-                        // Ritardato: se il cursore rientra dal bordo entro
-                        // PREVIEW_LEAVE_MS, mouseenter cancella il timer e
-                        // resta ingrandita — niente thrash.
-                        setPreviewEnlarged(false);
-                    });
-                }
+                // L'ingrandimento si arma passando SUL CUBO, non sul riquadro:
+                // il riquadro comprende la colonna dei testi e dei bottoni a
+                // destra, e li' l'anteprima si ingrandiva pur non avendo mai il
+                // cursore sopra il cubo.
+                canvas.addEventListener('mouseenter', () => setPreviewEnlarged(true));
+                canvas.addEventListener('mouseleave', () => {
+                    // Non rimpicciolire a meta' di un drag (il cursore
+                    // puo' uscire dal canvas con il tasto premuto).
+                    const p = _preview;
+                    if (p && p.drag) return;
+                    // Ritardato: se il cursore rientra dal bordo entro
+                    // PREVIEW_LEAVE_MS, mouseenter cancella il timer e
+                    // resta ingrandita — niente thrash.
+                    setPreviewEnlarged(false);
+                });
 
                 const onMove = (ev) => {
                     const p = _preview;
@@ -991,9 +994,9 @@
                     canvas.removeEventListener('pointermove', onMove);
                     canvas.removeEventListener('pointerup', onUp);
                     canvas.removeEventListener('pointercancel', onUp);
-                    // Se il cursore e' gia' fuori dal wrap, rimpicciolisci
+                    // Se il cursore e' gia' fuori dal cubo, rimpicciolisci
                     // (con lo stesso delay chill del mouseleave).
-                    if (wrap && !wrap.matches(':hover')) setPreviewEnlarged(false);
+                    if (!canvas.matches(':hover')) setPreviewEnlarged(false);
                     startPreviewSpin();
                 };
                 canvas.addEventListener('pointerdown', (ev) => {
@@ -1373,6 +1376,9 @@
                 }
                 refreshMaterialAiUI();
                 refreshMaterialPngUI();
+                // I bottoni verso PixelAIEditor (38-pixel-bridge.js) hanno senso solo
+                // a form aperto: qui passa ogni apertura, chiusura e cambio sorgente.
+                refreshPixelBridgeUI();
             }
 
             // L'ambito e il contesto esistono solo con sei facce: con una texture unica

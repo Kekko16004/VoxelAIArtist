@@ -281,6 +281,60 @@ for (const [label, data] of Object.entries({
           'ingresso degenere non solleva: ' + label);
 }
 
+// --- cancellazione totale in coda (`wipeDropped`) -----------------------------
+// L'AI chiude spesso con un `del` che copre l'intera tela, credendo di "pulire
+// lo sfondo trasparente": il risultato e' una tela VUOTA. Misurato: 2 risposte
+// vere su 12. Il testo del prompt da solo non e' bastato (successo due volte in
+// due tornate), quindi lo scarto e' strutturale. Un `del` totale con del disegno
+// DOPO e' invece un ricominciare legittimo e va conservato.
+// `painted` conta i pixel TOCCATI dalle ops (anche da un `del`), quindi qui la
+// misura giusta e' quanti pixel restano opachi alla fine.
+const opachi = (b) => { let n = 0; for (let i = 3; i < b.length; i += 4) if (b[i]) n++; return n; };
+
+res = P.expandPixelOps({ size: 8, palette: { a: '#FF0000' },
+                         faces: { all: ['fill 1 1 6 6 a', 'del 0 0 7 7'] } }, { size: 8 });
+check(opachi(res.faces.all) === 36,
+      'un `del` totale in coda viene scartato invece di svuotare la tela');
+check((res.warnings || []).includes('wipeDropped'),
+      'lo scarto e\' segnalato con un CODICE, non con una frase');
+
+res = P.expandPixelOps({ size: 8, palette: { a: '#FF0000' },
+                         faces: { all: ['fill 1 1 6 6 a', 'fill 0 0 7 7 -'] } }, { size: 8 });
+check(opachi(res.faces.all) === 36,
+      'anche un `fill` col colore trasparente sull\'intera tela e\' una cancellazione');
+
+res = P.expandPixelOps({ size: 8, palette: { a: '#FF0000' },
+                         faces: { all: ['fill 1 1 6 6 a', 'del 0 0 7 7', 'fill 2 2 5 5 a'] } },
+                       { size: 8 });
+check(opachi(res.faces.all) === 16 && !(res.warnings || []).includes('wipeDropped'),
+      'un `del` totale con disegno DOPO e\' un ricominciare: si conserva');
+
+// `mirror` non e' un comando che dipinge: un `del` totale seguito solo da
+// `mirror` lascia comunque la tela vuota, quindi va scartato lo stesso.
+res = P.expandPixelOps({ size: 8, palette: { a: '#FF0000' },
+                         faces: { all: ['fill 0 1 3 6 a', 'del 0 0 7 7', 'mirror x'] } },
+                       { size: 8 });
+check(opachi(res.faces.all) > 0,
+      '`mirror` dopo un `del` totale non salva la tela: il `del` va scartato');
+
+// Un `del` parziale non e' una cancellazione totale: intagliare il profilo e'
+// l'uso normale del comando e non deve sparire.
+res = P.expandPixelOps({ size: 8, palette: { a: '#FF0000' },
+                         faces: { all: ['fill 0 0 7 7 a', 'del 0 0 3 7'] } }, { size: 8 });
+check(opachi(res.faces.all) === 32 && !(res.warnings || []).includes('wipeDropped'),
+      'un `del` parziale resta intatto');
+
+// La stessa difesa deve esistere nel gemello di PixelAIEditor: due copie che
+// divergono darebbero risultati diversi a seconda di come l'editor e' aperto.
+const gemello = fs.readFileSync(
+    path.join(ROOT, 'PixelAIEditor/ui/src/lib/14-pixel-ops.js'), 'latin1');
+for (const fn of ['pixelIsWipeOp', 'pixelOpPaints', 'pixelDropSuicidalOps']) {
+    check(gemello.includes('function ' + fn + '('),
+          'il gemello di PixelAIEditor ha anche lui ' + fn);
+}
+check(/pixelDropSuicidalOps\(/.test(gemello.split('function pixelDropSuicidalOps')[1] || ''),
+      'nel gemello lo scarto e\' anche CHIAMATO, non solo definito');
+
 // --- pixel -> RLE -> testo del contesto --------------------------------------
 // Il giro completo: e' quello che rende possibile "usa le altre facce come
 // contesto". Le chiavi del contesto sono le stesse che l'AI riusa in risposta.

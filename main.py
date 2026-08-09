@@ -138,7 +138,9 @@ else:
     QMainWindow = object
     WebEnginePage = object
 
-from gemini import Gemini
+# Il client Gemini non si importa qui: lo importa `src/aiclient.py`, che e' l'unico
+# punto che lo istanzia, e lo fa in modo PIGRO cosi' il modulo resta importabile
+# (test headless compresi) anche senza il pacchetto installato.
 
 PORT = 0
 
@@ -440,126 +442,25 @@ def _apply_grid_rule(prompt_text, grid_size):
     )
 
 
-# --- Errori AI "parlanti" ---------------------------------------------------
-# Un 500 con str(e) non dice all'utente cosa fare. Queste tre classi separano i
-# soli casi su cui l'utente PUO' agire (cookie da riconfigurare / riprovare piu'
-# tardi / il modello ha risposto ma non in JSON) e gli endpoint le mappano su
-# codici e messaggi diversi.
+# --- Client AI, errori parlanti e retry -------------------------------------
+# Il corpo vive in `src/aiclient.py`, CONDIVISO con PixelAIEditor: e' la parte
+# che si sbaglia se duplicata (il client `gemini` non espone codici di errore,
+# solo messaggi, e distinguere "cookie scaduti" da "quota" si fa per indizi
+# testuali). Qui restano i re-export, perche' rotte e test li cercano come
+# attributi di `main`.
 
-class AIAuthError(RuntimeError):
-    """Cookie Gemini mancanti o scaduti: serve riconfigurare la sessione."""
-
-
-class AITransientError(RuntimeError):
-    """Rete, quota o rate-limit: la stessa richiesta puo' funzionare piu' tardi."""
-
-
-class AIFormatError(RuntimeError):
-    """Il modello ha risposto, ma non con JSON utilizzabile."""
-
-    def __init__(self, message, answer=None):
-        super().__init__(message)
-        self.answer = answer
-
-
-# Indizi testuali di un problema di autenticazione. Il client `gemini` e' un web
-# client reverse-engineered: non espone codici, solo messaggi.
-_AI_AUTH_HINTS = (
-    "cookie", "snlm0e", "nonce", "unauthorized", "forbidden", "401", "403",
-    "sign in", "signin", "login", "credential", "not authenticated",
-    "authentication", "secure_1psid", "session expired",
+from aiclient import (                                       # noqa: E402
+    AIAuthError,
+    AITransientError,
+    AIFormatError,
+    _AI_AUTH_HINTS,
+    _classify_ai_error,
+    _gemini_client,
+    ai_answer_text,
+    INTERACTIVE_RETRY_BUDGET_SECONDS,
+    _interactive_backoff,
+    ai_answer_text_retrying,
 )
-
-
-def _classify_ai_error(exc):
-    """Traduce un'eccezione del client Gemini in una delle classi sopra."""
-    msg = str(exc).strip() or exc.__class__.__name__
-    low = msg.lower()
-    if any(h in low for h in _AI_AUTH_HINTS):
-        return AIAuthError(
-            "Sessione Gemini non valida: i cookie sono mancanti o scaduti. "
-            "Apri le Impostazioni e reimposta i cookie del browser. "
-            "Dettaglio: %s" % msg)
-    # Riusa ESATTAMENTE il criterio di transitorieta' della coda pack: se un
-    # errore vale un retry nella coda, vale un retry anche qui.
-    if pack_engine._looks_like_rate_limit(msg) or isinstance(exc, (OSError,)):
-        return AITransientError(
-            "Servizio AI non raggiungibile o quota/limite temporaneo. "
-            "Riprova fra qualche minuto. Dettaglio: %s" % msg)
-    return AITransientError("Errore del servizio AI: %s" % msg)
-
-
-def _gemini_client(model=None):
-    """Crea il client Gemini con i cookie salvati (o auto-discovery).
-
-    `model` e' accettato per uniformita' con la UI (il selettore modello) ma il
-    client `gemini` installato NON espone un parametro modello
-    (`Gemini.__init__` non lo prevede e `generate_content(prompt, image)`
-    nemmeno): il valore viene quindi ignorato qui, in UN SOLO punto, invece che
-    silenziosamente in tre endpoint diversi. Il giorno in cui il client lo
-    supportera' basta cambiare questa funzione.
-    """
-    cookies_dict = app_settings.load_cookies()
-    if cookies_dict:
-        return Gemini(cookies=cookies_dict, timeout=180)
-    return Gemini(auto_cookies=True, timeout=180)
-
-
-def ai_answer_text(final_prompt, model=None):
-    """UNA chiamata al client Gemini -> testo grezzo della risposta.
-
-    Punto di contatto unico: creazione client, cookie e classificazione degli
-    errori stanno qui, non duplicati negli handler HTTP.
-    """
-    try:
-        client = _gemini_client(model)
-    except Exception as e:                                  # noqa: BLE001
-        raise _classify_ai_error(e) from e
-    try:
-        response = client.generate_content(final_prompt)
-    except Exception as e:                                  # noqa: BLE001
-        raise _classify_ai_error(e) from e
-    return response.text if hasattr(response, 'text') else str(response)
-
-
-# Backoff per gli endpoint INTERATTIVI. La scala e' quella della coda pack
-# (nessun valore duplicato) ma troncata a un budget compatibile con una
-# richiesta HTTP sincrona: nella coda si possono aspettare 20+60+150 s, davanti
-# a uno spinner no.
-INTERACTIVE_RETRY_BUDGET_SECONDS = 30
-
-
-def _interactive_backoff():
-    waits, total = [], 0
-    for w in pack_engine.RETRY_BACKOFF_SECONDS:
-        if total + w > INTERACTIVE_RETRY_BUDGET_SECONDS:
-            break
-        waits.append(w)
-        total += w
-    return waits
-
-
-def ai_answer_text_retrying(final_prompt, model=None, sleep=None):
-    """Come `ai_answer_text` ma ritenta gli errori transitori col backoff.
-
-    Gli errori di autenticazione e di formato NON vengono ritentati (come nella
-    coda pack: un JSON malformato non migliora riprovando subito).
-    `sleep` e' iniettabile per i test.
-    """
-    sleep = sleep or time.sleep
-    backoff = _interactive_backoff()
-    last = None
-    for attempt in range(len(backoff) + 1):
-        try:
-            return ai_answer_text(final_prompt, model)
-        except AITransientError as e:
-            last = e
-            if attempt >= len(backoff):
-                raise
-            print("[ai] errore transitorio, ritento fra %ds: %s"
-                  % (backoff[attempt], e))
-            sleep(backoff[attempt])
-    raise last  # pragma: no cover - il loop esce sempre da return/raise
 
 
 def run_ai_generation(final_prompt, model=None):
@@ -1088,279 +989,98 @@ def build_anim_prompt(prompt, bones):
 # ---------------------------------------------------------------------------
 # TEXTURE AI (pixel art): prompt + validazione della risposta
 #
-# Le ops dei PIXEL hanno UNA sola implementazione, `expandPixelOps` in
-# ui/src/lib/37-pixel-ops.js: la tela vive nel browser e non esiste un
+# Il corpo vive in `src/pixelprompt.py`, CONDIVISO con PixelAIEditor: le due app
+# parlano lo stesso formato di ops 2D e duplicarlo lo farebbe divergere alla
+# prima aggiunta di un comando. Qui restano i re-export (i test e le rotte HTTP
+# li cercano come attributi di `main`) e l'unico pezzo che e' davvero locale: da
+# quale cartella si legge il template del prompt.
+#
+# Le ops dei PIXEL hanno UNA sola implementazione lato disegno, `expandPixelOps`
+# in ui/src/lib/37-pixel-ops.js: la tela vive nel browser e non esiste un
 # consumatore server-side, a differenza delle ops dei voxel che la coda pack
 # espande in Python (e quella parita' e' costata tre difetti veri). Qui il
 # server NON disegna: valida solo la FORMA della risposta (lato, palette, una
-# lista di comandi per faccia) e riconduce i sinonimi al contratto. Cosi' non
-# nasce una seconda semantica da tenere allineata.
+# lista di comandi per faccia) e riconduce i sinonimi al contratto.
 # ---------------------------------------------------------------------------
 
-PIXEL_FACE_KEYS = ("px", "nx", "py", "ny", "pz", "nz")
-PIXEL_MIN_SIDE = 4
-PIXEL_MAX_SIDE = 128
-PIXEL_DEFAULT_SIDE = 16
-PIXEL_MAX_OPS = 400          # per faccia: oltre, l'AI sta elencando pixel
-PIXEL_MAX_PALETTE = 64
-PIXEL_COMMANDS = ("fill", "rect", "line", "set", "del", "mirror", "noise")
-
-# Etichette per il prompt. Il cubo di r128 ordina i gruppi +X,-X,+Y,-Y,+Z,-Z:
-# le sigle sono quelle di MATERIAL_FACE_KEYS lato UI, qui servono solo a
-# spiegare all'AI quale faccia sta disegnando.
-PIXEL_FACE_LABELS = {
-    "px": "laterale destra (+X)",
-    "nx": "laterale sinistra (-X)",
-    "py": "vista dall'alto (+Y)",
-    "ny": "vista da sotto (-Y)",
-    "pz": "laterale davanti (+Z)",
-    "nz": "laterale dietro (-Z)",
-    "all": "texture unica, usata su tutte le facce",
-}
-
-# Un LLM scrive "top" o "sopra" molto piu' spesso di "py". Ricondurli e' meno
-# costoso che rifiutare la risposta e rigenerare.
-_PIXEL_FACE_ALIASES = {
-    "px": "px", "x+": "px", "+x": "px", "right": "px", "destra": "px", "east": "px",
-    "nx": "nx", "x-": "nx", "-x": "nx", "left": "nx", "sinistra": "nx", "west": "nx",
-    "py": "py", "y+": "py", "+y": "py", "top": "py", "up": "py", "alto": "py",
-    "sopra": "py", "cima": "py",
-    "ny": "ny", "y-": "ny", "-y": "ny", "bottom": "ny", "down": "ny", "basso": "ny",
-    "sotto": "ny", "fondo": "ny",
-    "pz": "pz", "z+": "pz", "+z": "pz", "front": "pz", "fronte": "pz",
-    "davanti": "pz", "south": "pz",
-    "nz": "nz", "z-": "nz", "-z": "nz", "back": "nz", "dietro": "nz",
-    "retro": "nz", "north": "nz",
-    "all": "all", "tutte": "all", "tutto": "all", "unica": "all", "single": "all",
-    "base": "all", "texture": "all", "default": "all", "side": "all",
-    "lato": "all", "laterale": "all",
-}
-
-
-def _pixel_face_key(name):
-    """Sigla di faccia canonica, o None se non riconosciuta."""
-    key = str(name or "").strip().lower().replace(" ", "").replace("_", "")
-    return _PIXEL_FACE_ALIASES.get(key)
-
-
-PIXEL_PROMPT_FALLBACK = (
-    "Sei un pixel artist esperto di texture per giochi voxel.\n"
-    "Disegna le TEXTURE richieste con COMANDI COMPATTI, non pixel per pixel.\n\n"
-    "### TELA\n"
-    "Ogni faccia e' una griglia di [INSERISCI QUI LA DIMENSIONE] pixel.\n"
-    "Origine (0,0) in ALTO A SINISTRA: x verso destra, y verso il basso.\n"
-    "Coordinate INCLUSIVE.\n\n"
-    "### FACCE DA DISEGNARE\n[INSERISCI QUI LE FACCE]\n\n"
-    "### FACCE GIA' DISEGNATE (contesto)\n[INSERISCI QUI IL CONTESTO]\n\n"
-    "### FORMATO OUTPUT (obbligatorio)\n"
-    "Rispondi SOLO con il JSON dentro un blocco markdown (```json ... ```).\n"
-    "{\"size\":16,\"palette\":{\"s\":\"#6E6E73\",\"d\":\"#4A4A4F\"},"
-    "\"faces\":{\"px\":[\"fill 0 0 15 15 s\",\"noise 0 0 15 15 d 0.18 7\"]}}\n\n"
-    "### COMANDI DISPONIBILI\n"
-    "fill x0 y0 x1 y1 colore | rect x0 y0 x1 y1 colore | line x0 y0 x1 y1 colore\n"
-    "set colore x y x y ... | del x0 y0 x1 y1 | mirror x | mirror y\n"
-    "noise x0 y0 x1 y1 colore densita seme\n"
-    "Il colore `-` e' TRASPARENTE. Una tela parte trasparente: una faccia opaca\n"
-    "deve iniziare con un `fill` che la copre tutta.\n\n"
-    "### RICHIESTA DELL'UTENTE\n[INSERISCI QUI LA RICHIESTA]\n"
+from pixelprompt import (                                    # noqa: E402
+    PIXEL_FACE_KEYS,
+    PIXEL_MIN_SIDE,
+    PIXEL_MAX_SIDE,
+    PIXEL_DEFAULT_SIDE,
+    PIXEL_MAX_OPS,
+    PIXEL_MAX_PALETTE,
+    PIXEL_COMMANDS,
+    PIXEL_FACE_LABELS,
+    PIXEL_PROMPT_FALLBACK,
+    _PIXEL_FACE_ALIASES,
+    _pixel_face_key,
+    _pixel_hex,
+    normalize_pixel_data,
 )
+from pixelprompt import build_pixel_prompt as _build_pixel_prompt   # noqa: E402
 
 
-def build_pixel_prompt(prompt, faces, context=None, size=None):
-    """Prompt per generare una o piu' facce di texture in pixel art.
+def build_pixel_prompt(prompt, faces, context=None, size=None, height=None):
+    """Come `pixelprompt.build_pixel_prompt`, col template preso da QUESTA app.
 
-    `faces`   sigle da disegnare (px/nx/py/ny/pz/nz, o 'all' per texture unica).
-    `context` facce GIA' disegnate, come {sigla: righe RLE}: il client le rende
-              con `pixelContextBlock` (37-pixel-ops.js) perche' e' li' che vive
-              la tela. Il server le inoltra e non le interpreta.
-    `size`    lato della tela: e' l'UNICA fonte, perche' la tela esiste gia' e
-              una dimensione diversa costringerebbe a ricampionare il disegno.
+    Il modulo condiviso riceve il testo del prompt come parametro invece di
+    leggerlo da disco: `assets/prompts/` e' diverso nelle due app (e in un
+    bundle PyInstaller sta in un'altra cartella ancora), quindi chi conosce la
+    propria e' il chiamante.
     """
-    template = _read_prompt_file("prompt-pixel.txt", PIXEL_PROMPT_FALLBACK)
-
-    side = PIXEL_DEFAULT_SIDE
-    try:
-        side = max(PIXEL_MIN_SIDE, min(PIXEL_MAX_SIDE, int(round(float(size)))))
-    except (TypeError, ValueError):
-        pass
-
-    wanted = []
-    for f in (faces or []):
-        key = _pixel_face_key(f)
-        if key and key not in wanted:
-            wanted.append(key)
-    if not wanted:
-        wanted = ["all"]
-    faces_str = "\n".join(
-        "- `%s`: %s" % (k, PIXEL_FACE_LABELS.get(k, k)) for k in wanted)
-
-    if isinstance(context, str):
-        ctx_str = context.strip()
-    elif isinstance(context, dict) and context:
-        ctx_str = "\n".join(str(v) for v in context.values() if str(v).strip())
-    else:
-        ctx_str = ""
-    if not ctx_str:
-        ctx_str = ("(nessuna faccia disegnata: sei libero, ma resta coerente "
-                   "fra le facce che stai creando adesso)")
-
-    out = template.replace("[INSERISCI QUI LA DIMENSIONE]", "%dx%d" % (side, side))
-    out = out.replace("[INSERISCI QUI LE FACCE]", faces_str)
-    out = out.replace("[INSERISCI QUI IL CONTESTO]", ctx_str)
-    # prompt-pixel.txt finisce con l'intestazione della richiesta e nessun
-    # segnaposto (stesso schema di prompt.txt): se il segnaposto non c'e', la
-    # richiesta va APPESA, altrimenti l'AI riceve un prompt senza domanda.
-    if "[INSERISCI QUI LA RICHIESTA]" in out:
-        return out.replace("[INSERISCI QUI LA RICHIESTA]", prompt)
-    return out.rstrip("\n") + "\n" + prompt + "\n"
+    return _build_pixel_prompt(
+        prompt, faces, context=context, size=size, height=height,
+        template=_read_prompt_file("prompt-pixel.txt", PIXEL_PROMPT_FALLBACK))
 
 
-def _pixel_hex(value):
-    """Colore normalizzato a '#RRGGBB', oppure '-' per il trasparente, oppure
-    None se non e' un colore. `#RGB` viene espanso: e' una forma che gli LLM
-    producono spesso e scartarla costerebbe una rigenerazione."""
-    if value is None:
-        return None
-    s = str(value).strip()
-    if s.lower() in ("-", ".", "none", "null", "trasparente", "transparent"):
-        return "-"
-    if not s:
-        return None
-    if not s.startswith("#"):
-        s = "#" + s
-    body = s[1:]
-    if not all(c in "0123456789abcdefABCDEF" for c in body):
-        return None
-    if len(body) == 3:
-        body = "".join(c * 2 for c in body)
-    if len(body) == 8:          # #RRGGBBAA: l'alpha vive nelle ops, non qui
-        body = body[:6]
-    if len(body) != 6:
-        return None
-    return "#" + body.upper()
+# ---------------------------------------------------------------------------
+# PONTE CON PixelAIEditor
+# ---------------------------------------------------------------------------
+# L'editor di pixel art 2D vive in `PixelAIEditor/` ed e' un'app autonoma, ma
+# quando lo si apre DENTRO VoxelAIArtist (iframe della finestra dei materiali) la
+# sua pagina e' servita da QUESTO server e il suo processo non parte affatto:
+# `translate_path` ribasa ogni richiesta su BASE_DIR, quindi
+# `GET /PixelAIEditor/ui/index.html` funziona senza aggiungere rotte. Le sue
+# CHIAMATE AI no: la UI dell'editor usa percorsi assoluti (`/api/texture2d`), che
+# nell'iframe arrivano qui. Senza questa rotta la generazione AI sarebbe morta
+# appena aperta dal padre, e solo li' -- un difetto che l'app autonoma non mostra.
+#
+# Il template del prompt NON si duplica: si legge da quello dell'editor. Due copie
+# divergerebbero al primo ritocco e lo stesso disegno verrebbe generato in modo
+# diverso a seconda di come l'editor e' stato aperto.
+def _pixel2d_prompt_text():
+    """Testo di `prompt-pixel2d.txt` (cartella dei prompt di PixelAIEditor).
 
-
-def normalize_pixel_data(raw, requested_faces=None):
-    """Riconduce la risposta dell'AI al contratto di `expandPixelOps`.
-
-    NON disegna e NON interpreta le coordinate: quello lo fa il client, dove
-    sta la tela. Qui si controlla solo che esista almeno una faccia con almeno
-    un comando riconoscibile, cosi' un errore di formato diventa un 400 chiaro
-    invece di una tela che resta misteriosamente vuota.
+    Stesso spirito di `_prompts_dir()`: funziona da sorgente e congelato. Si
+    prova prima la cartella dell'editor sotto BASE_DIR, poi la propria, perche'
+    un bundle PyInstaller puo' appiattire i `datas` in un'unica cartella di
+    prompt. Senza il file l'AI deve comunque poter essere chiamata, quindi in
+    ultima istanza si ricade sul fallback del modulo condiviso.
     """
-    warnings = []
-    if not isinstance(raw, dict):
-        return {"faces": {}, "warnings": ["La risposta non e' un oggetto JSON."]}
-
-    wanted = []
-    for f in (requested_faces or []):
-        key = _pixel_face_key(f)
-        if key and key not in wanted:
-            wanted.append(key)
-
-    side = None
-    for k in ("size", "side", "w", "width", "lato", "dimensione"):
-        if raw.get(k) is not None:
+    for folder in (os.path.join(BASE_DIR, "PixelAIEditor", "assets", "prompts"),
+                   _prompts_dir()):
+        path = os.path.join(folder, "prompt-pixel2d.txt")
+        if os.path.exists(path):
             try:
-                side = int(round(float(raw[k])))
-            except (TypeError, ValueError):
-                continue
-            break
-    if side is not None:
-        clamped = max(PIXEL_MIN_SIDE, min(PIXEL_MAX_SIDE, side))
-        if clamped != side:
-            warnings.append("dimensione %s fuori range, riportata a %d"
-                            % (side, clamped))
-        side = clamped
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except OSError as e:
+                print(f"[prompt] impossibile leggere prompt-pixel2d.txt: {e}")
+    return PIXEL_PROMPT_FALLBACK
 
-    palette = {}
-    raw_palette = None
-    for k in ("palette", "colors", "colori", "colours"):
-        if isinstance(raw.get(k), dict):
-            raw_palette = raw[k]
-            break
-    for key, value in (raw_palette or {}).items():
-        name = str(key).strip()
-        if not name or len(palette) >= PIXEL_MAX_PALETTE:
-            continue
-        hexed = _pixel_hex(value)
-        if hexed is None:
-            warnings.append("colore '%s' non valido, ignorato" % name)
-            continue
-        palette[name] = hexed
 
-    raw_faces = None
-    for k in ("faces", "facce", "textures", "faccia"):
-        if isinstance(raw.get(k), dict):
-            raw_faces = raw[k]
-            break
-    if raw_faces is None:
-        # Risposta a faccia singola: le ops stanno alla radice. E' la forma che
-        # esce quasi sempre quando si chiede UNA faccia sola.
-        for k in ("ops", "comandi", "commands", "list", "draw"):
-            if isinstance(raw.get(k), (list, tuple, str)):
-                raw_faces = {wanted[0] if len(wanted) == 1 else "all": raw[k]}
-                break
-    if not isinstance(raw_faces, dict):
-        return {"size": side, "palette": palette, "faces": {},
-                "warnings": warnings + ["Nessuna faccia nella risposta."]}
+def build_pixel2d_prompt(prompt, context=None, size=None, height=None):
+    """Prompt per una TELA 2D, non per le sei facce di un cubo.
 
-    faces = {}
-    unknown = []
-    for key, value in raw_faces.items():
-        fkey = _pixel_face_key(key)
-        if not fkey:
-            unknown.append(str(key)[:24])
-            continue
-        if isinstance(value, dict):
-            for k in ("ops", "comandi", "commands", "list", "draw"):
-                if value.get(k) is not None:
-                    value = value[k]
-                    break
-        if isinstance(value, str):
-            value = value.split("\n")
-        if not isinstance(value, (list, tuple)):
-            warnings.append("faccia '%s': comandi non in lista, ignorata" % fkey)
-            continue
-        ops = []
-        for entry in value:
-            if isinstance(entry, (list, tuple)):
-                entry = " ".join(str(x) for x in entry)
-            line = str(entry).strip().strip(",").strip()
-            if not line or line.startswith("#") or line.startswith("//"):
-                continue
-            head = line.split()[0].lower()
-            if head not in PIXEL_COMMANDS:
-                warnings.append("faccia '%s': comando '%s' sconosciuto"
-                                % (fkey, head[:16]))
-                continue
-            ops.append(line)
-            if len(ops) >= PIXEL_MAX_OPS:
-                warnings.append("faccia '%s': troppi comandi, troncata a %d"
-                                % (fkey, PIXEL_MAX_OPS))
-                break
-        if ops:
-            faces[fkey] = ops
-        else:
-            warnings.append("faccia '%s': nessun comando valido" % fkey)
-
-    # Una faccia in piu' non e' un errore da rifiutare: il client applica solo
-    # quelle che ha chiesto. Va solo detto, perche' spiega una faccia mancante.
-    if wanted:
-        extra = [k for k in faces if k not in wanted and k != "all"]
-        if extra:
-            warnings.append("facce non richieste: %s" % ", ".join(extra))
-        missing = [k for k in wanted if k not in faces]
-        if missing and "all" not in faces:
-            warnings.append("facce richieste ma non disegnate: %s"
-                            % ", ".join(missing))
-
-    result = {"size": side, "palette": palette, "faces": faces}
-    if unknown:
-        result["unknownFaces"] = unknown[:12]
-    if warnings:
-        result["warnings"] = warnings[:20]
-    return result
+    Il motore e' lo stesso di `build_pixel_prompt` (`pixelprompt`, condiviso con
+    PixelAIEditor): cambiano solo il template e il fatto che la faccia e' sempre
+    una sola, `all`. Il modulo condiviso riceve il testo del template come
+    parametro proprio perche' le due app hanno cartelle `assets/prompts/` diverse.
+    """
+    return _build_pixel_prompt(
+        prompt, ["all"], context=context, size=size, height=height,
+        template=_pixel2d_prompt_text())
 
 
 class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -1696,6 +1416,132 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         raw = self.rfile.read(length)
         return json.loads(raw.decode('utf-8'))
 
+    def _handle_texture2d(self):
+        """POST /api/texture2d — generazione AI della TELA di PixelAIEditor.
+
+        Copia del `_handle_texture` di `PixelAIEditor/main.py`: stesso corpo
+        accettato, stessa risposta, stessi codici. Esiste qui perche' dentro
+        l'iframe la pagina dell'editor e' servita dal server del PADRE, quindi la
+        sua fetch su percorso assoluto arriva a questo handler e non al suo.
+        E' una rotta SEPARATA da `/api/texture` (le facce del creatore di
+        materiali) di proposito: la' la tela e' la faccia quadrata di un cubo e le
+        facce richieste sono fino a sei, qui la tela e' UNA e puo' non essere
+        quadrata (`width` + `height`).
+
+        Il server NON disegna: espandere le ops sulla tela e' compito di
+        `expandPixelOps` nel browser, dove la tela vive. Qui si valida solo la
+        FORMA della risposta, cosi' un errore diventa un messaggio invece di una
+        tela che resta misteriosamente vuota.
+        """
+        try:
+            content_length = int(self.headers.get('Content-Length') or 0)
+        except (TypeError, ValueError):
+            content_length = 0
+        if content_length <= 0:
+            self._send_json(400, {"error": "Corpo della richiesta mancante."})
+            return
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode('utf-8'))
+        except Exception as e:                                  # noqa: BLE001
+            self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "Richiesta non valida: atteso un oggetto."})
+            return
+
+        # `str(...)` non e' decorativo: con un `prompt` non testuale (un numero,
+        # una lista) lo `.strip()` solleva DENTRO l'handler, e un'eccezione qui
+        # non diventa un 500 - chiude la connessione senza NESSUNA risposta HTTP,
+        # e il client vede "connessione persa" invece di un messaggio.
+        prompt = str(payload.get("prompt") or "").strip()
+        if not prompt:
+            self._send_json(400, {"error": "Descrizione del disegno mancante."})
+            return
+
+        answer = None
+        try:
+            final_prompt = build_pixel2d_prompt(
+                prompt,
+                payload.get("context"),
+                payload.get("width", payload.get("size")),
+                payload.get("height"))
+            answer = ai_answer_text_retrying(final_prompt, payload.get("model"))
+        except (AIAuthError, AITransientError) as e:
+            self._send_ai_error(e, "PIXEL AI")
+            return
+        except Exception as e:                                  # noqa: BLE001
+            self._send_ai_error(_classify_ai_error(e), "PIXEL AI")
+            return
+
+        sys.path.insert(0, os.path.join(BASE_DIR, "src"))
+        from parser import extract_and_parse_json
+        try:
+            raw = extract_and_parse_json(answer)
+        except Exception as e:                                  # noqa: BLE001
+            self._log_ai_answer("PIXEL AI", answer, e)
+            self._send_json(400, {
+                "error": "Il modello non ha restituito JSON. Riprova, "
+                         "eventualmente riformulando la descrizione. "
+                         "Dettaglio: %s" % e,
+                "rawPreview": (answer or "")[:400],
+            })
+            return
+
+        # `faces=["all"]`: qualunque nome usi l'AI (`canvas`, `sprite`, `image`,
+        # `px`...) viene ricondotto qui a un'unica tela dagli alias di
+        # pixelprompt. Rifiutarlo costerebbe all'utente una rigenerazione per una
+        # parola.
+        tex = normalize_pixel_data(raw, ["all"])
+        faces = tex.get("faces") or {}
+        if not faces:
+            self._log_ai_answer("PIXEL AI", answer, None)
+            detail = ["Il modello ha risposto ma nessun comando e' utilizzabile."]
+            if tex.get("unknownFaces"):
+                detail.append("Nomi non riconosciuti: %s."
+                              % ", ".join(tex["unknownFaces"][:12]))
+            for w in (tex.get("warnings") or [])[:5]:
+                detail.append(w + ".")
+            detail.append("Riprova: spesso basta rigenerare.")
+            self._send_json(400, {
+                "error": " ".join(detail),
+                "unknownFaces": tex.get("unknownFaces", []),
+                "warnings": tex.get("warnings", []),
+                "rawPreview": (answer or "")[:400],
+            })
+            return
+
+        # La tela e' una sola: se l'AI ha comunque diviso in facce (capita quando
+        # il prompt dell'utente parla di un cubo), si prende `all` se c'e',
+        # altrimenti la PRIMA. Scartare il resto in silenzio sarebbe peggio che
+        # dirlo, quindi finisce negli avvisi.
+        if "all" in faces:
+            ops = faces["all"]
+        else:
+            first = sorted(faces.keys())[0]
+            ops = faces[first]
+            if len(faces) > 1:
+                tex.setdefault("warnings", []).append(
+                    "piu' disegni nella risposta (%s): usato '%s'"
+                    % (", ".join(sorted(faces)), first))
+
+        if tex.get("warnings") or tex.get("unknownFaces"):
+            print("[pixel2d] risposta normalizzata con avvisi: %s"
+                  % json.dumps({"unknownFaces": tex.get("unknownFaces", []),
+                                "warnings": tex.get("warnings", [])},
+                               ensure_ascii=False))
+
+        # `faces` resta nella risposta accanto a `ops`: il modulo che espande le
+        # ops e' condiviso col padre e li' l'ingresso e' sempre un dizionario di
+        # facce. Duplicare non costa nulla e evita un ramo dedicato nel client.
+        self._send_json(200, {
+            "size": tex.get("size"),
+            "palette": tex.get("palette") or {},
+            "ops": ops,
+            "faces": {"all": ops},
+            "unknownFaces": tex.get("unknownFaces", []),
+            "warnings": tex.get("warnings", []),
+        })
+
     def do_POST(self):
         # --- Preferenze generiche: merge senza perdere le altre chiavi ---
         if self.path == '/api/prefs':
@@ -1852,7 +1698,16 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:                              # noqa: BLE001
                 self._send_json(400, {"error": "Richiesta non valida: %s" % e})
                 return
-            prompt = (payload.get("prompt") or "").strip()
+            # Un corpo JSON che sia una LISTA fa sollevare `payload.get`, e un
+            # `prompt` non testuale (un numero) fa sollevare `.strip()`.
+            # Un'eccezione dentro l'handler non diventa un 500: socketserver
+            # stampa il traceback e chiude il socket, quindi il client vede
+            # "connessione persa" senza codice ne' messaggio. Modello della
+            # guardia: PixelAIEditor/main.py:330-340.
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "Richiesta non valida: atteso un oggetto."})
+                return
+            prompt = str(payload.get("prompt") or "").strip()
             if not prompt:
                 self._send_json(400, {"error": "Descrizione della texture mancante."})
                 return
@@ -1912,6 +1767,12 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, tex)
             return
 
+        # La tela 2D di PixelAIEditor aperto nell'iframe: rotta a se', vedi
+        # _handle_texture2d. `/api/texture` qui sopra resta intatta.
+        if self.path == "/api/texture2d":
+            self._handle_texture2d()
+            return
+
         if self.path == "/api/animate":
             # Genera UNA clip di animazione a keyframe per lo scheletro corrente,
             # a partire da un prompt in linguaggio naturale. Ritorna il JSON dei
@@ -1929,7 +1790,14 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:                              # noqa: BLE001
                 self._send_json(400, {"error": "Richiesta non valida: %s" % e})
                 return
-            prompt = (payload.get("prompt") or "").strip()
+            # Stessa guardia di /api/texture, per lo stesso motivo: un corpo non
+            # dizionario fa sollevare `payload.get` e un `prompt` non testuale
+            # `.strip()`, e un'eccezione qui non diventa un 500 - il socket si
+            # chiude e il client non riceve NESSUNA risposta HTTP.
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "Richiesta non valida: atteso un oggetto."})
+                return
+            prompt = str(payload.get("prompt") or "").strip()
             bones = payload.get("bones") or []
             if not isinstance(bones, (list, tuple)):
                 bones = []

@@ -302,6 +302,25 @@ run "Texture AI: prompt, normalizzazione e /api/texture" python3 tests/test_text
 #     (painted 0) va scartata invece di riversata, o cancella cio' che c'era.
 run "Texture AI: facce e destinazioni (Node)" node tests/test_material_ai.mjs
 
+# 4e-ter. Il server dell'app SORELLA (PixelAIEditor/main.py). La sua /api/texture
+#     ha lo stesso NOME e lo stesso contratto di risposta di quella del padre ma
+#     non lo stesso codice, e le differenze stanno dove si sbaglia. Qui la tela
+#     e' UNA e puo' NON essere quadrata: se `height` si perde per strada il
+#     prompt dichiara una tela quadrata, l'AI disegna dentro un rettangolo che
+#     non esiste e il risultato torna schiacciato - che si legge come "il
+#     modello disegna male", non come "il prompt gli ha mentito sulla tela".
+#     L'altra meta' sono gli ALIAS del nome della tela: chiedendo un'immagine
+#     invece di un cubo il modello risponde `canvas`, `sprite`, `image` o con le
+#     ops alla radice, e un nome non riconosciuto finisce fra le unknownFaces
+#     lasciando la tela VUOTA - che l'utente legge come "non ha generato
+#     niente", e paga una rigenerazione per una parola.
+#     Blocca anche la decisione sulle cartelle: le IMPOSTAZIONI si separano
+#     (APP_NAME, o la rotazione degli autosave conta i file delle due app
+#     insieme e cancella gli uni per far posto agli altri), la sessione Google
+#     NO (COOKIES_APP_NAME), altrimenti la stessa UI vede `has_cookies` opposto
+#     a seconda che l'abbia servita il padre o l'app da sola.
+run "Server PixelAIEditor: prompt 2D, /api/texture, cartelle" python3 tests/test_pixelai_server.py
+
 # 5. La build rigenera ui/index.html e il bundle e' sintatticamente valido.
 run "Build UI e sintassi bundle" bash -c '
   node ui/build.mjs >/dev/null || exit 1

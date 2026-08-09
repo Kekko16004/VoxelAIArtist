@@ -699,9 +699,7 @@
   "materials.saveToLibTitle": "Enregistre ce materiau dans votre bibliotheque personnelle, sans l'ajouter au projet",
   "materials.previewTitle": "Apercu",
   "materials.previewHint": "Le cube montre la texture telle que vous la verrez sur le voxel ; la sphere aide a lire la rugosite et la metallicite.",
-  "materials.previewDragHint": "Glisser pour tourner · survol pour agrandir",
-  "materials.previewDragTitle": "Glisser pour tourner ; au relachement elle continue seule",
-  "materials.previewDragHint": "Glisser pour tourner · survol pour agrandir",
+  "materials.previewDragHint": "Glisser pour tourner · survoler le cube pour agrandir",
   "materials.previewDragTitle": "Glisser pour tourner ; au relachement elle continue seule",
   "materials.cropLabel": "Recadrage : faites glisser pour choisir la partie de l'image a utiliser.",
   "materials.cropReset": "Image entiere",
@@ -924,5 +922,14 @@
   "plugins.droppedInvalid": " ({n} écartés car invalides)",
   "plugins.errGeneric": "Erreur du plugin : {msg}",
   "plugins.errPlain": "Erreur : {msg}",
-  "plugins.errRunFailed": "échec de l'exécution"
+  "plugins.errRunFailed": "échec de l'exécution",
+  "pixedit.open": "Éditeur complet",
+  "pixedit.openTitle": "Ouvrir la toile dans l'éditeur de pixel art complet",
+  "pixedit.title": "Éditeur de pixel art",
+  "pixedit.openTab": "Ouvrir dans un onglet",
+  "pixedit.openTabTitle": "Ouvrir l'éditeur dans un onglet du navigateur",
+  "pixedit.close": "Fermer",
+  "pixedit.frameTitle": "Toile de l'éditeur de pixel art",
+  "pixedit.subtitle": "Matériau : {name}",
+  "pixedit.subtitleNoName": "Matériau sans nom"
 }

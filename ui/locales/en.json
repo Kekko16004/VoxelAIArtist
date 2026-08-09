@@ -699,9 +699,7 @@
   "materials.saveToLibTitle": "Save this material to your personal library, without adding it to the project",
   "materials.previewTitle": "Preview",
   "materials.previewHint": "The cube shows the texture as you will see it on the voxel; the sphere helps read roughness and metalness.",
-  "materials.previewDragHint": "Drag to rotate · hover to enlarge",
-  "materials.previewDragTitle": "Drag to rotate; on release it keeps spinning",
-  "materials.previewDragHint": "Drag to rotate · hover to enlarge",
+  "materials.previewDragHint": "Drag to rotate · hover the cube to enlarge",
   "materials.previewDragTitle": "Drag to rotate; on release it keeps spinning",
   "materials.cropLabel": "Crop: drag to pick the part of the image to use.",
   "materials.cropReset": "Whole image",
@@ -924,5 +922,14 @@
   "plugins.droppedInvalid": " ({n} dropped as invalid)",
   "plugins.errGeneric": "Plugin error: {msg}",
   "plugins.errPlain": "Error: {msg}",
-  "plugins.errRunFailed": "execution failed"
+  "plugins.errRunFailed": "execution failed",
+  "pixedit.open": "Full editor",
+  "pixedit.openTitle": "Open the canvas in the full pixel art editor",
+  "pixedit.title": "Pixel art editor",
+  "pixedit.openTab": "Open in a tab",
+  "pixedit.openTabTitle": "Open the editor in a browser tab",
+  "pixedit.close": "Close",
+  "pixedit.frameTitle": "Pixel art editor canvas",
+  "pixedit.subtitle": "Material: {name}",
+  "pixedit.subtitleNoName": "Unnamed material"
 }

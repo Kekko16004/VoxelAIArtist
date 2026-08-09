@@ -699,9 +699,7 @@
   "materials.saveToLibTitle": "Guarda este material na tua biblioteca pessoal, sem o adicionar ao projeto",
   "materials.previewTitle": "Pre-visualizacao",
   "materials.previewHint": "O cubo mostra a textura como a veras no voxel; a esfera ajuda a ler a rugosidade e a metalicidade.",
-  "materials.previewDragHint": "Arraste para rodar · passe por cima para ampliar",
-  "materials.previewDragTitle": "Arraste para rodar; ao soltar continua sozinha",
-  "materials.previewDragHint": "Arraste para rodar · passe por cima para ampliar",
+  "materials.previewDragHint": "Arraste para rodar · passe sobre o cubo para ampliar",
   "materials.previewDragTitle": "Arraste para rodar; ao soltar continua sozinha",
   "materials.cropLabel": "Recorte: arrasta para escolher a parte da imagem a usar.",
   "materials.cropReset": "Imagem inteira",
@@ -924,5 +922,14 @@
   "plugins.droppedInvalid": " ({n} descartados por inválidos)",
   "plugins.errGeneric": "Erro do plugin: {msg}",
   "plugins.errPlain": "Erro: {msg}",
-  "plugins.errRunFailed": "execução falhou"
+  "plugins.errRunFailed": "execução falhou",
+  "pixedit.open": "Editor completo",
+  "pixedit.openTitle": "Abrir a tela no editor de pixel art completo",
+  "pixedit.title": "Editor de pixel art",
+  "pixedit.openTab": "Abrir num separador",
+  "pixedit.openTabTitle": "Abrir o editor num separador do navegador",
+  "pixedit.close": "Fechar",
+  "pixedit.frameTitle": "Tela do editor de pixel art",
+  "pixedit.subtitle": "Material: {name}",
+  "pixedit.subtitleNoName": "Material sem nome"
 }

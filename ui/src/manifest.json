@@ -37,5 +37,6 @@
   "lib/35-primitives.js",
   "lib/37-pixel-ops.js",
   "lib/36-materials.js",
+  "lib/38-pixel-bridge.js",
   "lib/18-bootstrap-tail.js"
 ]

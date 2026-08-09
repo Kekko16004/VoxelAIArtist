@@ -699,9 +699,7 @@
   "materials.saveToLibTitle": "Speichert dieses Material in der personlichen Bibliothek, ohne es dem Projekt hinzuzufugen",
   "materials.previewTitle": "Vorschau",
   "materials.previewHint": "Der Wurfel zeigt die Textur so, wie du sie am Voxel siehst; die Kugel hilft, Rauheit und Metallgrad zu lesen.",
-  "materials.previewDragHint": "Ziehen zum Drehen · Hover zum Vergrossern",
-  "materials.previewDragTitle": "Ziehen zum Drehen; beim Loslassen dreht sie weiter",
-  "materials.previewDragHint": "Ziehen zum Drehen · Hover zum Vergrossern",
+  "materials.previewDragHint": "Ziehen zum Drehen · Cursor auf den Wuerfel zum Vergrossern",
   "materials.previewDragTitle": "Ziehen zum Drehen; beim Loslassen dreht sie weiter",
   "materials.cropLabel": "Zuschnitt: ziehen, um den zu verwendenden Bildausschnitt zu wahlen.",
   "materials.cropReset": "Ganzes Bild",
@@ -924,5 +922,14 @@
   "plugins.droppedInvalid": " ({n} als ungültig verworfen)",
   "plugins.errGeneric": "Plugin-Fehler: {msg}",
   "plugins.errPlain": "Fehler: {msg}",
-  "plugins.errRunFailed": "Ausführung fehlgeschlagen"
+  "plugins.errRunFailed": "Ausführung fehlgeschlagen",
+  "pixedit.open": "Voller Editor",
+  "pixedit.openTitle": "Die Leinwand im vollständigen Pixel-Art-Editor öffnen",
+  "pixedit.title": "Pixel-Art-Editor",
+  "pixedit.openTab": "In einem Tab öffnen",
+  "pixedit.openTabTitle": "Den Editor in einem Browser-Tab öffnen",
+  "pixedit.close": "Schließen",
+  "pixedit.frameTitle": "Leinwand des Pixel-Art-Editors",
+  "pixedit.subtitle": "Material: {name}",
+  "pixedit.subtitleNoName": "Material ohne Namen"
 }

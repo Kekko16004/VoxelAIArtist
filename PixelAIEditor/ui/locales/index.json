@@ -1,0 +1,12 @@
+{
+  "source": "it",
+  "fallback": "it",
+  "locales": [
+    { "code": "it", "name": "Italiano" },
+    { "code": "en", "name": "English" },
+    { "code": "es", "name": "Español" },
+    { "code": "de", "name": "Deutsch" },
+    { "code": "fr", "name": "Français" },
+    { "code": "pt", "name": "Português" }
+  ]
+}

@@ -5,6 +5,16 @@ import time
 
 APP_NAME = "VoxelAIArtist"
 
+# I COOKIE sono una sessione Google, non una preferenza: restano CONDIVISI fra le
+# app di questo repo, sotto un nome FISSO. Se cambiassero con APP_NAME, la stessa
+# app vedrebbe `has_cookies: true` servita dal server di VoxelAIArtist (ponte
+# iframe) e `false` avviata da sola — due comportamenti opposti per lo stesso
+# codice a seconda di come e' stata aperta.
+# Le IMPOSTAZIONI invece si separano (APP_NAME, mutabile con set_app_name): la
+# rotazione degli autosave conta i file per cartella, e mescolare autosalvataggi
+# di categorie diverse farebbe cancellare gli uni per far posto agli altri.
+COOKIES_APP_NAME = "VoxelAIArtist"
+
 # Chiavi che non devono MAI finire nel dict pubblico delle preferenze.
 # I cookie vivono in cookies.json separato, ma restiamo difensivi nel caso
 # in cui una chiave sensibile finisca per errore in settings.json.
@@ -17,14 +27,33 @@ RECENT_MAX_KEEP = 15
 # Pattern nome file autosave: autosave_<projectId>_<epoch>.voxai.json
 _AUTOSAVE_RE = re.compile(r"^autosave_[A-Za-z0-9._-]+_\d+\.voxai\.json$")
 
-def get_appdata_dir():
+def set_app_name(name):
+    """Cambia la cartella delle IMPOSTAZIONI (mai quella dei cookie).
+
+    La chiama un'app diversa da VoxelAIArtist subito dopo l'import, prima di
+    qualunque lettura: PixelAIEditor lo fa in cima al proprio main.py.
+    """
+    global APP_NAME
+    APP_NAME = str(name or "VoxelAIArtist").strip() or "VoxelAIArtist"
+    return APP_NAME
+
+
+def _appdata_root(app_name):
     appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
-    path = os.path.join(appdata, APP_NAME)
+    path = os.path.join(appdata, app_name)
     os.makedirs(path, exist_ok=True)
     return path
 
+
+def get_appdata_dir():
+    return _appdata_root(APP_NAME)
+
+def get_cookies_dir():
+    """Cartella dei cookie: FISSA, condivisa fra le app (vedi COOKIES_APP_NAME)."""
+    return _appdata_root(COOKIES_APP_NAME)
+
 def get_cookies_path():
-    return os.path.join(get_appdata_dir(), "cookies.json")
+    return os.path.join(get_cookies_dir(), "cookies.json")
 
 def get_settings_path():
     return os.path.join(get_appdata_dir(), "settings.json")
