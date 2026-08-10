@@ -21,6 +21,13 @@ PyQt6-WebEngine-Qt6==6.11.1
 # Fornisce il modulo `gemini`.
 python-gemini-api==2.4.12
 
+# --- Provider AI aggiuntivi: NESSUNA dipendenza ---
+# src/providers.py parla con Anthropic, con i servizi compatibili OpenAI e con i
+# provider personalizzati usando SOLO urllib della libreria standard: sono API
+# HTTP con JSON, e un pacchetto in piu' sarebbe peso senza guadagno. Quindi NON
+# serve installare `anthropic` ne' `openai` per usarli, e non vanno aggiunti qui:
+# un import mancante all'avvio spegnerebbe l'app anche a chi usa solo Gemini.
+#
 # --- Legacy: client Perplexity (NON piu' dipendenza runtime) ---
 # RIMOSSO da runtime (2026-07-19). L'import di `perplexity` in src/parser.py e'
 # stato reso LAZY: e' presente solo dentro start_local_server() (server standalone

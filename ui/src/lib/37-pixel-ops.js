@@ -7,13 +7,19 @@
             // elencandoli; le stesse 32x32 in ops stanno in 300 byte. E' l'unico modo
             // per cui "genera 6 facce" non sfondi il budget di token della risposta.
             //
-            // PERCHE' QUI E NON ANCHE IN PYTHON. Le ops dei voxel esistono in due
-            // implementazioni (parser.py + expand-ops.js) perche' la coda pack le
-            // espande sul server, e quella parita' e' costata tre difetti veri. Le ops
-            // dei pixel non hanno un consumatore server-side: la tela vive nel browser,
-            // quindi l'espansione sta SOLO qui e il backend si limita a validare la
-            // forma della risposta (main.py: `normalize_pixel_data`). Nessuna parita'
-            // da mantenere, per scelta.
+            // DUE IMPLEMENTAZIONI, DA TENERE IDENTICHE. Nasceva come modulo unico:
+            // la tela vive nel browser, quindi non c'era un consumatore server-side
+            // come per le ops dei voxel. `mcp_server/pixelops.py` (`expand_pixel_ops`)
+            // e' il secondo, quindi ora la parita' c'e', ed e' la stessa che sui
+            // voxel e' costata tre difetti veri. Una modifica alla SEMANTICA qui va
+            // fatta anche di la', e si verifica con
+            // `bash tests/pixel_parity_check.sh` (55 casi condivisi, confrontati
+            // pixel per pixel). Scriverlo ne ha trovate tre gia' divergenti, tutte
+            // con questo lato piu' permissivo: le parole del trasparente in palette,
+            // `forceSize` che qui ignorava `height` e faceva la tela quadrata, e
+            // `faces` non-dizionario, dove `Object.keys` su una stringa dava una
+            // faccia per CARATTERE. Il backend continua a limitarsi a validare la
+            // forma della risposta (main.py: `normalize_pixel_data`).
             //
             // ORIGINE: (0,0) e' in ALTO A SINISTRA, x verso destra, y verso il BASSO.
             // E' la convenzione di ImageData e quella che un modello linguistico usa
@@ -63,10 +69,14 @@
                 // mappa 'a' -> '#...' vince su un'interpretazione fantasiosa.
                 if (palette && Object.prototype.hasOwnProperty.call(palette, s)) {
                     const mapped = palette[s];
-                    // La palette puo' dichiarare il trasparente per una sua chiave.
+                    // La palette puo' dichiarare il trasparente per una sua chiave, e
+                    // con le STESSE parole accettate come colore diretto: accettarne
+                    // meno qui vorrebbe dire che 'trasparente' funziona scritto in una
+                    // op e non funziona dichiarato in palette, che nessuno indovina.
                     if (mapped === null || mapped === undefined) return [0, 0, 0, 0];
                     s = String(mapped).trim();
-                    if (s === '-' || s.toLowerCase() === 'none') return [0, 0, 0, 0];
+                    if (s === '-' || ['none', 'trasparente', 'transparent']
+                        .indexOf(s.toLowerCase()) >= 0) return [0, 0, 0, 0];
                 }
                 if (s[0] !== '#') return null;
                 const hex = s.slice(1);
@@ -383,8 +393,13 @@
                 // Se il chiamante impone la dimensione (la tela esiste gia' e le altre
                 // facce sono di quel lato) si ignora quella dichiarata dall'AI: mescolare
                 // facce di lati diversi sullo stesso cubo si vede come una texture
-                // "che non si e' caricata" su una faccia sola.
-                if (o.forceSize) { w = pixelClampSide(o.size, dflt); h = w; }
+                // "che non si e' caricata" su una faccia sola. `height` e' facoltativo
+                // e serve alle tele NON quadrate (le usa l'MCP): senza, imporre la
+                // dimensione la squadrerebbe di forza, che e' un ritaglio silenzioso.
+                if (o.forceSize) {
+                    w = pixelClampSide(o.size, dflt);
+                    h = o.height ? pixelClampSide(o.height, w) : w;
+                }
 
                 const palette = {};
                 const rawPal = data.palette || data.colors || data.colori;
@@ -392,8 +407,13 @@
                     Object.keys(rawPal).forEach(k => { palette[k] = rawPal[k]; });
                 }
 
+                // `faces` vale solo se e' un DIZIONARIO di facce. Una stringa o una
+                // lista non lo sono, e senza questo controllo Object.keys() ne
+                // enumererebbe gli indici: 'faces: "abc"' diventerebbe tre facce
+                // chiamate 0, 1, 2 con dentro le lettere. Si ricade sulle ops alla
+                // radice, che e' anche cio' che fa il porto Python.
                 let rawFaces = data.faces || data.facce || null;
-                if (!rawFaces) {
+                if (!rawFaces || typeof rawFaces !== 'object' || Array.isArray(rawFaces)) {
                     const ops = data.ops || data.comandi || null;
                     rawFaces = ops ? { all: ops } : {};
                 }

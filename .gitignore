@@ -62,6 +62,7 @@ temp/
 # Artefatti temporanei dei test
 tests/.js_out.json
 tests/.js_budget.json
+tests/.js_pixel_out.json
 tests/.bundle_check.js
 # three.js + GLTFExporter scaricati a mano per l'harness GLB, e i .glb che
 # genera: ~35 MB rigenerabili, non vanno nella storia del repo.

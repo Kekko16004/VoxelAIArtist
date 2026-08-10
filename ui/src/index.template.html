@@ -4344,6 +4344,90 @@
                     </div>
                 </div>
 
+                <!-- Provider AI: sta DOPO la sessione Gemini di proposito. Quella
+                     e' il default a configurazione zero e deve restare dov'e',
+                     a un clic; questa e' la sezione per chi porta la propria
+                     chiave. -->
+                <div id="settingsProvidersSection">
+                    <div class="section-title" data-i18n="settings.prov.title">Provider AI</div>
+                    <div class="controls-group glass" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
+                        <div style="font-size:11px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.prov.intro">Scegli quale AI genera i modelli. Senza configurare nulla si usa Gemini con i cookie del browser.</div>
+                        <div id="providerList" style="display:flex; flex-direction:column; gap:8px;"></div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-secondary" id="providerAddBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.prov.addBtn">Aggiungi provider</button>
+                        </div>
+
+                        <div id="providerForm" style="display:none; flex-direction:column; gap:10px; padding-top:10px; border-top:1px solid var(--glass-border, rgba(255,255,255,0.10));">
+                            <div id="providerFormTitle" style="font-size:12px; font-weight:600; color:var(--text-primary);" data-i18n="settings.prov.formTitleNew">Nuovo provider</div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerTypeSelect" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.typeLabel">Tipo</label>
+                                <select id="providerTypeSelect" class="field-strong" style="padding:6px; font-size:12px;">
+                                    <option value="anthropic" data-i18n="settings.prov.typeAnthropic">Anthropic (Claude)</option>
+                                    <option value="openai_compatible" data-i18n="settings.prov.typeOpenai">Compatibile OpenAI</option>
+                                    <option value="custom" data-i18n="settings.prov.typeCustom">Personalizzato</option>
+                                </select>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerLabelInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.labelLabel">Nome</label>
+                                <input type="text" id="providerLabelInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Come vuoi chiamarlo" data-i18n-placeholder="settings.prov.labelPlaceholder">
+                            </div>
+                            <div id="providerBaseUrlRow" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerBaseUrlInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.baseUrlLabel">URL di base</label>
+                                <input type="text" id="providerBaseUrlInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="https://api.openai.com/v1" data-i18n-placeholder="settings.prov.baseUrlPlaceholder">
+                                <div id="providerBaseUrlHelp" style="font-size:10px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.prov.baseUrlHelp">Funziona con OpenAI, OpenRouter, Groq, Together, LM Studio, Ollama e vLLM: e' lo stesso contratto.</div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerModelInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.modelLabel">Modello</label>
+                                <input type="text" id="providerModelInput" class="field-strong" list="providerModelSuggestions" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Identificativo del modello" data-i18n-placeholder="settings.prov.modelPlaceholder">
+                                <datalist id="providerModelSuggestions"></datalist>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerKeyInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.keyLabel">Chiave API</label>
+                                <input type="password" id="providerKeyInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Incolla la chiave" data-i18n-placeholder="settings.prov.keyPlaceholder">
+                                <div id="providerKeyHint" style="font-size:10px; color:var(--text-muted); line-height:1.45;"></div>
+                            </div>
+                            <div id="providerMaxTokensRow" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerMaxTokensInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.maxTokensLabel">Token massimi in risposta</label>
+                                <input type="number" id="providerMaxTokensInput" class="field-strong" min="256" step="256" style="padding:6px; font-size:12px;">
+                            </div>
+                            <div id="providerCustomRows" style="display:none; flex-direction:column; gap:10px;">
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerPromptPathInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.promptPathLabel">Percorso del prompt nel corpo</label>
+                                    <input type="text" id="providerPromptPathInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="messages.0.content" data-i18n-placeholder="settings.prov.promptPathPlaceholder">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerResponsePathInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.responsePathLabel">Percorso del testo nella risposta</label>
+                                    <input type="text" id="providerResponsePathInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="choices.0.message.content" data-i18n-placeholder="settings.prov.responsePathPlaceholder">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerAuthHeaderInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.authHeaderLabel">Header di autenticazione</label>
+                                    <input type="text" id="providerAuthHeaderInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Authorization" data-i18n-placeholder="settings.prov.authHeaderPlaceholder">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerAuthPrefixInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.authPrefixLabel">Prefisso davanti alla chiave</label>
+                                    <input type="text" id="providerAuthPrefixInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Bearer " data-i18n-placeholder="settings.prov.authPrefixPlaceholder">
+                                    <div style="font-size:10px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.prov.authPrefixHelp">Lascialo vuoto per mandare la chiave da sola, senza prefisso.</div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerBodyInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.bodyLabel">Corpo JSON di partenza</label>
+                                    <textarea id="providerBodyInput" class="field-strong" rows="3" autocomplete="off" spellcheck="false" style="padding:6px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="{&quot;stream&quot;: false}" data-i18n-placeholder="settings.prov.bodyPlaceholder"></textarea>
+                                </div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerHeadersInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.headersLabel">Header aggiuntivi (JSON)</label>
+                                <textarea id="providerHeadersInput" class="field-strong" rows="2" autocomplete="off" spellcheck="false" style="padding:6px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="{&quot;X-Titolo&quot;: &quot;VoxelAIArtist&quot;}" data-i18n-placeholder="settings.prov.headersPlaceholder"></textarea>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-primary" id="providerSaveBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.prov.saveBtn">Salva provider</button>
+                                <button class="btn btn-secondary" id="providerCancelBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.prov.cancelBtn">Annulla</button>
+                            </div>
+                        </div>
+
+                        <div id="providerFeedback" style="display:none; font-size:11px; line-height:1.45; padding:8px 10px; border-radius:var(--radius-sm);"></div>
+                        <div class="screens-section-note" data-i18n="settings.prov.privacy">Le chiavi API restano soltanto su questo computer, in un file separato dalle preferenze, e vengono usate solo per contattare il provider che hai scelto.</div>
+                    </div>
+                </div>
+
                 <!-- Avvio / Salvataggio / Plugin: iniettati da 22-screens/26-settings-modal -->
                 <div id="settingsExtraSections"></div>
 

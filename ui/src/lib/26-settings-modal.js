@@ -354,6 +354,10 @@
                 // quello che la risposta espone gia' sulla presenza dei cookie.
                 function needsCookies(data) {
                     if (!data) return false;                    // backend assente: non insistiamo
+                    // Chi ha configurato un provider a chiave API NON usa i cookie:
+                    // aprirgli la modale a ogni avvio per una sessione Gemini che non
+                    // gli serve sarebbe un promemoria di sistemare la cosa sbagliata.
+                    if (data.provider && data.provider.usesCookies === false) return false;
                     if (typeof data.needsCookies === 'boolean') return data.needsCookies;
                     return !hasCookies(data);
                 }
@@ -512,4 +516,402 @@
                     }
                 })();
 
+            })();
+
+            /* ============================================================
+               PROVIDER AI — elenco, scelta dell'attivo, form, prova, elimina.
+               Gemini a cookie e' la prima riga dell'elenco ed e' SINTETICA (la
+               manda il server, non sta nel registro): non si puo' modificare
+               ne' eliminare, cosi' la via a configurazione zero non si perde
+               nemmeno per sbaglio.
+               ============================================================ */
+            (function initProviderSettings() {
+                const section = document.getElementById('settingsProvidersSection');
+                if (!section) return;
+
+                const listEl = document.getElementById('providerList');
+                const addBtn = document.getElementById('providerAddBtn');
+                const form = document.getElementById('providerForm');
+                const formTitle = document.getElementById('providerFormTitle');
+                const typeSelect = document.getElementById('providerTypeSelect');
+                const labelInput = document.getElementById('providerLabelInput');
+                const baseUrlRow = document.getElementById('providerBaseUrlRow');
+                const baseUrlInput = document.getElementById('providerBaseUrlInput');
+                const modelInput = document.getElementById('providerModelInput');
+                const modelSuggestions = document.getElementById('providerModelSuggestions');
+                const keyInput = document.getElementById('providerKeyInput');
+                const keyHint = document.getElementById('providerKeyHint');
+                const maxTokensRow = document.getElementById('providerMaxTokensRow');
+                const maxTokensInput = document.getElementById('providerMaxTokensInput');
+                const customRows = document.getElementById('providerCustomRows');
+                const promptPathInput = document.getElementById('providerPromptPathInput');
+                const responsePathInput = document.getElementById('providerResponsePathInput');
+                const authHeaderInput = document.getElementById('providerAuthHeaderInput');
+                const authPrefixInput = document.getElementById('providerAuthPrefixInput');
+                const bodyInput = document.getElementById('providerBodyInput');
+                const headersInput = document.getElementById('providerHeadersInput');
+                const saveBtn = document.getElementById('providerSaveBtn');
+                const cancelBtn = document.getElementById('providerCancelBtn');
+                const feedback = document.getElementById('providerFeedback');
+
+                const OK_COLOR = '#22c55e';
+                const KO_COLOR = 'var(--danger, #ef4444)';
+
+                // Stato del pannello. `editing` e' l'id in modifica (null = nuovo).
+                let state = { providers: [], active: 'gemini', anthropicModels: [] };
+                let editing = null;
+
+                function api(route) { return (window.__API_BASE__ ? window.__API_BASE__ : '') + route; }
+
+                // Ogni testo passa da t(): vedi la nota nella sezione cookie. Nessun
+                // ripiego italiano hardcoded, nemmeno per i messaggi d'errore.
+                function tr(key, vars) {
+                    return (typeof t === 'function') ? t(key, vars) : key;
+                }
+
+                function showFeedback(msg, kind) {
+                    if (!feedback) return;
+                    feedback.textContent = msg;
+                    feedback.style.display = 'block';
+                    if (kind === 'ok') {
+                        feedback.style.background = 'rgba(34,197,94,0.10)';
+                        feedback.style.border = '1px solid rgba(34,197,94,0.30)';
+                        feedback.style.color = OK_COLOR;
+                    } else if (kind === 'error') {
+                        feedback.style.background = 'rgba(239,68,68,0.10)';
+                        feedback.style.border = '1px solid rgba(239,68,68,0.30)';
+                        feedback.style.color = KO_COLOR;
+                    } else {
+                        feedback.style.background = 'var(--input-bg)';
+                        feedback.style.border = '1px solid var(--glass-border)';
+                        feedback.style.color = 'var(--text-secondary)';
+                    }
+                }
+                function clearFeedback() { if (feedback) feedback.style.display = 'none'; }
+
+                function typeName(type) {
+                    if (type === 'anthropic') return tr('settings.prov.typeAnthropic');
+                    if (type === 'openai_compatible') return tr('settings.prov.typeOpenai');
+                    if (type === 'custom') return tr('settings.prov.typeCustom');
+                    return tr('settings.prov.typeGemini');
+                }
+
+                function byId(id) {
+                    return state.providers.filter(p => p.id === id)[0] || null;
+                }
+
+                // --- Elenco ---------------------------------------------------
+                function renderList() {
+                    if (!listEl) return;
+                    listEl.textContent = '';
+                    state.providers.forEach(p => {
+                        const isActive = (p.id === state.active);
+                        const row = document.createElement('div');
+                        row.className = 'provider-row';
+                        row.dataset.providerId = p.id;
+                        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 10px;'
+                            + ' border-radius:var(--radius-sm); border:1px solid '
+                            + (isActive ? 'rgba(34,197,94,0.45)' : 'var(--glass-border, rgba(255,255,255,0.10))')
+                            + '; background:var(--input-bg);';
+
+                        const dot = document.createElement('span');
+                        dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex-shrink:0; background:'
+                            + (isActive ? OK_COLOR : 'var(--text-muted)') + ';';
+                        row.appendChild(dot);
+
+                        const info = document.createElement('div');
+                        info.style.cssText = 'flex:1; min-width:0;';
+                        const name = document.createElement('div');
+                        name.style.cssText = 'font-size:12px; font-weight:600; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                        name.textContent = p.label || p.id;
+                        info.appendChild(name);
+                        const meta = document.createElement('div');
+                        meta.style.cssText = 'font-size:10px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                        const bits = [typeName(p.type)];
+                        if (p.model) bits.push(p.model);
+                        if (p.needsKey) {
+                            bits.push(p.hasKey
+                                ? tr('settings.prov.keySaved', { mask: p.keyMask || '' })
+                                : tr('settings.prov.noKey'));
+                        }
+                        meta.textContent = bits.join(' · ');
+                        info.appendChild(meta);
+                        row.appendChild(info);
+
+                        const actions = document.createElement('div');
+                        actions.style.cssText = 'display:flex; gap:4px; flex-shrink:0;';
+                        const mkBtn = (cls, key, action, title) => {
+                            const b = document.createElement('button');
+                            b.className = 'btn ' + cls;
+                            b.style.cssText = 'font-size:10px; padding:4px 8px;';
+                            b.textContent = tr(key);
+                            b.dataset.providerAction = action;
+                            if (title) b.title = title;
+                            return b;
+                        };
+                        if (isActive) {
+                            const badge = document.createElement('span');
+                            badge.style.cssText = 'font-size:10px; color:' + OK_COLOR + '; padding:4px 6px;';
+                            badge.textContent = tr('settings.prov.inUse');
+                            badge.dataset.providerAction = 'badge';
+                            actions.appendChild(badge);
+                        } else {
+                            actions.appendChild(mkBtn('btn-secondary', 'settings.prov.useBtn', 'use'));
+                        }
+                        actions.appendChild(mkBtn('btn-secondary', 'settings.prov.testBtn', 'test'));
+                        if (!p.builtin) {
+                            actions.appendChild(mkBtn('btn-secondary', 'settings.prov.editBtn', 'edit'));
+                            actions.appendChild(mkBtn('btn-secondary', 'settings.prov.deleteBtn', 'delete'));
+                        }
+                        row.appendChild(actions);
+                        listEl.appendChild(row);
+                    });
+                }
+
+                async function load() {
+                    try {
+                        const res = await fetch(api('/api/providers'));
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        const data = await res.json();
+                        state.providers = Array.isArray(data.providers) ? data.providers : [];
+                        state.active = data.active || 'gemini';
+                        state.anthropicModels = data.anthropicModels || [];
+                        renderList();
+                        return data;
+                    } catch (err) {
+                        // Aperta come file:// o senza backend non c'e' nessun registro da
+                        // mostrare: lo si dice, invece di lasciare un riquadro vuoto che
+                        // sembra un guasto.
+                        state.providers = [];
+                        renderList();
+                        if (section) section.style.display = 'none';
+                        return null;
+                    }
+                }
+
+                // --- Form -----------------------------------------------------
+                function refreshFormUI() {
+                    const type = typeSelect ? typeSelect.value : 'anthropic';
+                    if (baseUrlRow) {
+                        // Per Anthropic l'URL ha gia' un default valido: mostrarlo come
+                        // campo obbligatorio farebbe credere che serva compilarlo.
+                        baseUrlRow.style.display = (type === 'anthropic') ? 'none' : 'flex';
+                    }
+                    if (customRows) customRows.style.display = (type === 'custom') ? 'flex' : 'none';
+                    if (maxTokensRow) maxTokensRow.style.display = (type === 'custom') ? 'none' : 'flex';
+                    if (modelSuggestions) {
+                        modelSuggestions.textContent = '';
+                        if (type === 'anthropic') {
+                            (state.anthropicModels || []).forEach(m => {
+                                const o = document.createElement('option');
+                                o.value = m;
+                                modelSuggestions.appendChild(o);
+                            });
+                        }
+                    }
+                }
+
+                function openForm(provider) {
+                    editing = provider ? provider.id : null;
+                    if (formTitle) {
+                        formTitle.textContent = tr(provider
+                            ? 'settings.prov.formTitleEdit' : 'settings.prov.formTitleNew');
+                    }
+                    if (typeSelect) typeSelect.value = (provider && provider.type) || 'anthropic';
+                    if (labelInput) labelInput.value = (provider && provider.label) || '';
+                    if (baseUrlInput) baseUrlInput.value = (provider && provider.base_url) || '';
+                    if (modelInput) modelInput.value = (provider && provider.model) || '';
+                    if (maxTokensInput) maxTokensInput.value = (provider && provider.max_tokens) || 16000;
+                    if (promptPathInput) promptPathInput.value = (provider && provider.prompt_path) || '';
+                    if (responsePathInput) responsePathInput.value = (provider && provider.response_path) || '';
+                    if (authHeaderInput) authHeaderInput.value = (provider && provider.auth_header) || '';
+                    // `auth_prefix` puo' essere la stringa VUOTA di proposito (chiave
+                    // nuda): `|| ''` va bene qui, ma in salvataggio va distinto.
+                    if (authPrefixInput) {
+                        authPrefixInput.value = (provider && provider.auth_prefix != null)
+                            ? provider.auth_prefix : '';
+                    }
+                    if (bodyInput) bodyInput.value = (provider && provider.body_template) || '';
+                    if (headersInput) {
+                        headersInput.value = (provider && provider.headers
+                            && Object.keys(provider.headers).length)
+                            ? JSON.stringify(provider.headers) : '';
+                    }
+                    // La chiave NON torna dal server: il form ne vede solo la maschera.
+                    // Lasciarlo vuoto significa "non cambiarla", ed e' scritto nel campo
+                    // sotto perche' altrimenti sembra che si sia persa.
+                    if (keyInput) keyInput.value = '';
+                    if (keyHint) {
+                        keyHint.textContent = (provider && provider.hasKey)
+                            ? tr('settings.prov.keyKeep', { mask: provider.keyMask || '' })
+                            : '';
+                    }
+                    refreshFormUI();
+                    if (form) form.style.display = 'flex';
+                    clearFeedback();
+                    if (labelInput) labelInput.focus();
+                }
+
+                function closeForm() {
+                    editing = null;
+                    if (form) form.style.display = 'none';
+                    // La chiave in chiaro non deve restare nel campo dopo la
+                    // chiusura: il form e' solo nascosto, non smontato, quindi il
+                    // valore sopravviverebbe nel DOM per tutta la sessione (e
+                    // finirebbe in un salvataggio password del browser o in una
+                    // copia della pagina). openForm() la riazzera comunque, ma
+                    // aspettare la prossima apertura la lascia li' nel frattempo.
+                    if (keyInput) keyInput.value = '';
+                }
+
+                function collectForm() {
+                    const payload = {
+                        type: typeSelect ? typeSelect.value : 'anthropic',
+                        label: labelInput ? labelInput.value.trim() : '',
+                        model: modelInput ? modelInput.value.trim() : '',
+                        base_url: baseUrlInput ? baseUrlInput.value.trim() : '',
+                    };
+                    if (editing) payload.id = editing;
+                    if (keyInput && keyInput.value.trim()) payload.api_key = keyInput.value.trim();
+                    if (maxTokensInput && maxTokensInput.value) {
+                        payload.max_tokens = parseInt(maxTokensInput.value, 10) || undefined;
+                    }
+                    if (payload.type === 'custom') {
+                        payload.prompt_path = promptPathInput ? promptPathInput.value.trim() : '';
+                        payload.response_path = responsePathInput ? responsePathInput.value.trim() : '';
+                        payload.auth_header = authHeaderInput ? authHeaderInput.value.trim() : '';
+                        payload.auth_prefix = authPrefixInput ? authPrefixInput.value : '';
+                        payload.body_template = bodyInput ? bodyInput.value.trim() : '';
+                    }
+                    if (headersInput && headersInput.value.trim()) {
+                        // Header illeggibili: si ferma QUI invece di mandarli al server,
+                        // che li scarterebbe in silenzio e lascerebbe l'utente a chiedersi
+                        // perche' il suo header non arriva mai.
+                        let parsed = null;
+                        try { parsed = JSON.parse(headersInput.value.trim()); }
+                        catch (e) { return { error: tr('settings.prov.headersInvalid') }; }
+                        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                            return { error: tr('settings.prov.headersInvalid') };
+                        }
+                        payload.headers = parsed;
+                    } else {
+                        payload.headers = {};
+                    }
+                    return { payload: payload };
+                }
+
+                async function post(route, body) {
+                    const res = await fetch(api(route), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    let out = {};
+                    try { out = await res.json(); } catch (e) { out = {}; }
+                    if (!res.ok || out.error) {
+                        throw new Error(out.error || ('HTTP ' + res.status));
+                    }
+                    return out;
+                }
+
+                // --- Azioni ---------------------------------------------------
+                if (addBtn) addBtn.addEventListener('click', () => { openForm(null); });
+                if (cancelBtn) cancelBtn.addEventListener('click', () => { closeForm(); clearFeedback(); });
+                if (typeSelect) typeSelect.addEventListener('change', refreshFormUI);
+
+                if (saveBtn) saveBtn.addEventListener('click', async () => {
+                    const got = collectForm();
+                    if (got.error) { showFeedback(got.error, 'error'); return; }
+                    saveBtn.disabled = true;
+                    try {
+                        await post('/api/providers', got.payload);
+                        closeForm();
+                        await load();
+                        showFeedback(tr('settings.prov.saved'), 'ok');
+                    } catch (err) {
+                        showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
+                    } finally {
+                        saveBtn.disabled = false;
+                    }
+                });
+
+                // Un solo handler sull'elenco (delega): le righe si ridisegnano a ogni
+                // caricamento, e agganciare i bottoni uno per uno li accumulerebbe.
+                if (listEl) listEl.addEventListener('click', async (ev) => {
+                    const btn = ev.target.closest('[data-provider-action]');
+                    if (!btn) return;
+                    const row = ev.target.closest('[data-provider-id]');
+                    if (!row) return;
+                    const id = row.dataset.providerId;
+                    const action = btn.dataset.providerAction;
+                    const provider = byId(id);
+                    if (!provider || action === 'badge') return;
+
+                    if (action === 'use') {
+                        try {
+                            const out = await post('/api/providers', { action: 'activate', id: id });
+                            state.active = out.active || id;
+                            state.providers = out.providers || state.providers;
+                            renderList();
+                            showFeedback(tr('settings.prov.activated', { label: provider.label || id }), 'ok');
+                        } catch (err) {
+                            showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
+                        }
+                        return;
+                    }
+                    if (action === 'edit') { openForm(provider); return; }
+                    if (action === 'delete') {
+                        if (!confirm(tr('settings.prov.deleteConfirm', { label: provider.label || id }))) return;
+                        try {
+                            const res = await fetch(api('/api/providers?id=' + encodeURIComponent(id)),
+                                { method: 'DELETE' });
+                            const out = await res.json();
+                            if (!res.ok || out.error) throw new Error(out.error || ('HTTP ' + res.status));
+                            if (editing === id) closeForm();
+                            await load();
+                            showFeedback(tr('settings.prov.deleted'), 'ok');
+                        } catch (err) {
+                            showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
+                        }
+                        return;
+                    }
+                    if (action === 'test') {
+                        btn.disabled = true;
+                        showFeedback(tr('settings.prov.testing'), 'info');
+                        try {
+                            // La prova risponde 200 anche quando fallisce: l'esito sta in
+                            // `ok`/`kind`, cosi' un 401 del provider diventa un messaggio
+                            // che dice cosa fare invece di un errore di rete generico.
+                            const res = await fetch(api('/api/providers/test'), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: id }),
+                            });
+                            const out = await res.json();
+                            if (out.ok) {
+                                showFeedback(tr('settings.prov.testOk', { sample: out.sample || '' }), 'ok');
+                            } else {
+                                const kindKey = out.kind === 'auth' ? 'settings.prov.testAuth'
+                                    : (out.kind === 'transient' ? 'settings.prov.testTransient'
+                                        : 'settings.prov.testFormat');
+                                showFeedback(tr(kindKey, { error: out.message || out.error || '' }), 'error');
+                            }
+                        } catch (err) {
+                            showFeedback(tr('settings.prov.testFormat',
+                                { error: String(err.message || err) }), 'error');
+                        } finally {
+                            btn.disabled = false;
+                        }
+                        return;
+                    }
+                });
+
+                // Le righe dell'elenco sono costruite da JS: non hanno data-i18n e
+                // applyI18n non le tocca. Nascono anche PRIMA che i dizionari siano
+                // caricati, quando t() ritorna la chiave nuda — quindi senza questo
+                // ridisegno si leggerebbe per sempre 'settings.prov.useBtn'. Lo chiama
+                // setLanguage (23-i18n.js) come per renderObjectsList e compagni.
+                window.renderProviderList = function () { renderList(); refreshFormUI(); };
+
+                load();
             })();

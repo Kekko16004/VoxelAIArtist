@@ -63,6 +63,7 @@ from aiclient import (  # noqa: E402
     ai_answer_text_retrying,
 )
 from parser import extract_and_parse_json  # noqa: E402
+import providers as ai_providers  # noqa: E402
 
 # Le IMPOSTAZIONI sono nostre, i COOKIE restano condivisi col padre (sono una
 # sessione Google, non una preferenza). Vedi COOKIES_APP_NAME in settings.py.
@@ -222,12 +223,20 @@ class PixelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _send_ai_error(self, exc, label):
         """Mappa gli errori AI classificati su codici HTTP distinti.
 
-        401 -> cookie da riconfigurare (il client apre le Impostazioni),
+        401 -> credenziali da riconfigurare (il client apre le Impostazioni),
         503 -> rete/quota/rate-limit (riprovabile), 400 -> risposta non JSON.
         """
         self._log_ai_answer(label, getattr(exc, "answer", None), exc)
         if isinstance(exc, AIAuthError):
-            self._send_json(401, {"error": str(exc), "needsCookies": True})
+            # Vedi la stessa nota nel main.py del padre: mandare a riconfigurare
+            # i cookie chi usa un provider a chiave API lo manderebbe a sistemare
+            # la cosa sbagliata.
+            try:
+                uses_cookies = ai_providers.public_summary().get("usesCookies", True)
+            except Exception:                                   # noqa: BLE001
+                uses_cookies = True
+            self._send_json(401, {"error": str(exc), "needsCookies": uses_cookies,
+                                  "needsProvider": (not uses_cookies)})
         elif isinstance(exc, AIFormatError):
             self._send_json(400, {"error": str(exc)})
         else:
@@ -274,6 +283,11 @@ class PixelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 # deve usare download del browser e <input type="file">.
                 "is_desktop": False,
                 "app": "PixelAIEditor",
+                # Provider AI attivo (registro CONDIVISO col padre, come i
+                # cookie: vedi il docstring di src/providers.py). Solo il
+                # riassunto mascherato, mai una chiave. Qui e' in sola lettura:
+                # i provider si aggiungono dalle impostazioni di VoxelAIArtist.
+                "provider": ai_providers.public_summary(),
             })
             return
 

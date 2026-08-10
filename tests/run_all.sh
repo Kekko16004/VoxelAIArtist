@@ -10,6 +10,25 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
 cd "$ROOT" || exit 1
 
+# Registro dei provider AI in una cartella USA-E-GETTA, per TUTTA la suite.
+# Senza, i test leggerebbero la configurazione reale di chi li lancia: con un
+# provider a chiave API attivo, `ai_answer_text` non finirebbe piu' nel client
+# Gemini finto ma proverebbe una chiamata di rete VERA. La riga qui sotto e' cio'
+# che rende ancora vero il "non serve rete" scritto in cima.
+VOXELAI_PROVIDERS_DIR="$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/voxai_providers_$$")"
+export VOXELAI_PROVIDERS_DIR
+mkdir -p "$VOXELAI_PROVIDERS_DIR"
+
+# Stessa ragione, altro file: la libreria personale di materiali dell'MCP
+# (`textures.library_path`) sta su disco e ha un TETTO di 40 voci. Senza questa
+# riga la suite scriverebbe nella libreria vera di chi la lancia e, arrivata al
+# tetto, butterebbe fuori i materiali che quella persona voleva tenere.
+VOXELAI_MCP_DIR="$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/voxai_mcp_$$")"
+export VOXELAI_MCP_DIR
+mkdir -p "$VOXELAI_MCP_DIR"
+
+trap 'rm -rf "$VOXELAI_PROVIDERS_DIR" "$VOXELAI_MCP_DIR"' EXIT
+
 fails=0
 run() {
   local label="$1"; shift
@@ -41,6 +60,12 @@ run "Animazioni AI: normalizzazione (Python)" python3 tests/test_animate.py
 #    questo test e' la rete di sicurezza che lo verifica op per op e griglia per
 #    griglia.
 run "Parita' ops e tetto Python <-> JS" bash tests/parity_check.sh
+
+# 3b. Lo stesso, per le ops 2D dei pixel. Fino all'MCP l'espansore stava solo in
+#     JS e non c'era parita' da mantenere; `mcp_server/pixelops.py` e' il secondo
+#     consumatore, quindi ora c'e'. Scrivendolo sono emerse tre divergenze vere
+#     (parole del trasparente, forceSize+height, `faces` non-dizionario).
+run "Parita' ops 2D Python <-> JS" bash tests/pixel_parity_check.sh
 
 # 4. Logica UI del pannello pack (DOM finto + fetch finto).
 run "UI modalita' pack (Node)" node tests/test_pack_ui.mjs
@@ -287,9 +312,9 @@ run "Guida i18n: testo dal dizionario (Node)" node tests/test_help_i18n.mjs
 run "Export ZIP" bash -c 'node tests/test_zip.mjs && python3 tests/verify_zip.py'
 
 # 4e. Texture AI in pixel art. Due meta' che non si sovrappongono:
-#     - l'ESPANSORE delle ops 2D vive solo in JS (la tela sta nel browser, non
-#       c'e' un consumatore server-side come per le ops dei voxel: nessuna
-#       parita' da mantenere, per scelta);
+#     - l'ESPANSORE delle ops 2D, provato qui da solo (la SEMANTICA e' invece
+#       ancorata dalla parita' col lato Python dell'MCP, punto 3b: da quando
+#       `mcp_server/pixelops.py` esiste, una modifica qui va fatta anche di la');
 #     - il SERVER valida solo la forma della risposta AI e costruisce il prompt.
 run "Ops 2D pixel art (Node)" node tests/test_pixel_ops.mjs
 run "Texture AI: prompt, normalizzazione e /api/texture" python3 tests/test_texture_ai.py
@@ -321,6 +346,22 @@ run "Texture AI: facce e destinazioni (Node)" node tests/test_material_ai.mjs
 #     a seconda che l'abbia servita il padre o l'app da sola.
 run "Server PixelAIEditor: prompt 2D, /api/texture, cartelle" python3 tests/test_pixelai_server.py
 
+# 4f. Provider AI multipli (registro + dispatch + rotte /api/providers).
+#     Tre invarianti che non si vedono leggendo il codice:
+#     - a configurazione zero si genera ancora con Gemini a cookie. E' la
+#       proprieta' che il multi-provider non deve rompere, e si rompe in
+#       silenzio (l'utente vede solo "non genera piu'");
+#     - una chiave API non compare MAI in un payload pubblico. Asserito
+#       cercando la chiave IN CHIARO dentro /api/settings, /api/providers e
+#       get_public_settings: una maschera sbagliata non e' distinguibile a
+#       occhio da una giusta;
+#     - i provider con codici di stato veri si classificano SUI CODICI. Il
+#       test controlla anche il verso opposto (un 400 col testo "quota rate
+#       limit" NON deve diventare transitorio), perche' il difetto tipico e'
+#       far ricadere tutto nelle euristiche testuali nate per Gemini, che i
+#       codici non li ha.
+run "Provider AI: registro, dispatch, mascheramento" python3 tests/test_providers.py
+
 # 5. La build rigenera ui/index.html e il bundle e' sintatticamente valido.
 run "Build UI e sintassi bundle" bash -c '
   node ui/build.mjs >/dev/null || exit 1
@@ -350,6 +391,18 @@ run "Bootstrap del bundle (DOM finto)" node tests/test_bootstrap.mjs
 #     con una BASELINE che lo sweep abbassa fino a zero: e' verde finche' il
 #     debito non cresce, rossa appena qualcuno ne aggiunge.
 run "Guardia i18n (niente testi hardcoded)" node tests/test_i18n_hardcoded.mjs
+
+# 5b. Server MCP: esportatori e importatori. Nessuna rete e nessun cookie —
+#     i formati si verificano rileggendo i byte prodotti, non fidandosi che una
+#     funzione non abbia sollevato.
+run "MCP: esportatori (OBJ, glTF/GLB, .vox, ZIP)" python3 tests/test_mcp_export.py
+run "MCP: importatori (.vox, OBJ, PNG, glTF/GLB)" python3 tests/test_mcp_import.py
+run "MCP: strumenti del server (via il registro FastMCP)" python3 tests/test_mcp_server.py
+# Il rig sta a parte perche' prova un'altra cosa: non che gli strumenti
+# rispondano, ma che il GLB che producono sia GIUSTO. I sei invarianti di
+# CLAUDE.md sono sei modi in cui un file strutturalmente perfetto si apre nero,
+# bucato o in T-pose, e la skinning si verifica rifacendone il conto a mano.
+run "MCP: rig e animazioni (i sei invarianti del GLB)" python3 tests/test_mcp_rig.py
 
 # 6. Ogni lingua ha esattamente le chiavi della lingua di riferimento (it).
 #    Prima qui c'era un numero fisso (65) che non ha mai corrisposto alla

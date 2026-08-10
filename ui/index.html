@@ -4344,6 +4344,90 @@
                     </div>
                 </div>
 
+                <!-- Provider AI: sta DOPO la sessione Gemini di proposito. Quella
+                     e' il default a configurazione zero e deve restare dov'e',
+                     a un clic; questa e' la sezione per chi porta la propria
+                     chiave. -->
+                <div id="settingsProvidersSection">
+                    <div class="section-title" data-i18n="settings.prov.title">Provider AI</div>
+                    <div class="controls-group glass" style="padding:14px; display:flex; flex-direction:column; gap:12px;">
+                        <div style="font-size:11px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.prov.intro">Scegli quale AI genera i modelli. Senza configurare nulla si usa Gemini con i cookie del browser.</div>
+                        <div id="providerList" style="display:flex; flex-direction:column; gap:8px;"></div>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-secondary" id="providerAddBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.prov.addBtn">Aggiungi provider</button>
+                        </div>
+
+                        <div id="providerForm" style="display:none; flex-direction:column; gap:10px; padding-top:10px; border-top:1px solid var(--glass-border, rgba(255,255,255,0.10));">
+                            <div id="providerFormTitle" style="font-size:12px; font-weight:600; color:var(--text-primary);" data-i18n="settings.prov.formTitleNew">Nuovo provider</div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerTypeSelect" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.typeLabel">Tipo</label>
+                                <select id="providerTypeSelect" class="field-strong" style="padding:6px; font-size:12px;">
+                                    <option value="anthropic" data-i18n="settings.prov.typeAnthropic">Anthropic (Claude)</option>
+                                    <option value="openai_compatible" data-i18n="settings.prov.typeOpenai">Compatibile OpenAI</option>
+                                    <option value="custom" data-i18n="settings.prov.typeCustom">Personalizzato</option>
+                                </select>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerLabelInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.labelLabel">Nome</label>
+                                <input type="text" id="providerLabelInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Come vuoi chiamarlo" data-i18n-placeholder="settings.prov.labelPlaceholder">
+                            </div>
+                            <div id="providerBaseUrlRow" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerBaseUrlInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.baseUrlLabel">URL di base</label>
+                                <input type="text" id="providerBaseUrlInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="https://api.openai.com/v1" data-i18n-placeholder="settings.prov.baseUrlPlaceholder">
+                                <div id="providerBaseUrlHelp" style="font-size:10px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.prov.baseUrlHelp">Funziona con OpenAI, OpenRouter, Groq, Together, LM Studio, Ollama e vLLM: e' lo stesso contratto.</div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerModelInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.modelLabel">Modello</label>
+                                <input type="text" id="providerModelInput" class="field-strong" list="providerModelSuggestions" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Identificativo del modello" data-i18n-placeholder="settings.prov.modelPlaceholder">
+                                <datalist id="providerModelSuggestions"></datalist>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerKeyInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.keyLabel">Chiave API</label>
+                                <input type="password" id="providerKeyInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Incolla la chiave" data-i18n-placeholder="settings.prov.keyPlaceholder">
+                                <div id="providerKeyHint" style="font-size:10px; color:var(--text-muted); line-height:1.45;"></div>
+                            </div>
+                            <div id="providerMaxTokensRow" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerMaxTokensInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.maxTokensLabel">Token massimi in risposta</label>
+                                <input type="number" id="providerMaxTokensInput" class="field-strong" min="256" step="256" style="padding:6px; font-size:12px;">
+                            </div>
+                            <div id="providerCustomRows" style="display:none; flex-direction:column; gap:10px;">
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerPromptPathInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.promptPathLabel">Percorso del prompt nel corpo</label>
+                                    <input type="text" id="providerPromptPathInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="messages.0.content" data-i18n-placeholder="settings.prov.promptPathPlaceholder">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerResponsePathInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.responsePathLabel">Percorso del testo nella risposta</label>
+                                    <input type="text" id="providerResponsePathInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="choices.0.message.content" data-i18n-placeholder="settings.prov.responsePathPlaceholder">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerAuthHeaderInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.authHeaderLabel">Header di autenticazione</label>
+                                    <input type="text" id="providerAuthHeaderInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Authorization" data-i18n-placeholder="settings.prov.authHeaderPlaceholder">
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerAuthPrefixInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.authPrefixLabel">Prefisso davanti alla chiave</label>
+                                    <input type="text" id="providerAuthPrefixInput" class="field-strong" autocomplete="off" spellcheck="false" style="padding:6px; font-size:12px;" placeholder="Bearer " data-i18n-placeholder="settings.prov.authPrefixPlaceholder">
+                                    <div style="font-size:10px; color:var(--text-muted); line-height:1.45;" data-i18n="settings.prov.authPrefixHelp">Lascialo vuoto per mandare la chiave da sola, senza prefisso.</div>
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:4px;">
+                                    <label for="providerBodyInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.bodyLabel">Corpo JSON di partenza</label>
+                                    <textarea id="providerBodyInput" class="field-strong" rows="3" autocomplete="off" spellcheck="false" style="padding:6px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="{&quot;stream&quot;: false}" data-i18n-placeholder="settings.prov.bodyPlaceholder"></textarea>
+                                </div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="providerHeadersInput" style="font-size:11px; color:var(--text-secondary);" data-i18n="settings.prov.headersLabel">Header aggiuntivi (JSON)</label>
+                                <textarea id="providerHeadersInput" class="field-strong" rows="2" autocomplete="off" spellcheck="false" style="padding:6px; font-size:11px; font-family:monospace; resize:vertical;" placeholder="{&quot;X-Titolo&quot;: &quot;VoxelAIArtist&quot;}" data-i18n-placeholder="settings.prov.headersPlaceholder"></textarea>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-primary" id="providerSaveBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.prov.saveBtn">Salva provider</button>
+                                <button class="btn btn-secondary" id="providerCancelBtn" style="font-size:12px; padding:8px 12px;" data-i18n="settings.prov.cancelBtn">Annulla</button>
+                            </div>
+                        </div>
+
+                        <div id="providerFeedback" style="display:none; font-size:11px; line-height:1.45; padding:8px 10px; border-radius:var(--radius-sm);"></div>
+                        <div class="screens-section-note" data-i18n="settings.prov.privacy">Le chiavi API restano soltanto su questo computer, in un file separato dalle preferenze, e vengono usate solo per contattare il provider che hai scelto.</div>
+                    </div>
+                </div>
+
                 <!-- Avvio / Salvataggio / Plugin: iniettati da 22-screens/26-settings-modal -->
                 <div id="settingsExtraSections"></div>
 
@@ -14913,6 +14997,9 @@
                     if (typeof renderObjectsList === 'function') { try { renderObjectsList(); } catch (e) {} }
                     if (typeof renderPaletteSwatches === 'function') { try { renderPaletteSwatches(); } catch (e) {} }
                     if (typeof renderMaterialsPanel === 'function') { try { renderMaterialsPanel(); } catch (e) {} }
+                    // Stesso motivo per l'elenco dei provider AI (26-settings-modal.js):
+                    // righe costruite da JS, nate prima dei dizionari.
+                    if (typeof window.renderProviderList === 'function') { try { window.renderProviderList(); } catch (e) {} }
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
                     if (sel && sel.value !== code) sel.value = code;
@@ -15778,6 +15865,10 @@
                 // quello che la risposta espone gia' sulla presenza dei cookie.
                 function needsCookies(data) {
                     if (!data) return false;                    // backend assente: non insistiamo
+                    // Chi ha configurato un provider a chiave API NON usa i cookie:
+                    // aprirgli la modale a ogni avvio per una sessione Gemini che non
+                    // gli serve sarebbe un promemoria di sistemare la cosa sbagliata.
+                    if (data.provider && data.provider.usesCookies === false) return false;
                     if (typeof data.needsCookies === 'boolean') return data.needsCookies;
                     return !hasCookies(data);
                 }
@@ -15936,6 +16027,404 @@
                     }
                 })();
 
+            })();
+
+            /* ============================================================
+               PROVIDER AI — elenco, scelta dell'attivo, form, prova, elimina.
+               Gemini a cookie e' la prima riga dell'elenco ed e' SINTETICA (la
+               manda il server, non sta nel registro): non si puo' modificare
+               ne' eliminare, cosi' la via a configurazione zero non si perde
+               nemmeno per sbaglio.
+               ============================================================ */
+            (function initProviderSettings() {
+                const section = document.getElementById('settingsProvidersSection');
+                if (!section) return;
+
+                const listEl = document.getElementById('providerList');
+                const addBtn = document.getElementById('providerAddBtn');
+                const form = document.getElementById('providerForm');
+                const formTitle = document.getElementById('providerFormTitle');
+                const typeSelect = document.getElementById('providerTypeSelect');
+                const labelInput = document.getElementById('providerLabelInput');
+                const baseUrlRow = document.getElementById('providerBaseUrlRow');
+                const baseUrlInput = document.getElementById('providerBaseUrlInput');
+                const modelInput = document.getElementById('providerModelInput');
+                const modelSuggestions = document.getElementById('providerModelSuggestions');
+                const keyInput = document.getElementById('providerKeyInput');
+                const keyHint = document.getElementById('providerKeyHint');
+                const maxTokensRow = document.getElementById('providerMaxTokensRow');
+                const maxTokensInput = document.getElementById('providerMaxTokensInput');
+                const customRows = document.getElementById('providerCustomRows');
+                const promptPathInput = document.getElementById('providerPromptPathInput');
+                const responsePathInput = document.getElementById('providerResponsePathInput');
+                const authHeaderInput = document.getElementById('providerAuthHeaderInput');
+                const authPrefixInput = document.getElementById('providerAuthPrefixInput');
+                const bodyInput = document.getElementById('providerBodyInput');
+                const headersInput = document.getElementById('providerHeadersInput');
+                const saveBtn = document.getElementById('providerSaveBtn');
+                const cancelBtn = document.getElementById('providerCancelBtn');
+                const feedback = document.getElementById('providerFeedback');
+
+                const OK_COLOR = '#22c55e';
+                const KO_COLOR = 'var(--danger, #ef4444)';
+
+                // Stato del pannello. `editing` e' l'id in modifica (null = nuovo).
+                let state = { providers: [], active: 'gemini', anthropicModels: [] };
+                let editing = null;
+
+                function api(route) { return (window.__API_BASE__ ? window.__API_BASE__ : '') + route; }
+
+                // Ogni testo passa da t(): vedi la nota nella sezione cookie. Nessun
+                // ripiego italiano hardcoded, nemmeno per i messaggi d'errore.
+                function tr(key, vars) {
+                    return (typeof t === 'function') ? t(key, vars) : key;
+                }
+
+                function showFeedback(msg, kind) {
+                    if (!feedback) return;
+                    feedback.textContent = msg;
+                    feedback.style.display = 'block';
+                    if (kind === 'ok') {
+                        feedback.style.background = 'rgba(34,197,94,0.10)';
+                        feedback.style.border = '1px solid rgba(34,197,94,0.30)';
+                        feedback.style.color = OK_COLOR;
+                    } else if (kind === 'error') {
+                        feedback.style.background = 'rgba(239,68,68,0.10)';
+                        feedback.style.border = '1px solid rgba(239,68,68,0.30)';
+                        feedback.style.color = KO_COLOR;
+                    } else {
+                        feedback.style.background = 'var(--input-bg)';
+                        feedback.style.border = '1px solid var(--glass-border)';
+                        feedback.style.color = 'var(--text-secondary)';
+                    }
+                }
+                function clearFeedback() { if (feedback) feedback.style.display = 'none'; }
+
+                function typeName(type) {
+                    if (type === 'anthropic') return tr('settings.prov.typeAnthropic');
+                    if (type === 'openai_compatible') return tr('settings.prov.typeOpenai');
+                    if (type === 'custom') return tr('settings.prov.typeCustom');
+                    return tr('settings.prov.typeGemini');
+                }
+
+                function byId(id) {
+                    return state.providers.filter(p => p.id === id)[0] || null;
+                }
+
+                // --- Elenco ---------------------------------------------------
+                function renderList() {
+                    if (!listEl) return;
+                    listEl.textContent = '';
+                    state.providers.forEach(p => {
+                        const isActive = (p.id === state.active);
+                        const row = document.createElement('div');
+                        row.className = 'provider-row';
+                        row.dataset.providerId = p.id;
+                        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 10px;'
+                            + ' border-radius:var(--radius-sm); border:1px solid '
+                            + (isActive ? 'rgba(34,197,94,0.45)' : 'var(--glass-border, rgba(255,255,255,0.10))')
+                            + '; background:var(--input-bg);';
+
+                        const dot = document.createElement('span');
+                        dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex-shrink:0; background:'
+                            + (isActive ? OK_COLOR : 'var(--text-muted)') + ';';
+                        row.appendChild(dot);
+
+                        const info = document.createElement('div');
+                        info.style.cssText = 'flex:1; min-width:0;';
+                        const name = document.createElement('div');
+                        name.style.cssText = 'font-size:12px; font-weight:600; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                        name.textContent = p.label || p.id;
+                        info.appendChild(name);
+                        const meta = document.createElement('div');
+                        meta.style.cssText = 'font-size:10px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                        const bits = [typeName(p.type)];
+                        if (p.model) bits.push(p.model);
+                        if (p.needsKey) {
+                            bits.push(p.hasKey
+                                ? tr('settings.prov.keySaved', { mask: p.keyMask || '' })
+                                : tr('settings.prov.noKey'));
+                        }
+                        meta.textContent = bits.join(' · ');
+                        info.appendChild(meta);
+                        row.appendChild(info);
+
+                        const actions = document.createElement('div');
+                        actions.style.cssText = 'display:flex; gap:4px; flex-shrink:0;';
+                        const mkBtn = (cls, key, action, title) => {
+                            const b = document.createElement('button');
+                            b.className = 'btn ' + cls;
+                            b.style.cssText = 'font-size:10px; padding:4px 8px;';
+                            b.textContent = tr(key);
+                            b.dataset.providerAction = action;
+                            if (title) b.title = title;
+                            return b;
+                        };
+                        if (isActive) {
+                            const badge = document.createElement('span');
+                            badge.style.cssText = 'font-size:10px; color:' + OK_COLOR + '; padding:4px 6px;';
+                            badge.textContent = tr('settings.prov.inUse');
+                            badge.dataset.providerAction = 'badge';
+                            actions.appendChild(badge);
+                        } else {
+                            actions.appendChild(mkBtn('btn-secondary', 'settings.prov.useBtn', 'use'));
+                        }
+                        actions.appendChild(mkBtn('btn-secondary', 'settings.prov.testBtn', 'test'));
+                        if (!p.builtin) {
+                            actions.appendChild(mkBtn('btn-secondary', 'settings.prov.editBtn', 'edit'));
+                            actions.appendChild(mkBtn('btn-secondary', 'settings.prov.deleteBtn', 'delete'));
+                        }
+                        row.appendChild(actions);
+                        listEl.appendChild(row);
+                    });
+                }
+
+                async function load() {
+                    try {
+                        const res = await fetch(api('/api/providers'));
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        const data = await res.json();
+                        state.providers = Array.isArray(data.providers) ? data.providers : [];
+                        state.active = data.active || 'gemini';
+                        state.anthropicModels = data.anthropicModels || [];
+                        renderList();
+                        return data;
+                    } catch (err) {
+                        // Aperta come file:// o senza backend non c'e' nessun registro da
+                        // mostrare: lo si dice, invece di lasciare un riquadro vuoto che
+                        // sembra un guasto.
+                        state.providers = [];
+                        renderList();
+                        if (section) section.style.display = 'none';
+                        return null;
+                    }
+                }
+
+                // --- Form -----------------------------------------------------
+                function refreshFormUI() {
+                    const type = typeSelect ? typeSelect.value : 'anthropic';
+                    if (baseUrlRow) {
+                        // Per Anthropic l'URL ha gia' un default valido: mostrarlo come
+                        // campo obbligatorio farebbe credere che serva compilarlo.
+                        baseUrlRow.style.display = (type === 'anthropic') ? 'none' : 'flex';
+                    }
+                    if (customRows) customRows.style.display = (type === 'custom') ? 'flex' : 'none';
+                    if (maxTokensRow) maxTokensRow.style.display = (type === 'custom') ? 'none' : 'flex';
+                    if (modelSuggestions) {
+                        modelSuggestions.textContent = '';
+                        if (type === 'anthropic') {
+                            (state.anthropicModels || []).forEach(m => {
+                                const o = document.createElement('option');
+                                o.value = m;
+                                modelSuggestions.appendChild(o);
+                            });
+                        }
+                    }
+                }
+
+                function openForm(provider) {
+                    editing = provider ? provider.id : null;
+                    if (formTitle) {
+                        formTitle.textContent = tr(provider
+                            ? 'settings.prov.formTitleEdit' : 'settings.prov.formTitleNew');
+                    }
+                    if (typeSelect) typeSelect.value = (provider && provider.type) || 'anthropic';
+                    if (labelInput) labelInput.value = (provider && provider.label) || '';
+                    if (baseUrlInput) baseUrlInput.value = (provider && provider.base_url) || '';
+                    if (modelInput) modelInput.value = (provider && provider.model) || '';
+                    if (maxTokensInput) maxTokensInput.value = (provider && provider.max_tokens) || 16000;
+                    if (promptPathInput) promptPathInput.value = (provider && provider.prompt_path) || '';
+                    if (responsePathInput) responsePathInput.value = (provider && provider.response_path) || '';
+                    if (authHeaderInput) authHeaderInput.value = (provider && provider.auth_header) || '';
+                    // `auth_prefix` puo' essere la stringa VUOTA di proposito (chiave
+                    // nuda): `|| ''` va bene qui, ma in salvataggio va distinto.
+                    if (authPrefixInput) {
+                        authPrefixInput.value = (provider && provider.auth_prefix != null)
+                            ? provider.auth_prefix : '';
+                    }
+                    if (bodyInput) bodyInput.value = (provider && provider.body_template) || '';
+                    if (headersInput) {
+                        headersInput.value = (provider && provider.headers
+                            && Object.keys(provider.headers).length)
+                            ? JSON.stringify(provider.headers) : '';
+                    }
+                    // La chiave NON torna dal server: il form ne vede solo la maschera.
+                    // Lasciarlo vuoto significa "non cambiarla", ed e' scritto nel campo
+                    // sotto perche' altrimenti sembra che si sia persa.
+                    if (keyInput) keyInput.value = '';
+                    if (keyHint) {
+                        keyHint.textContent = (provider && provider.hasKey)
+                            ? tr('settings.prov.keyKeep', { mask: provider.keyMask || '' })
+                            : '';
+                    }
+                    refreshFormUI();
+                    if (form) form.style.display = 'flex';
+                    clearFeedback();
+                    if (labelInput) labelInput.focus();
+                }
+
+                function closeForm() {
+                    editing = null;
+                    if (form) form.style.display = 'none';
+                    // La chiave in chiaro non deve restare nel campo dopo la
+                    // chiusura: il form e' solo nascosto, non smontato, quindi il
+                    // valore sopravviverebbe nel DOM per tutta la sessione (e
+                    // finirebbe in un salvataggio password del browser o in una
+                    // copia della pagina). openForm() la riazzera comunque, ma
+                    // aspettare la prossima apertura la lascia li' nel frattempo.
+                    if (keyInput) keyInput.value = '';
+                }
+
+                function collectForm() {
+                    const payload = {
+                        type: typeSelect ? typeSelect.value : 'anthropic',
+                        label: labelInput ? labelInput.value.trim() : '',
+                        model: modelInput ? modelInput.value.trim() : '',
+                        base_url: baseUrlInput ? baseUrlInput.value.trim() : '',
+                    };
+                    if (editing) payload.id = editing;
+                    if (keyInput && keyInput.value.trim()) payload.api_key = keyInput.value.trim();
+                    if (maxTokensInput && maxTokensInput.value) {
+                        payload.max_tokens = parseInt(maxTokensInput.value, 10) || undefined;
+                    }
+                    if (payload.type === 'custom') {
+                        payload.prompt_path = promptPathInput ? promptPathInput.value.trim() : '';
+                        payload.response_path = responsePathInput ? responsePathInput.value.trim() : '';
+                        payload.auth_header = authHeaderInput ? authHeaderInput.value.trim() : '';
+                        payload.auth_prefix = authPrefixInput ? authPrefixInput.value : '';
+                        payload.body_template = bodyInput ? bodyInput.value.trim() : '';
+                    }
+                    if (headersInput && headersInput.value.trim()) {
+                        // Header illeggibili: si ferma QUI invece di mandarli al server,
+                        // che li scarterebbe in silenzio e lascerebbe l'utente a chiedersi
+                        // perche' il suo header non arriva mai.
+                        let parsed = null;
+                        try { parsed = JSON.parse(headersInput.value.trim()); }
+                        catch (e) { return { error: tr('settings.prov.headersInvalid') }; }
+                        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                            return { error: tr('settings.prov.headersInvalid') };
+                        }
+                        payload.headers = parsed;
+                    } else {
+                        payload.headers = {};
+                    }
+                    return { payload: payload };
+                }
+
+                async function post(route, body) {
+                    const res = await fetch(api(route), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body),
+                    });
+                    let out = {};
+                    try { out = await res.json(); } catch (e) { out = {}; }
+                    if (!res.ok || out.error) {
+                        throw new Error(out.error || ('HTTP ' + res.status));
+                    }
+                    return out;
+                }
+
+                // --- Azioni ---------------------------------------------------
+                if (addBtn) addBtn.addEventListener('click', () => { openForm(null); });
+                if (cancelBtn) cancelBtn.addEventListener('click', () => { closeForm(); clearFeedback(); });
+                if (typeSelect) typeSelect.addEventListener('change', refreshFormUI);
+
+                if (saveBtn) saveBtn.addEventListener('click', async () => {
+                    const got = collectForm();
+                    if (got.error) { showFeedback(got.error, 'error'); return; }
+                    saveBtn.disabled = true;
+                    try {
+                        await post('/api/providers', got.payload);
+                        closeForm();
+                        await load();
+                        showFeedback(tr('settings.prov.saved'), 'ok');
+                    } catch (err) {
+                        showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
+                    } finally {
+                        saveBtn.disabled = false;
+                    }
+                });
+
+                // Un solo handler sull'elenco (delega): le righe si ridisegnano a ogni
+                // caricamento, e agganciare i bottoni uno per uno li accumulerebbe.
+                if (listEl) listEl.addEventListener('click', async (ev) => {
+                    const btn = ev.target.closest('[data-provider-action]');
+                    if (!btn) return;
+                    const row = ev.target.closest('[data-provider-id]');
+                    if (!row) return;
+                    const id = row.dataset.providerId;
+                    const action = btn.dataset.providerAction;
+                    const provider = byId(id);
+                    if (!provider || action === 'badge') return;
+
+                    if (action === 'use') {
+                        try {
+                            const out = await post('/api/providers', { action: 'activate', id: id });
+                            state.active = out.active || id;
+                            state.providers = out.providers || state.providers;
+                            renderList();
+                            showFeedback(tr('settings.prov.activated', { label: provider.label || id }), 'ok');
+                        } catch (err) {
+                            showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
+                        }
+                        return;
+                    }
+                    if (action === 'edit') { openForm(provider); return; }
+                    if (action === 'delete') {
+                        if (!confirm(tr('settings.prov.deleteConfirm', { label: provider.label || id }))) return;
+                        try {
+                            const res = await fetch(api('/api/providers?id=' + encodeURIComponent(id)),
+                                { method: 'DELETE' });
+                            const out = await res.json();
+                            if (!res.ok || out.error) throw new Error(out.error || ('HTTP ' + res.status));
+                            if (editing === id) closeForm();
+                            await load();
+                            showFeedback(tr('settings.prov.deleted'), 'ok');
+                        } catch (err) {
+                            showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
+                        }
+                        return;
+                    }
+                    if (action === 'test') {
+                        btn.disabled = true;
+                        showFeedback(tr('settings.prov.testing'), 'info');
+                        try {
+                            // La prova risponde 200 anche quando fallisce: l'esito sta in
+                            // `ok`/`kind`, cosi' un 401 del provider diventa un messaggio
+                            // che dice cosa fare invece di un errore di rete generico.
+                            const res = await fetch(api('/api/providers/test'), {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: id }),
+                            });
+                            const out = await res.json();
+                            if (out.ok) {
+                                showFeedback(tr('settings.prov.testOk', { sample: out.sample || '' }), 'ok');
+                            } else {
+                                const kindKey = out.kind === 'auth' ? 'settings.prov.testAuth'
+                                    : (out.kind === 'transient' ? 'settings.prov.testTransient'
+                                        : 'settings.prov.testFormat');
+                                showFeedback(tr(kindKey, { error: out.message || out.error || '' }), 'error');
+                            }
+                        } catch (err) {
+                            showFeedback(tr('settings.prov.testFormat',
+                                { error: String(err.message || err) }), 'error');
+                        } finally {
+                            btn.disabled = false;
+                        }
+                        return;
+                    }
+                });
+
+                // Le righe dell'elenco sono costruite da JS: non hanno data-i18n e
+                // applyI18n non le tocca. Nascono anche PRIMA che i dizionari siano
+                // caricati, quando t() ritorna la chiave nuda — quindi senza questo
+                // ridisegno si leggerebbe per sempre 'settings.prov.useBtn'. Lo chiama
+                // setLanguage (23-i18n.js) come per renderObjectsList e compagni.
+                window.renderProviderList = function () { renderList(); refreshFormUI(); };
+
+                load();
             })();
 
             // ===== RENDERING INCREMENTALE (idea #8) =====
@@ -20937,13 +21426,19 @@ async function voxelizeScene(gltfScene, options) {
             // elencandoli; le stesse 32x32 in ops stanno in 300 byte. E' l'unico modo
             // per cui "genera 6 facce" non sfondi il budget di token della risposta.
             //
-            // PERCHE' QUI E NON ANCHE IN PYTHON. Le ops dei voxel esistono in due
-            // implementazioni (parser.py + expand-ops.js) perche' la coda pack le
-            // espande sul server, e quella parita' e' costata tre difetti veri. Le ops
-            // dei pixel non hanno un consumatore server-side: la tela vive nel browser,
-            // quindi l'espansione sta SOLO qui e il backend si limita a validare la
-            // forma della risposta (main.py: `normalize_pixel_data`). Nessuna parita'
-            // da mantenere, per scelta.
+            // DUE IMPLEMENTAZIONI, DA TENERE IDENTICHE. Nasceva come modulo unico:
+            // la tela vive nel browser, quindi non c'era un consumatore server-side
+            // come per le ops dei voxel. `mcp_server/pixelops.py` (`expand_pixel_ops`)
+            // e' il secondo, quindi ora la parita' c'e', ed e' la stessa che sui
+            // voxel e' costata tre difetti veri. Una modifica alla SEMANTICA qui va
+            // fatta anche di la', e si verifica con
+            // `bash tests/pixel_parity_check.sh` (55 casi condivisi, confrontati
+            // pixel per pixel). Scriverlo ne ha trovate tre gia' divergenti, tutte
+            // con questo lato piu' permissivo: le parole del trasparente in palette,
+            // `forceSize` che qui ignorava `height` e faceva la tela quadrata, e
+            // `faces` non-dizionario, dove `Object.keys` su una stringa dava una
+            // faccia per CARATTERE. Il backend continua a limitarsi a validare la
+            // forma della risposta (main.py: `normalize_pixel_data`).
             //
             // ORIGINE: (0,0) e' in ALTO A SINISTRA, x verso destra, y verso il BASSO.
             // E' la convenzione di ImageData e quella che un modello linguistico usa
@@ -20993,10 +21488,14 @@ async function voxelizeScene(gltfScene, options) {
                 // mappa 'a' -> '#...' vince su un'interpretazione fantasiosa.
                 if (palette && Object.prototype.hasOwnProperty.call(palette, s)) {
                     const mapped = palette[s];
-                    // La palette puo' dichiarare il trasparente per una sua chiave.
+                    // La palette puo' dichiarare il trasparente per una sua chiave, e
+                    // con le STESSE parole accettate come colore diretto: accettarne
+                    // meno qui vorrebbe dire che 'trasparente' funziona scritto in una
+                    // op e non funziona dichiarato in palette, che nessuno indovina.
                     if (mapped === null || mapped === undefined) return [0, 0, 0, 0];
                     s = String(mapped).trim();
-                    if (s === '-' || s.toLowerCase() === 'none') return [0, 0, 0, 0];
+                    if (s === '-' || ['none', 'trasparente', 'transparent']
+                        .indexOf(s.toLowerCase()) >= 0) return [0, 0, 0, 0];
                 }
                 if (s[0] !== '#') return null;
                 const hex = s.slice(1);
@@ -21313,8 +21812,13 @@ async function voxelizeScene(gltfScene, options) {
                 // Se il chiamante impone la dimensione (la tela esiste gia' e le altre
                 // facce sono di quel lato) si ignora quella dichiarata dall'AI: mescolare
                 // facce di lati diversi sullo stesso cubo si vede come una texture
-                // "che non si e' caricata" su una faccia sola.
-                if (o.forceSize) { w = pixelClampSide(o.size, dflt); h = w; }
+                // "che non si e' caricata" su una faccia sola. `height` e' facoltativo
+                // e serve alle tele NON quadrate (le usa l'MCP): senza, imporre la
+                // dimensione la squadrerebbe di forza, che e' un ritaglio silenzioso.
+                if (o.forceSize) {
+                    w = pixelClampSide(o.size, dflt);
+                    h = o.height ? pixelClampSide(o.height, w) : w;
+                }
 
                 const palette = {};
                 const rawPal = data.palette || data.colors || data.colori;
@@ -21322,8 +21826,13 @@ async function voxelizeScene(gltfScene, options) {
                     Object.keys(rawPal).forEach(k => { palette[k] = rawPal[k]; });
                 }
 
+                // `faces` vale solo se e' un DIZIONARIO di facce. Una stringa o una
+                // lista non lo sono, e senza questo controllo Object.keys() ne
+                // enumererebbe gli indici: 'faces: "abc"' diventerebbe tre facce
+                // chiamate 0, 1, 2 con dentro le lettere. Si ricade sulle ops alla
+                // radice, che e' anche cio' che fa il porto Python.
                 let rawFaces = data.faces || data.facce || null;
-                if (!rawFaces) {
+                if (!rawFaces || typeof rawFaces !== 'object' || Array.isArray(rawFaces)) {
                     const ops = data.ops || data.comandi || null;
                     rawFaces = ops ? { all: ops } : {};
                 }

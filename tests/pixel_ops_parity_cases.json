@@ -1,0 +1,336 @@
+{
+  "note": "Casi condivisi fra ui/src/lib/37-pixel-ops.js (expandPixelOps) e mcp_server/pixelops.py (expand_pixel_ops). UN SOLO file per i due lati: due elenchi scritti a mano divergerebbero come la semantica che stanno ancorando. Un'op puo' essere {repeat, op}: la espandono entrambi i lati PRIMA di chiamare l'espansore, e serve solo al caso del budget (20001 ops scritte per esteso sarebbero ~400 KB di JSON).",
+  "cases": [
+    {
+      "name": "fill-base",
+      "why": "il caso normale: un rettangolo pieno dentro la tela",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 1 1 6 6 #FF0000"]}}
+    },
+    {
+      "name": "fill-coordinate-frazionarie",
+      "why": "TRAPPOLA js_round: Math.round(2.5)=3 e Math.round(6.5)=7, mentre round() di Python da' 2 e 6 (arrotondamento del banchiere). Un pixel di scarto su ogni bordo",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 2.5 2.5 6.5 6.5 #00FF00"]}}
+    },
+    {
+      "name": "fill-frazionarie-negative",
+      "why": "l'altra meta' della stessa trappola: a meta' strada JS va verso +infinito anche in negativo (Math.round(-2.5) = -2, round(-2.5) = -2 ma Math.round(-0.5) = 0 e round(-0.5) = 0... i casi che divergono sono .5 su interi pari)",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill -2.5 -0.5 3.5 4.5 #0000FF"]}}
+    },
+    {
+      "name": "fill-angoli-invertiti",
+      "why": "x1<x0 e y1<y0 si normalizzano invece di scartare l'op: un rettangolo con gli angoli scambiati e' chiaramente inteso",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 6 6 1 1 #FF00FF"]}}
+    },
+    {
+      "name": "fill-interamente-fuori",
+      "why": "tutto fuori tela: badCoords, e nessun pixel scritto",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 20 20 30 30 #FF0000"]}}
+    },
+    {
+      "name": "fill-ritagliata-ai-bordi",
+      "why": "parzialmente fuori: si ritaglia alla tela, non si scarta",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill -5 -5 3 3 #FF0000", "fill 5 5 99 99 #00FF00"]}}
+    },
+    {
+      "name": "coordinate-in-forme-strane",
+      "why": "js_number NON e' float(): JS legge '' come 0 e 0x/0o/0b, e rifiuta gli underscore che Python accetterebbe ('1_0' vale 10 in Python e NaN in JS)",
+      "opts": {"size": 16},
+      "data": {"size": 16, "faces": {"all": ["fill 0x2 0x2 0x5 0x5 #FF0000", "set #00FF00 1_0 1_0 8 8", "fill +3.0 9 6 1e1 #0000FF"]}}
+    },
+    {
+      "name": "rect-parzialmente-fuori",
+      "why": "il contorno si ricava dai bordi RICHIESTI: il lato che esce dalla tela va PERSO, non appiccicato al bordo (sarebbe una cornice inventata)",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["rect 2 2 20 6 #FFFFFF"]}}
+    },
+    {
+      "name": "rect-degenere",
+      "why": "contorno di larghezza o altezza 1: il ciclo interno non deve girare a vuoto ne' saltare i due lati",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["rect 3 3 3 3 #FFFFFF", "rect 1 6 6 6 #00FFFF"]}}
+    },
+    {
+      "name": "line-tutte-le-pendenze",
+      "why": "Bresenham: diagonale esatta, quasi orizzontale, quasi verticale, invertita e un punto solo",
+      "opts": {"size": 16},
+      "data": {"size": 16, "faces": {"all": ["line 0 0 15 15 #FF0000", "line 0 15 15 12 #00FF00", "line 2 15 4 0 #0000FF", "line 15 3 1 1 #FFFF00", "line 8 8 8 8 #FF00FF"]}}
+    },
+    {
+      "name": "line-che-esce-dalla-tela",
+      "why": "la guardia del ciclo (dx+dy+2)*2 deve fermarlo alla stessa iterazione nelle due lingue, anche quando gran parte dei pixel cade fuori",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["line -20 -20 30 30 #FF0000", "line 40 2 -40 5 #00FF00"]}}
+    },
+    {
+      "name": "set-coppie-e-numero-spaiato",
+      "why": "un numero spaiato in coda si ignora (risposta troncata) senza perdere le coppie buone che lo precedono",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["set #FF0000 1 1 2 2 3 3 4"]}}
+    },
+    {
+      "name": "set-trasparente-fa-un-foro",
+      "why": "il trasparente e' valore possibile di QUALUNQUE op: `set -` buca senza che esista un'op 'buca'",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 7 7 #FFFFFF", "set - 2 2 3 3 4 4"]}}
+    },
+    {
+      "name": "set-senza-colore",
+      "why": "argomento mancante: badColor, e zero pixel. Il codice dell'avviso deve essere lo stesso (il dato grezzo che segue no: JS stampa 'undefined', Python 'None')",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["set", "set 4 4"]}}
+    },
+    {
+      "name": "ultima-op-vince-non-fonde",
+      "why": "pixelPut SOSTITUISCE l'alpha: un colore pieno sopra un semitrasparente non lascia una tinta mista",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 7 7 #FF000080", "fill 2 2 5 5 #00FF00"]}}
+    },
+    {
+      "name": "colori-a-3-6-8-cifre",
+      "why": "le tre lunghezze di hex accettate, piu' una a 5 cifre che NON e' un colore",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 7 1 #f0a", "fill 0 2 7 3 #FF00AA", "fill 0 4 7 5 #FF00AA40", "fill 0 6 7 7 #FF00A"]}}
+    },
+    {
+      "name": "del-parziale-e-un-intaglio",
+      "why": "una `del` che NON copre tutto e' l'unico modo che l'AI ha di sottrarre: non va scartata",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 7 7 #808080", "del 3 0 4 7"]}}
+    },
+    {
+      "name": "del-totale-con-disegno-dopo",
+      "why": "cancellazione totale SEGUITA da vere pennellate: e' un 'riparti da capo' legittimo e si conserva",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 7 7 #FF0000", "del 0 0 7 7", "fill 2 2 5 5 #0000FF"]}}
+    },
+    {
+      "name": "del-totale-suicida",
+      "why": "il difetto misurato su 2 risposte vere su 12: l'AI chiude con `del` a tutta tela credendo di ripulire lo sfondo e consegna una faccia VUOTA. wipeDropped",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 2 2 5 5 #FF0000", "del 0 0 7 7"]}}
+    },
+    {
+      "name": "del-oltre-i-bordi-e-comunque-totale",
+      "why": "il riconoscimento e' sui bordi RICHIESTI e non ritagliati: `del -3 -3 99 99` copre tutto quanto `del 0 0 7 7`",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 2 2 5 5 #FF0000", "del -3 -3 99 99"]}}
+    },
+    {
+      "name": "fill-trasparente-totale-suicida",
+      "why": "la stessa cancellazione scritta come `fill ... -`: il riconoscimento guarda l'alpha del colore, non il nome del comando",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 2 2 5 5 #FF0000", "fill 0 0 7 7 -"]}}
+    },
+    {
+      "name": "del-totale-seguita-solo-da-mirror",
+      "why": "mirror COPIA cio' che c'e': dopo una cancellazione totale copia il vuoto, quindi la cancellazione resta suicida",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 3 7 #FF0000", "del 0 0 7 7", "mirror x"]}}
+    },
+    {
+      "name": "mirror-x-e-y",
+      "why": "ribalta sul centro DELLA TELA, non del soggetto. Va applicata dopo aver disegnato la meta' sorgente",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"nx": ["fill 0 0 2 7 #FF0000", "set #FFFFFF 1 3", "mirror x"], "py": ["fill 0 0 7 2 #00FF00", "set #FFFFFF 3 1", "mirror y"]}}
+    },
+    {
+      "name": "mirror-su-lato-dispari",
+      "why": "con lato dispari la colonna/riga centrale resta com'e': floor(w/2) in JS, w//2 in Python",
+      "opts": {"size": 9},
+      "data": {"size": 9, "faces": {"all": ["fill 0 0 3 8 #FF0000", "set #0000FF 4 4", "mirror x"]}}
+    },
+    {
+      "name": "mirror-asse-sconosciuto",
+      "why": "un asse che non e' x ne' y non fa niente e non e' un errore (nessun avviso): e' il ramo 'else if' che manca",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 3 7 #FF0000", "mirror z", "mirror"]}}
+    },
+    {
+      "name": "noise-seme-esplicito",
+      "why": "TRAPPOLA _lcg_next: s*1103515245 sfiora 2.4e18, oltre i 2^53 esatti di un double. Python con interi esatti darebbe una sequenza DIVERSA, quindi una texture diversa a parita' di seme",
+      "opts": {"size": 16},
+      "data": {"size": 16, "faces": {"all": ["fill 0 0 15 15 #404040", "noise 0 0 15 15 #FFFFFF 0.3 7"]}}
+    },
+    {
+      "name": "noise-semi-diversi",
+      "why": "piu' semi, compreso 0 (che con un LCG puro resterebbe 0) e uno grande: la perdita di precisione dipende dallo stato, quindi un seme solo non basta a coprirla",
+      "opts": {"size": 16},
+      "data": {"size": 16, "faces": {"nx": ["noise 0 0 15 15 #FF0000 0.5 0"], "px": ["noise 0 0 15 15 #00FF00 0.5 1"], "ny": ["noise 0 0 15 15 #0000FF 0.5 123456789"], "py": ["noise 0 0 15 15 #FFFF00 0.5 -42"]}}
+    },
+    {
+      "name": "noise-densita-in-percento-e-senza-seme",
+      "why": "una densita' > 1 e' intesa in percento ('30' = 30%), e il seme assente vale 1. Una densita' illeggibile vale 0.25",
+      "opts": {"size": 16},
+      "data": {"size": 16, "faces": {"nx": ["noise 0 0 15 15 #FF0000 30"], "px": ["noise 0 0 15 15 #00FF00 0.3"], "ny": ["noise 0 0 15 15 #0000FF tanto"], "py": ["noise 0 0 15 15 #FFFF00 -5 3"]}}
+    },
+    {
+      "name": "noise-argomenti-sbagliati",
+      "why": "rettangolo fuori tela e colore illeggibile: due avvisi distinti, zero pixel",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["noise 50 50 60 60 #FF0000 0.5 1", "noise 0 0 7 7 verde 0.5 1"]}}
+    },
+    {
+      "name": "palette-comune",
+      "why": "la chiave di palette si risolve PRIMA del letterale",
+      "opts": {"size": 8},
+      "data": {"size": 8, "palette": {"a": "#FF0000", "b": "#00FF00"}, "faces": {"all": ["fill 0 0 7 3 a", "fill 0 4 7 7 b"]}}
+    },
+    {
+      "name": "palette-per-faccia-si-somma",
+      "why": "trovato in GUI reale: la palette dichiarata DENTRO la faccia si somma a quella comune e vince sulle chiavi omonime. Senza questo ramo le chiavi non risolvono e la faccia torna VUOTA",
+      "opts": {"size": 8},
+      "data": {"size": 8, "palette": {"a": "#FF0000", "c": "#0000FF"}, "faces": {"nx": {"palette": {"a": "#00FF00"}, "ops": ["fill 0 0 7 7 a", "set c 1 1"]}, "px": ["fill 0 0 7 7 a"]}}
+    },
+    {
+      "name": "palette-che-mappa-il-trasparente",
+      "why": "una chiave di palette puo' valere null, '-' o una PAROLA del trasparente: e' il modo in cui un LLM dichiara lo sfondo. Le parole accettate qui devono essere le stesse accettate come colore diretto, o 'trasparente' funzionerebbe scritto in una op e non dichiarato in palette - che nessuno indovina. Un punto invece NON e' trasparente in palette (li' e' la chiave RLE, non un valore)",
+      "opts": {"size": 8},
+      "data": {"size": 8, "palette": {"v": null, "t": "-", "n": "none", "i": "trasparente", "e": "TRANSPARENT", "p": "."},
+               "faces": {"all": ["fill 0 0 7 7 #FFFFFF", "fill 0 0 3 1 v", "fill 4 0 7 1 t", "fill 0 2 3 3 n", "fill 4 2 7 3 i", "fill 0 4 3 5 e", "fill 4 4 7 5 p"]}}
+    },
+    {
+      "name": "palette-con-chiavi-scomode",
+      "why": "JS usa hasOwnProperty (non `in`), quindi una chiave che esiste su Object.prototype non deve risolvere per sbaglio",
+      "opts": {"size": 8},
+      "data": {"size": 8, "palette": {"1": "#FF0000", "-": "#00FF00"}, "faces": {"all": ["fill 0 0 7 3 1", "fill 0 4 7 5 constructor", "fill 0 6 7 7 -"]}}
+    },
+    {
+      "name": "ops-alla-radice",
+      "why": "senza `faces` le ops alla radice diventano la texture unica 'all'",
+      "opts": {"size": 8},
+      "data": {"size": 8, "ops": ["fill 1 1 6 6 #FF0000"]}
+    },
+    {
+      "name": "faces-e-una-lista",
+      "why": "`faces` vale solo se e' un DIZIONARIO. Una lista non lo e', e senza il controllo Object.keys() ne enumera gli INDICI: si otterrebbero tre facce chiamate 0, 1, 2 con dentro le singole ops. Si ricade sulle ops alla radice, come fa il porto Python",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": ["fill 0 0 7 7 #FF0000", "fill 2 2 5 5 #00FF00"], "ops": ["fill 1 1 6 6 #0000FF"]}
+    },
+    {
+      "name": "faces-e-una-stringa",
+      "why": "stessa trappola con una stringa: Object.keys() ne darebbe i CARATTERI, cioe' una faccia per lettera. E qui non c'e' nemmeno `ops` su cui ricadere, quindi il risultato giusto e' nessuna faccia",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": "fill 0 0 7 7 #FF0000"}
+    },
+    {
+      "name": "sinonimi-italiani",
+      "why": "`comandi`, `facce`, `colori`: forme che un LLM produce da se', e rifiutarne una costa all'utente una rigenerazione per una parola",
+      "opts": {"size": 8},
+      "data": {"size": 8, "colori": {"r": "#FF0000"}, "facce": {"nz": {"comandi": ["fill 0 0 7 7 r"]}}}
+    },
+    {
+      "name": "ops-come-stringa-multiriga",
+      "why": "la lista di ops arriva anche come UNA stringa con i ritorni a capo",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": "fill 0 0 7 7 #202020\nfill 2 2 5 5 #FF0000\n"}}
+    },
+    {
+      "name": "faccia-senza-ops",
+      "why": "una faccia il cui valore non e' una lista da' noOps e NON entra fra le facce: chi chiama non deve sovrascrivere un disegno con una tela vuota",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"nx": 42, "px": {"palette": {"a": "#FF0000"}}, "py": ["fill 0 0 7 7 #FF0000"]}}
+    },
+    {
+      "name": "faccia-nominata-ma-non-dipinta",
+      "why": "painted 0 con la faccia PRESENTE: e' il caso che chi chiama deve scartare (`faces_from_ops` lo fa), e va distinto da noOps",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"nx": ["fill 99 99 100 100 #FF0000"], "px": ["fill 0 0 7 7 #FF0000"]}}
+    },
+    {
+      "name": "chiavi-con-spazi-e-maiuscole",
+      "why": "la chiave della faccia si normalizza (trim + minuscole) allo stesso modo nelle due lingue",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"  NX  ": ["fill 0 0 7 7 #FF0000"], "Py": ["fill 0 0 3 3 #00FF00"]}}
+    },
+    {
+      "name": "comando-sconosciuto",
+      "why": "unknownCmd, e le ops buone attorno continuano ad applicarsi",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 7 7 #202020", "circle 4 4 3 #FF0000", "fill 2 2 5 5 #FF0000"]}}
+    },
+    {
+      "name": "ops-vuote-e-separatori",
+      "why": "righe vuote, virgole come separatori e spazi multipli: si dividono su [\\s,]+ nelle due lingue",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"all": ["", "   ", "fill,1,1,6,6,#FF0000", "  set   #00FF00   2 2  "]}}
+    },
+    {
+      "name": "dimensione-dichiarata-dall-AI",
+      "why": "senza forceSize la dimensione la decide la risposta, con i sinonimi width/height",
+      "opts": {"size": 16},
+      "data": {"width": 32, "height": 12, "faces": {"all": ["fill 0 0 31 11 #FF0000"]}}
+    },
+    {
+      "name": "dimensione-imposta-da-chi-chiama",
+      "why": "forceSize: la tela esiste gia' e le altre facce sono di quel lato, quindi la dimensione dichiarata dall'AI si ignora. Facce di lati diversi sullo stesso cubo si vedono come una texture 'non caricata'",
+      "opts": {"size": 8, "forceSize": true},
+      "data": {"size": 64, "faces": {"all": ["fill 0 0 63 63 #FF0000"]}}
+    },
+    {
+      "name": "dimensione-imposta-non-quadrata",
+      "why": "DIVERGENZA VERA, trovata scrivendo questo file: il lato JS faceva `h = w` e squadrava di forza, il porto Python onorava `opts.height`. Nessun chiamante della UI passa height (36-materials.js impone solo `size`), quindi non era mai emerso; `textures.faces_from_ops` dell'MCP invece lo passa, ed e' il caso della tela NON quadrata. Senza questo caso la parita' sarebbe passata verde su un ritaglio silenzioso",
+      "opts": {"size": 16, "height": 8, "forceSize": true},
+      "data": {"size": 32, "faces": {"all": ["fill 0 0 15 7 #FF0000", "set #00FF00 15 7"]}}
+    },
+    {
+      "name": "altezza-imposta-fuori-scala",
+      "why": "l'altezza imposta passa dallo stesso clamp del lato, e il suo default e' la larghezza (non 16): senza, una tela 100x2 diventerebbe 100x16 invece di 100x4",
+      "opts": {"size": 100, "height": 2, "forceSize": true},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 99 3 #FF0000"]}}
+    },
+    {
+      "name": "altezza-imposta-illeggibile",
+      "why": "un'altezza che non e' un numero non deve azzerare la tela ne' cadere sul default generico: si ricade sulla larghezza",
+      "opts": {"size": 12, "height": "alta", "forceSize": true},
+      "data": {"size": 8, "faces": {"all": ["fill 0 0 11 11 #FF0000"]}}
+    },
+    {
+      "name": "altezza-imposta-senza-forceSize",
+      "why": "`height` senza `forceSize` NON conta: la dimensione resta quella dichiarata dalla risposta. Il ramo dell'altezza vive dentro forceSize in entrambe le lingue",
+      "opts": {"size": 16, "height": 8},
+      "data": {"size": 32, "faces": {"all": ["fill 0 0 31 31 #FF0000"]}}
+    },
+    {
+      "name": "dimensione-fuori-scala",
+      "why": "clamp fra 4 e 128 su entrambi i lati, e un valore illeggibile ricade sul default di chi chiama",
+      "opts": {"size": 16},
+      "data": {"size": 999, "faces": {"all": ["fill 0 0 127 127 #FF0000"]}}
+    },
+    {
+      "name": "dimensione-sotto-il-minimo",
+      "why": "l'altro capo del clamp: 2 diventa 4",
+      "opts": {"size": 16},
+      "data": {"size": 2, "faces": {"all": ["fill 0 0 3 3 #FF0000"]}}
+    },
+    {
+      "name": "dimensione-illeggibile",
+      "why": "'grande' non e' un numero: si ricade sul default passato da chi chiama",
+      "opts": {"size": 12},
+      "data": {"size": "grande", "faces": {"all": ["fill 0 0 11 11 #FF0000"]}}
+    },
+    {
+      "name": "risposta-non-e-un-oggetto",
+      "why": "emptyAnswer, w e h a 0, nessuna faccia",
+      "opts": {"size": 8},
+      "data": "mi dispiace, non posso disegnare"
+    },
+    {
+      "name": "risposta-senza-niente-di-disegnabile",
+      "why": "oggetto valido ma senza ops ne' faces: nessuna faccia e nessun avviso",
+      "opts": {"size": 8},
+      "data": {"size": 8, "palette": {"a": "#FF0000"}}
+    },
+    {
+      "name": "budget-condiviso-fra-le-facce",
+      "why": "`budget` sta FUORI dal ciclo sulle facce: il tetto di 20000 ops e' della RISPOSTA, non della faccia. La prima faccia lo consuma quasi tutto e la seconda si tronca. truncated",
+      "opts": {"size": 8},
+      "data": {"size": 8, "faces": {"nx": [{"repeat": 19999, "op": "set #FF0000 0 0"}], "px": ["fill 0 0 7 3 #00FF00", "fill 0 4 7 7 #0000FF"]}}
+    }
+  ]
+}

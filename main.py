@@ -462,6 +462,11 @@ from aiclient import (                                       # noqa: E402
     ai_answer_text_retrying,
 )
 
+# Registro dei provider AI (Gemini a cookie + provider a chiave API). Le rotte
+# `/api/providers*` lo usano direttamente; la generazione ci arriva attraverso
+# `ai_answer_text`, che chiede al provider ATTIVO.
+import providers as ai_providers                            # noqa: E402
+
 
 def run_ai_generation(final_prompt, model=None):
     """
@@ -1129,12 +1134,22 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _send_ai_error(self, exc, label):
         """Mappa gli errori AI classificati su codici HTTP distinti.
 
-        401 -> cookie da riconfigurare (il client puo' aprire le Impostazioni),
-        503 -> rete/quota/rate-limit (riprovabile), 400 -> risposta non JSON.
+        401 -> credenziali da riconfigurare (il client puo' aprire le
+        Impostazioni), 503 -> rete/quota/rate-limit (riprovabile),
+        400 -> risposta non JSON.
         """
         self._log_ai_answer(label, getattr(exc, "answer", None), exc)
         if isinstance(exc, AIAuthError):
-            self._send_json(401, {"error": str(exc), "needsCookies": True})
+            # `needsCookies` fa aprire alla UI la sezione COOKIE. Ha senso solo
+            # se l'AI attiva e' Gemini: con un provider a chiave API i cookie
+            # non c'entrano, e mandare l'utente a riconfigurarli lo manderebbe a
+            # sistemare la cosa sbagliata.
+            try:
+                uses_cookies = ai_providers.public_summary().get("usesCookies", True)
+            except Exception:                               # noqa: BLE001
+                uses_cookies = True
+            self._send_json(401, {"error": str(exc), "needsCookies": uses_cookies,
+                                  "needsProvider": (not uses_cookies)})
         elif isinstance(exc, AIFormatError):
             self._send_json(400, {"error": str(exc)})
         else:
@@ -1289,7 +1304,17 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 # browser) sapendo in che modalita' gira il processo.
                 "app_mode": APP_MODE,
                 "is_desktop": bool(APP_MODE == "py" and GUI_AVAILABLE),
+                # Riassunto del provider AI attivo: MAI una chiave, solo id,
+                # tipo, etichetta e conteggio. La UI ne ha bisogno per dire
+                # quale AI sta usando senza una seconda richiesta.
+                "provider": ai_providers.public_summary(),
             })
+            return
+        if self.path == '/api/providers':
+            try:
+                self._send_json(200, ai_providers.list_providers())
+            except Exception as e:                          # noqa: BLE001
+                self._send_json(500, {"error": str(e)})
             return
         if self.path == '/api/settings/open-folder':
             folder = app_settings.get_appdata_dir()
@@ -1394,6 +1419,22 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         parsed = urlparse(self.path)
+        if parsed.path == '/api/providers':
+            # L'id arriva in query string: un DELETE con corpo e' ammesso ma
+            # molti proxy lo scartano, e qui il corpo sarebbe un solo campo.
+            try:
+                query = parse_qs(parsed.query)
+                pid = (query.get('id') or [''])[0]
+                if not pid:
+                    self._send_json(400, {"error": "parametro 'id' mancante"})
+                    return
+                self._send_json(200, ai_providers.delete_provider(pid))
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+            except Exception as e:                          # noqa: BLE001
+                self._send_json(500, {"error": str(e)})
+            return
+
         if parsed.path == '/api/recent':
             try:
                 query = parse_qs(parsed.query)
@@ -1620,6 +1661,54 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 app_settings.save_cookies(data)
                 self._send_json(200, {"ok": True})
             except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # ===== PROVIDER AI =====
+        # Aggiungi / modifica / attiva / prova un provider. Una sola rotta
+        # perche' il corpo dice gia' cosa fare: fossero quattro, la UI dovrebbe
+        # scegliere l'URL in base allo stato del form, cioe' duplicare la
+        # decisione che il server prende comunque.
+        if self.path in ('/api/providers', '/api/providers/test'):
+            # Stessa insidia di /api/generate: header assente -> int(None) ->
+            # TypeError non catturato -> socket chiuso SENZA risposta HTTP.
+            try:
+                length = int(self.headers.get('Content-Length') or 0)
+                if length <= 0:
+                    self._send_json(400, {"error": "Corpo della richiesta mancante."})
+                    return
+                payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            except (TypeError, ValueError) as e:
+                self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+                return
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "Il corpo deve essere un oggetto JSON."})
+                return
+            try:
+                if self.path == '/api/providers/test':
+                    pid = payload.get("id") or ""
+                    if not pid:
+                        self._send_json(400, {"error": "parametro 'id' mancante"})
+                        return
+                    # La prova NON e' un errore HTTP: un 401 del provider e' un
+                    # esito atteso di questa rotta, e mandarlo come 401 farebbe
+                    # scattare la gestione d'errore generica della UI invece di
+                    # mostrare il messaggio classificato accanto al bottone.
+                    self._send_json(200, ai_providers.test_provider(pid))
+                    return
+                action = payload.get("action") or ""
+                if action == "activate":
+                    self._send_json(200, ai_providers.set_active_provider(payload.get("id")))
+                    return
+                if payload.get("id") and action != "add":
+                    entry = ai_providers.update_provider(payload["id"], payload)
+                else:
+                    entry = ai_providers.add_provider(payload)
+                self._send_json(200, {"provider": entry,
+                                      **ai_providers.list_providers()})
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+            except Exception as e:                          # noqa: BLE001
                 self._send_json(500, {"error": str(e)})
             return
 

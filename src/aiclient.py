@@ -1,4 +1,4 @@
-"""Client AI condiviso: una chiamata a Gemini, errori parlanti, retry.
+"""Client AI condiviso: una chiamata all'AI attiva, errori parlanti, retry.
 
 Modulo CONDIVISO fra VoxelAIArtist e PixelAIEditor. Prima viveva dentro il
 `main.py` del padre; duplicarlo nella seconda app significava duplicare anche la
@@ -6,38 +6,34 @@ classificazione degli errori, che e' la parte che si sbaglia (il client `gemini`
 e' un web client reverse-engineered: non espone codici, solo messaggi, e
 distinguere "cookie scaduti" da "quota" si fa solo per indizi testuali).
 
-Il client NON e' l'API ufficiale: e' autenticato a cookie di browser. Da qui
-discende tutto il resto — il rate-limit e' facile da prendere, la sessione si
+Il client Gemini NON e' l'API ufficiale: e' autenticato a cookie di browser. Da
+qui discende tutto il resto — il rate-limit e' facile da prendere, la sessione si
 puo' bruciare, e gli errori arrivano come stringhe.
+
+Da quando esistono i provider (`src/providers.py`), `ai_answer_text` NON e' piu'
+legata a Gemini: chiede al provider ATTIVO. Gemini a cookie resta il default e il
+ripiego, quindi chi non configura niente non vede alcuna differenza. La firma e
+il significato delle due funzioni pubbliche non cambiano: una chiamata, testo
+grezzo in uscita, e le stesse tre classi d'errore.
+
+Le classi d'errore sono DEFINITE in `providers.py` e qui re-esportate: devono
+essere gli stessi oggetti in tutta l'app, o `except AIAuthError` funzionerebbe o
+no a seconda di chi ha importato cosa. `main.py` continua a importarle da qui.
 """
 
 import time
 
 import pack as pack_engine
+import providers as ai_providers
 import settings as app_settings
+from providers import AIAuthError, AIFormatError, AITransientError  # noqa: F401
 
 
 # --- Errori AI "parlanti" ---------------------------------------------------
-# Un 500 con str(e) non dice all'utente cosa fare. Queste tre classi separano i
-# soli casi su cui l'utente PUO' agire (cookie da riconfigurare / riprovare piu'
-# tardi / il modello ha risposto ma non in JSON) e gli endpoint le mappano su
-# codici e messaggi diversi.
-
-class AIAuthError(RuntimeError):
-    """Cookie Gemini mancanti o scaduti: serve riconfigurare la sessione."""
-
-
-class AITransientError(RuntimeError):
-    """Rete, quota o rate-limit: la stessa richiesta puo' funzionare piu' tardi."""
-
-
-class AIFormatError(RuntimeError):
-    """Il modello ha risposto, ma non con JSON utilizzabile."""
-
-    def __init__(self, message, answer=None):
-        super().__init__(message)
-        self.answer = answer
-
+# Un 500 con str(e) non dice all'utente cosa fare. Le tre classi (in
+# providers.py) separano i soli casi su cui l'utente PUO' agire (credenziali da
+# riconfigurare / riprovare piu' tardi / il modello ha risposto ma non in JSON) e
+# gli endpoint le mappano su codici e messaggi diversi.
 
 # Indizi testuali di un problema di autenticazione. Il client `gemini` e' un web
 # client reverse-engineered: non espone codici, solo messaggi.
@@ -49,7 +45,16 @@ _AI_AUTH_HINTS = (
 
 
 def _classify_ai_error(exc):
-    """Traduce un'eccezione del client Gemini in una delle classi sopra."""
+    """Traduce un'eccezione del client Gemini in una delle classi sopra.
+
+    Un'eccezione GIA' classificata passa intatta. Le euristiche qui sotto sono
+    fatte per un client senza codici di stato: applicarle a un errore che arriva
+    da un'API vera lo riclassificherebbe leggendone il messaggio (un 503 il cui
+    testo non contiene nessuno degli indizi diventerebbe "errore generico"), e
+    l'informazione buona — il codice HTTP — verrebbe buttata via.
+    """
+    if isinstance(exc, (AIAuthError, AITransientError, AIFormatError)):
+        return exc
     msg = str(exc).strip() or exc.__class__.__name__
     low = msg.lower()
     if any(h in low for h in _AI_AUTH_HINTS):
@@ -87,11 +92,13 @@ def _gemini_client(model=None):
     return Gemini(auto_cookies=True, timeout=180)
 
 
-def ai_answer_text(final_prompt, model=None):
-    """UNA chiamata al client Gemini -> testo grezzo della risposta.
+def gemini_answer_text(final_prompt, model=None):
+    """UNA chiamata al client Gemini a cookie -> testo grezzo della risposta.
 
-    Punto di contatto unico: creazione client, cookie e classificazione degli
-    errori stanno qui, non duplicati negli handler HTTP.
+    E' il corpo storico di `ai_answer_text`, ora raggiungibile anche dal ramo
+    `gemini_cookies` di `providers.complete()`. Sta QUI e non in providers.py
+    perche' cookie e classificazione a indizi testuali sono roba di Gemini, e
+    providers.py non deve sapere che esistono.
     """
     try:
         client = _gemini_client(model)
@@ -102,6 +109,29 @@ def ai_answer_text(final_prompt, model=None):
     except Exception as e:                                  # noqa: BLE001
         raise _classify_ai_error(e) from e
     return response.text if hasattr(response, 'text') else str(response)
+
+
+def ai_answer_text(final_prompt, model=None, provider=None):
+    """UNA chiamata all'AI ATTIVA -> testo grezzo della risposta.
+
+    Punto di contatto unico: scelta del provider, credenziali e classificazione
+    degli errori stanno qui sotto, non duplicati negli handler HTTP.
+
+    `provider` e' opzionale e serve solo a forzare un provider per una singola
+    chiamata (la prova di connessione delle impostazioni): nessun chiamante
+    esistente deve passarlo, e senza si usa quello attivo — che a configurazione
+    zero e' Gemini a cookie, come prima.
+
+    `model` resta il valore del selettore della UI. Non sovrascrive il modello
+    configurato in un provider a chiave API: vale solo se quel provider non ne
+    dichiara uno (vedi `providers.complete`).
+    """
+    try:
+        return ai_providers.complete(final_prompt, provider=provider, model=model)
+    except (AIAuthError, AITransientError, AIFormatError):
+        raise
+    except Exception as e:                                  # noqa: BLE001
+        raise _classify_ai_error(e) from e
 
 
 # Backoff per gli endpoint INTERATTIVI. La scala e' quella della coda pack
@@ -121,19 +151,19 @@ def _interactive_backoff():
     return waits
 
 
-def ai_answer_text_retrying(final_prompt, model=None, sleep=None):
+def ai_answer_text_retrying(final_prompt, model=None, sleep=None, provider=None):
     """Come `ai_answer_text` ma ritenta gli errori transitori col backoff.
 
     Gli errori di autenticazione e di formato NON vengono ritentati (come nella
-    coda pack: un JSON malformato non migliora riprovando subito).
-    `sleep` e' iniettabile per i test.
+    coda pack: un JSON malformato non migliora riprovando subito, e una chiave
+    sbagliata resta sbagliata). `sleep` e' iniettabile per i test.
     """
     sleep = sleep or time.sleep
     backoff = _interactive_backoff()
     last = None
     for attempt in range(len(backoff) + 1):
         try:
-            return ai_answer_text(final_prompt, model)
+            return ai_answer_text(final_prompt, model, provider=provider)
         except AITransientError as e:
             last = e
             if attempt >= len(backoff):

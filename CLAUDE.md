@@ -105,6 +105,70 @@ Additionally verify by:
 - `src/settings.py` — cookies and settings live in `%APPDATA%/VoxelAIArtist/` (`cookies.json`, `settings.json`), **not** in the repo. With no cookies nothing is opened automatically: `main.py` prints a console hint and `GET /api/settings` returns `needsCookies: true` so the in-app settings modal can open itself. `ui/settings.html` and its `/settings.html` route survive as a manual fallback only.
 - `src/parser.py` — contains a legacy standalone `start_local_server()` / `__main__` block; the live app path is `main.py`, which only uses `expand_ops` and `extract_and_parse_json` from this module. The rest (OBJ export, standalone server) is legacy/CLI. NOTE (2026-07-19): the top-level `import perplexity` was removed — it's now a lazy import inside `start_local_server()` only, so `perplexity-api` is no longer a runtime dependency (Gemini is the live generator). The old `scratch/test_perplexity.py` (contained a hardcoded session token) was deleted.
 
+### Provider AI multipli (`src/providers.py` + `ui/src/lib/26-settings-modal.js`)
+Gemini-coi-cookie resta il **predefinito a configurazione zero**: senza niente su
+disco c'e' una voce sintetica `gemini` (`GEMINI_ID`, `builtin`, non eliminabile e
+non modificabile) che *non* sta in nessun file. Accanto si aggiungono provider
+propri: `anthropic` (chiave + modello), `openai_compatible` (base_url + chiave +
+modello: copre OpenAI, OpenRouter, Groq, Together, LM Studio, Ollama, vLLM — e'
+lo stesso contratto) e `custom` (percorsi puntati per prompt e risposta, header e
+prefisso di autenticazione, corpo JSON di partenza).
+
+- **`ai_answer_text` / `ai_answer_text_retrying` NON cambiano firma.** Tutto
+  (voxel, coda pack, texture AI, animazioni, PixelAIEditor, il server MCP) passa
+  di li'. C'e' un `provider=None` in coda per l'override per-chiamata, ma nessun
+  chiamante esistente deve passare niente. `main.py` continua a riesportare i
+  dieci nomi storici, e le tre classi d'errore ora **nascono in `providers.py`**:
+  `aiclient` le importa, quindi sono gli **stessi oggetti** ovunque e un
+  `except AIAuthError` scritto anni fa continua a prendere l'errore di Anthropic.
+- **Le due directory: registro e chiavi stanno ENTRAMBI in `get_cookies_dir()`**,
+  cioe' la cartella FISSA condivisa fra le app, non quella spostata da
+  `set_app_name()`. Non e' pigrizia: chi configura la sua chiave Anthropic in
+  VoxelAIArtist la vuole anche in PixelAIEditor (stessa persona, stesso account,
+  e le due app girano una dentro l'altra). Ma la ragione decisiva e' un'altra:
+  registro per-app + chiavi condivise significherebbe che `p1` nel figlio e' un
+  provider **diverso** da `p1` nel padre mentre leggono lo stesso file di chiavi
+  — cioe' **la chiave sbagliata mandata al provider sbagliato**. O tutti e due
+  condivisi, o tutti e due separati; condivisi e' quello che l'utente vuole.
+- **Due file, non uno**: `providers.json` (registro) e `provider_keys.json`
+  (chiavi). Cosi' il mascheramento e' **strutturale** e non una disciplina:
+  `list_providers()` legge solo il registro, che una chiave non puo' contenere.
+  Nei payload pubblici esce `hasKey` + `keyMask` (`****WXYZ`), mai il valore —
+  e le chiavi non entrano MAI in `settings.json` (`_SENSITIVE_KEYS`).
+- **La classificazione degli errori non e' comune: e' per tipo.** Su un'API vera
+  ci sono i codici (`classify_http_status`: 401/403 -> auth, 429 e >=5xx ->
+  transient, il resto -> format), e le euristiche testuali di Gemini
+  (`_AI_AUTH_HINTS`) **non vanno applicate**: leggerebbero "quota" dentro il
+  messaggio di un 400 e lo declasserebbero a ritentabile. Per questo
+  `_classify_ai_error` come **prima cosa** restituisce l'eccezione invariata se
+  e' gia' una delle tre.
+- **Zero dipendenze nuove.** Anthropic e i compatibili OpenAI si chiamano con
+  `urllib` della libreria standard: sono HTTP + JSON. `anthropic` e `openai` non
+  vanno aggiunti a `requirements.txt` — un import mancante all'avvio spegnerebbe
+  l'app anche a chi usa solo Gemini.
+- **Il corpo di Anthropic resta minimo** (`model`, `max_tokens`, `messages`):
+  `temperature`, `top_p`, `top_k` e `thinking.budget_tokens` sono **rifiutati con
+  400** dai modelli recenti, e il campo modello e' testo libero (l'utente puo'
+  configurarne uno vecchio o nuovo), quindi solo il corpo minimo vale per tutti.
+  La risposta e' una **lista di blocchi tipizzati**: si filtra `type == "text"`,
+  perche' un blocco `thinking` puo' precederlo.
+- **Il `model=` della UI non scavalca il provider.** La tendina manda un nome
+  dell'era Gemini; inoltrarlo ad Anthropic darebbe un 400. Vale solo come ripiego
+  quando la voce non dichiara nessun modello.
+- `POST /api/providers/test` risponde **200 anche quando fallisce**: l'esito sta
+  in `ok`/`kind`, cosi' un 401 del provider diventa un messaggio che dice cosa
+  fare invece di un errore di rete generico.
+- La sezione UI sta **dopo** i cookie e non li tocca: Gemini e' il predefinito e
+  deve restare a un clic. Le righe dell'elenco sono costruite da JS, quindi
+  `window.renderProviderList` e' chiamata da `setLanguage` (23-i18n.js) come
+  `renderObjectsList` e compagni — senza, al cambio lingua si leggerebbe per
+  sempre `settings.prov.useBtn`.
+- Guardie: `tests/test_providers.py` (offline, `_http_post_json` finto,
+  `VOXELAI_PROVIDERS_DIR` su una cartella temporanea esportata da
+  `run_all.sh` — senza, la suite leggerebbe il registro VERO dello sviluppatore e
+  "niente rete" diventerebbe falso) e `.superpowers/check_providers.py` (46
+  controlli in GUI reale, `/api/providers*` intercettata con `page.route`).
+
 ### Asset Pack / multi-generation (`src/pack.py` + `ui/src/lib/27-pack.js`)
 Beyond the palette contract below, finished assets are also **anchored**
 (`normalize_asset`: centred on XZ, sitting at y=0) and can carry a declared
@@ -696,6 +760,78 @@ gesto e l'altro invece di applicare e dimenticare.
   anche l'unico modo di distinguere "la maniglia non c'e'" da "c'e' ma qualcuno le
   sta sopra". Prevedere quali colonne l'overlay eroda **non funziona**: i valori
   attesi cambiano a ogni ritocco di geometria.
+
+## Server MCP (`mcp_server/`)
+
+Espone VoxelAIArtist come 48 strumenti a un assistente
+(`python -m mcp_server --workdir CARTELLA`, canale stdio). Non avvia la GUI e non
+parla col server HTTP: importa `main.py` e i moduli di `src/` in **questo**
+processo e tiene il documento in memoria. La documentazione per l'utente e'
+`mcp_server/README.md`; qui stanno solo le cose che si sbagliano riscrivendole.
+
+- **Gli strumenti ritornano TESTO, non oggetti.** Un JSON di quattromila voxel
+  dice a un modello meno di "42 voxel, 3 colori, ingombro 7x7x5". L'elenco dei
+  voxel non gli arriva mai: e' grande, illeggibile, e lo si otterrebbe solo per
+  riscriverlo. Dove il dato strutturato serve (elenchi, statistiche) esce un JSON
+  breve.
+- **Ogni modifica passa da `doc.edit(...)`**, cioe' dalla cronologia: la
+  riparazione di un errore dev'essere `voxel_undo`, non "rifai il modello".
+  Scrivere su disco e' l'unica cosa irreversibile, quindi l'unica con un vincolo:
+  `_resolve_out()` confina le scritture in `WORKDIR` confrontando i percorsi
+  REALI (quindi `..` e i collegamenti simbolici non lo aggirano) con un
+  separatore in coda (o `/lavoro2` passerebbe per dentro `/lavoro`). **Leggere non
+  ha limiti ed e' voluto**: aprire un file che l'utente ha nominato e' cio' che
+  gli e' stato chiesto.
+- **`src/` si importa PIATTO, mai come pacchetto**: `compat.py` aggiunge `src/` a
+  `sys.path` **in coda** (`parser` collide con quello della libreria standard).
+  `from src import settings` solleva `ValueError: source code string cannot
+  contain null bytes` — `src/__init__.py` sono 6 byte di BOM UTF-16.
+- **Solo 7 strumenti su 48 chiamano un modello esterno** (`voxel_generate`,
+  `voxel_modify`, `voxel_texture_generate`, `voxel_rig_animate`,
+  `voxel_pack_start` + i due che ne leggono l'esito). Tutto il resto gira in
+  locale senza credenziali, e `voxel_ops` prende le stesse ops compatte che
+  produce l'AI: un assistente disegna da se', senza cookie.
+- **Due formati di ops, una sola parola.** Le ops dei VOXEL sono **liste**
+  (`["fill",0,0,0,7,3,7,"#8844AA"]`), quelle dei PIXEL sono **stringhe**
+  (`"fill 0 0 15 15 a"`). `apply_pixel_op` ritorna 0 su un non-stringa **senza un
+  avviso**, quindi la lista dava una texture vuota e il messaggio "le ops non
+  hanno dipinto niente", che manda a cercare l'errore nei colori. La conversione
+  sta in `textures.op_to_text`/`ops_to_text`, cioe' **al confine MCP e non in
+  `pixelops.py`**: quel modulo ha un gemello in JS e `tests/pixel_parity_check.sh`
+  li confronta op per op — allargare li' cio' che si accetta romperebbe la parita'.
+- **La coda dei pack gira in QUESTO processo**, non in quello dell'app: e' la
+  stessa classe con la stessa cartella, non la stessa istanza. I worker di
+  `src/pack.py` sono thread `daemon`, quindi un pack in corso muore col server;
+  uno ARRIVATO IN FONDO si rivede anche dalla GUI, perche' la persistenza passa
+  dal disco.
+- **stdout e' il canale del protocollo.** Il saluto d'avvio va su stderr e
+  `compat.protect_stdout()` dirotta ogni `print` del processo **prima** di
+  `mcp.run()`: la coda dei pack stampa dai suoi thread, che nessun `quiet()` a
+  blocco potrebbe coprire. Una riga di troppo su stdout chiude il client senza
+  spiegazioni.
+- **`__main__.py` regge anche `python percorso/a/mcp_server`** (la cartella come
+  argomento), che e' la forma per i client che non sanno impostare una directory
+  di lavoro — Claude Desktop fra questi. Senza la guardia su `__package__`,
+  `ImportError: attempted relative import with no known parent package`. Da qui
+  discende che **non va importato nelle prove**: chiama `main()` all'import, cioe'
+  avvia il server e gli fa consumare il ciclo di eventi del processo.
+- **Un modello umanoide va costruito in T-POSE.** Le stazioni delle braccia si
+  misurano dal bordo del torso, e con le braccia lungo i fianchi quel bordo *e'*
+  il braccio: la spalla finisce sulla punta del dito e a `upperArm_*` non si lega
+  nessun voxel. Le braccia si abbassano dopo, con `voxel_rig_pose` (Z −78 a
+  destra, +78 a sinistra).
+- Guardie: `tests/test_mcp_server.py` (268 controlli, dal registro VERO di
+  FastMCP: uno strumento puo' esistere e non essere esposto),
+  `test_mcp_rig.py` / `test_mcp_export.py` / `test_mcp_import.py`. Il punto di
+  sostituzione e' `ai.answer_text`, risolto dai globali a ogni chiamata: le prove
+  gli assegnano una funzione finta e prompt, recupero del JSON ed espansione
+  girano per davvero senza rete.
+  Fra queste c'e' **la guardia contro gli strumenti fantasma**: le descrizioni si
+  rimandano l'un l'altra ("rileggila con X") e un nome sbagliato li' non da'
+  nessun errore — il modello chiama uno strumento inesistente e sembra che se lo
+  sia inventato. Ne sono stati trovati due in GUI (`voxel_render`,
+  `voxel_pack_retry`), quindi ora ogni `voxel_*` citato in `mcp_server/` deve
+  esistere nel registro o essere una funzione interna.
 
 ## Conventions & gotchas
 - **`ui/index.html` is generated, but it is NOT disposable.** `node ui/build.mjs`
