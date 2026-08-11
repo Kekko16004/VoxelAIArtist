@@ -138,10 +138,19 @@ def _quad(face, normal, token, axis, ua, va, level, u, v, w, h):
         return tuple(p)
 
     corners = [pt(0, 0), pt(w, 0), pt(w, h), pt(0, h)]
-    # Ordine antiorario visto da FUORI. Sul verso negativo l'ordine si inverte,
-    # ed e' esattamente il caso in cui una lista fissa di UV sarebbe trasposta
-    # (vedi la docstring del modulo).
-    if normal[axis] < 0:
+    # Ordine antiorario visto da FUORI: la normale del triangolo 0-1-2 deve
+    # avere lo stesso segno di `normal`. La vecchia regola "inverti se
+    # normal[axis] < 0" sbagliava su +Y/-Y (py/ny uscivano FLIPPED): Unity e
+    # glTF con backface culling (FrontSide / doubleSided=false) buttavano via
+    # il tetto e la base, e il guscio sembrava bucato anche se in VoxelAI si
+    # vedeva pieno (li' ogni voxel e' un cubo istanced, non il greedy mesh).
+    c0, c1, c2 = corners[0], corners[1], corners[2]
+    ax, ay, az = c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]
+    bx, by, bz = c2[0] - c0[0], c2[1] - c0[1], c2[2] - c0[2]
+    cx = ay * bz - az * by
+    cy = az * bx - ax * bz
+    cz = ax * by - ay * bx
+    if cx * normal[0] + cy * normal[1] + cz * normal[2] < 0:
         corners = [corners[0], corners[3], corners[2], corners[1]]
     return Quad(face, normal, token, corners, w, h)
 
