@@ -72,3 +72,4 @@ tests/.vendor/
 tests/*.glb
 tests/*.glb.expect.json
 tests/*.png
+*.voxai
