@@ -3881,10 +3881,11 @@
         <div id="autosaveHistoryOverlay"
              style="display:none; position:absolute; inset:0; z-index:40; align-items:center; justify-content:center; background:var(--overlay-scrim);">
             <div class="glass" style="width:min(460px, 90%); max-height:80%; display:flex; flex-direction:column; padding:18px; border-radius:var(--radius-md); border:1px solid var(--glass-border); box-shadow:0 12px 48px rgba(0,0,0,0.5);">
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                    <div style="font-size:15px; font-weight:700; color:var(--text-primary);" data-i18n="file.autosaveHistory">Cronologia salvataggi</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                    <div style="font-size:15px; font-weight:700; color:var(--text-primary);" data-i18n="file.autosaveHistory">Cronologia salvataggi e generazioni</div>
                     <button class="btn btn-secondary" id="autosaveHistoryClose" style="font-size:12px; padding:6px 12px;" data-i18n="settings.close">Chiudi</button>
                 </div>
+                <div style="font-size:11px; opacity:0.75; margin-bottom:12px;" data-i18n="autosave.retentionNote">Tutti i progetti e le generazioni (da app o MCP) vengono conservati per i giorni impostati e puliti automaticamente.</div>
                 <div id="autosaveList" style="overflow-y:auto; flex:1; margin-bottom:12px;"></div>
                 <button class="btn btn-secondary" id="autosaveOpenFolderBtn" style="width:100%; font-size:12px; padding:8px;"
                     title="Apri la cartella dei salvataggi automatici" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder">📁 Apri cartella autosave</button>

@@ -36,34 +36,38 @@ if __package__ in (None, ""):
 from mcp.server.fastmcp import FastMCP                       # noqa: E402
 
 from mcp_server import ai, compat, edits, exporters, importers  # noqa: E402
-from mcp_server import materials, pixelops, rig, textures       # noqa: E402
+from mcp_server import materials, patch, pixelops, rig, textures  # noqa: E402
 from mcp_server import png as pngmod                         # noqa: E402
 from mcp_server.document import Cell, Document, VoxelObject  # noqa: E402
 from mcp_server.session import SESSION, SessionError         # noqa: E402
 
 mcp = FastMCP("voxelai")
 
+
+# NIENTE rotta POST su /sse. Nel trasporto SSE il client fa GET /sse per aprire
+# lo stream e poi POSTA su /messages/?session_id=..., che e' l'indirizzo annunciato
+# dall'evento `endpoint`: lo monta il trasporto del SDK. Una rotta POST /sse che
+# ripiega su `Response(202)` e' peggio di non averla, perche' un 202 dice "preso
+# in carico" a una richiesta che nessuno ha processato: il client resta ad
+# aspettare una risposta che non arrivera' sullo stream, e il terminale non
+# stampa niente perche' non c'e' stato nessun errore da stampare.
+
+
 # La cartella di lavoro: si stabilisce all'avvio (vedi main()) e non cambia
 # durante la sessione. Metterla in una variabile che uno strumento puo'
 # riscrivere renderebbe il vincolo del punto 3 aggirabile dall'interno.
 WORKDIR = os.getcwd()
+UNRESTRICTED = False
 
 
 def _resolve_out(path):
-    """Percorso di scrittura, verificato dentro WORKDIR.
-
-    Il confronto e' fra percorsi REALI (`realpath`), non fra stringhe: senza,
-    un `..` di troppo o un collegamento simbolico che punta fuori passerebbero
-    il controllo pur scrivendo altrove. E si confronta con il separatore in
-    coda, o `/lavoro-altrui` sembrerebbe dentro `/lavoro`.
-    """
     raw = os.path.expanduser(str(path or "").strip())
     if not raw:
         raise SessionError("percorso vuoto")
     full = raw if os.path.isabs(raw) else os.path.join(WORKDIR, raw)
     full = os.path.realpath(full)
     root = os.path.realpath(WORKDIR)
-    if full != root and not full.startswith(root + os.sep):
+    if not UNRESTRICTED and full != root and not full.startswith(root + os.sep):
         raise SessionError(
             "posso scrivere solo dentro la cartella di lavoro (%s): "
             "'%s' e' fuori" % (root, path))
@@ -73,6 +77,7 @@ def _resolve_out(path):
     return full
 
 
+
 def _write(path, data):
     full = _resolve_out(path)
     mode = "wb" if isinstance(data, (bytes, bytearray)) else "w"
@@ -80,6 +85,34 @@ def _write(path, data):
     with open(full, mode, **kwargs) as f:
         f.write(data)
     return full
+
+
+# I due convertitori qui sotto esistono perche' lo SCHEMA e il CORPO hanno due
+# pubblici diversi. Lo schema dichiara `float` / `bool` perche' e' quello che il
+# modello legge per decidere cosa scrivere: dichiarare `string` gli fa mandare
+# "1.0", e un client che valida gli argomenti PRIMA di spedirli (Kilo Code lo fa)
+# rifiuta `1.0` da solo — l'errore compare nel pannello e il server non vede mai
+# la richiesta, quindi il terminale resta muto. Ma alcuni client mandano ogni
+# cosa come testo, e li' un `float` dichiarato non basta: percio' il corpo
+# accetta comunque la stringa. Dichiarare stretto e accettare largo copre
+# entrambi; il contrario non copre nessuno dei due.
+def _as_float(v, default=0.0):
+    if isinstance(v, bool) or v is None or v == "":
+        return default
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        raise SessionError("mi aspettavo un numero, ho ricevuto %r" % (v,))
+
+
+def _as_bool(v, default=False):
+    if v is None or v == "":
+        return default
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    return str(v).strip().lower() in ("true", "1", "yes", "y", "t", "si", "sì", "on")
 
 
 def _describe(doc, obj):
@@ -1153,17 +1186,20 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
     - `.json`: i voxel piatti.
     """
     doc = SESSION.get(document or None)
+    SESSION.auto_save(doc)
     o = doc.object_by_ref(obj or None)
+
     if not len(o):
         raise SessionError("l'oggetto '%s' e' vuoto: non c'e' niente da esportare"
                            % o.name)
     ext = (fmt or os.path.splitext(path)[1]).lower().lstrip(".")
-    scale = float(scale)
+    scale = _as_float(scale, 1.0)
+    _center = _as_bool(center, True)
     if ext == "glb":
         return "Esportato in %s." % _write(path, exporters.build_glb(
-            doc, o, scale, bool(center)))
+            doc, o, scale, _center))
     if ext == "gltf":
-        gltf, blob = exporters.build_gltf(doc, o, scale, bool(center))
+        gltf, blob = exporters.build_gltf(doc, o, scale, _center)
         if blob:
             import base64
             gltf["buffers"] = [{
@@ -1176,7 +1212,7 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
         folder = os.path.dirname(path)
         written = []
         for name, data in exporters.export_obj_bundle(
-                doc, o, base, scale, bool(center)):
+                doc, o, base, scale, _center):
             written.append(os.path.basename(
                 _write(os.path.join(folder, name) if folder else name, data)))
         return ("Esportati accanto: %s. Tienili nella stessa cartella, o i "
@@ -1476,16 +1512,28 @@ def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
     perche' unisce le facce complanari in quad grandi.
     """
     doc = SESSION.get(document or None)
+    SESSION.auto_save(doc)
     o = doc.object_by_ref(obj or None)
+
     rig.require_rig(o)
-    only = [str(c) for c in clips] if clips else None
-    data = rig.export_rigged_glb(doc, o, float(scale), bool(all_faces),
-                                 bool(presets), bool(custom), only)
+    # `clips` arriva come lista dai client che rispettano lo schema e come
+    # stringa "walk,run" da quelli che appiattiscono tutto a testo.
+    if isinstance(clips, str):
+        only = [c.strip() for c in clips.split(",") if c.strip()] or None
+    elif clips:
+        only = [str(c).strip() for c in clips if str(c).strip()] or None
+    else:
+        only = None
+    _scale = _as_float(scale, 0.01)
+    _all = _as_bool(all_faces, False)
+    _pre = _as_bool(presets, True)
+    _cust = _as_bool(custom, True)
+    data = rig.export_rigged_glb(doc, o, _scale, _all, _pre, _cust, only)
     full = _write(path, data)
     # I nomi vanno letti col filtro applicato, non dai valori di partenza: con
     # `clips=['walk']` il file ne contiene una sola, e annunciarle tutte e' un
     # messaggio che smentisce il file appena scritto.
-    names = rig.clip_names(o, bool(presets), bool(custom), only)
+    names = rig.clip_names(o, _pre, _cust, only)
     # E la posa si annuncia solo se c'e' davvero: a scheletro a riposo
     # `build_pose_clip` non ne emette nessuna (una clip di soli valori di riposo
     # comparirebbe nell'elenco senza fare niente).
@@ -1497,32 +1545,96 @@ def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
 
 
 def main(argv=None):
-    global WORKDIR
+    global WORKDIR, UNRESTRICTED
     argv = list(sys.argv[1:] if argv is None else argv)
     workdir = None
+    transport = "stdio"
+    host = None
+    port = None
+    debug = False
     for i, a in enumerate(argv):
         if a == "--workdir" and i + 1 < len(argv):
             workdir = argv[i + 1]
         elif a.startswith("--workdir="):
             workdir = a.split("=", 1)[1]
+        elif a in ("--unrestricted", "--allow-any-path", "--unlimited"):
+            UNRESTRICTED = True
+        elif a in ("--debug", "-v", "--verbose"):
+            debug = True
+        elif a == "--sse":
+            transport = "sse"
+        elif a == "--transport" and i + 1 < len(argv):
+            transport = argv[i + 1]
+        elif a.startswith("--transport="):
+            transport = a.split("=", 1)[1]
+        elif a == "--host" and i + 1 < len(argv):
+            host = argv[i + 1]
+        elif a.startswith("--host="):
+            host = a.split("=", 1)[1]
+        elif a == "--port" and i + 1 < len(argv):
+            port = int(argv[i + 1])
+        elif a.startswith("--port="):
+            port = int(a.split("=", 1)[1])
     if workdir:
         WORKDIR = os.path.realpath(os.path.expanduser(workdir))
         os.makedirs(WORKDIR, exist_ok=True)
     else:
         WORKDIR = os.path.realpath(os.getcwd())
-    # Su stderr: stdout E' il canale del protocollo, e una riga di saluto li'
-    # dentro corrompe il primo messaggio e il client si chiude senza dire perche'.
-    sys.stderr.write("VoxelAI MCP — cartella di lavoro: %s\n" % WORKDIR)
-    # E per lo stesso motivo lo si blinda PRIMA di partire: la coda dei pack
-    # stampa da thread propri, in un momento che nessun blocco `quiet()` puo'
-    # racchiudere. Da qui in poi ogni `print` del processo va su stderr, mentre
-    # il trasporto MCP continua a scrivere sullo stdout autentico.
+    if host:
+        mcp.settings.host = host
+    if port:
+        mcp.settings.port = port
+    import logging
+
+    # Il rumore che si vuole zittire e' SOLO questo: due warning che il SDK
+    # emette a ogni riconnessione di un client e che non descrivono un guasto.
+    class SuppressWarningsFilter(logging.Filter):
+        def filter(self, record):
+            if record.levelno == logging.WARNING:
+                msg = record.getMessage()
+                if "Received request before initialization" in msg:
+                    return False
+                if "RequestResponder must be used" in msg:
+                    return False
+            return True
+
+    logging.getLogger().addFilter(SuppressWarningsFilter())
+    for name in logging.root.manager.loggerDict:
+        if name.startswith("mcp") or name.startswith("uvicorn") or name.startswith("starlette"):
+            logging.getLogger(name).addFilter(SuppressWarningsFilter())
+
+    # `Failed to validate request:` NON va soppresso, ed e' il motivo per cui un
+    # -32602 sembrava arrivare dal nulla: il SDK rifiuta la busta JSON-RPC dentro
+    # `mcp/shared/session.py` PRIMA di chiamare qualunque strumento, quindi un
+    # aggancio su `call_tool` non lo vede mai. Il messaggio esiste gia', ma senza
+    # una configurazione del logging finisce nel gestore d'emergenza e a volte da
+    # nessuna parte. Qui gli si da' una destinazione esplicita: stderr, perche'
+    # su stdio quello e' il canale del protocollo e una riga di troppo su stdout
+    # chiude il client senza spiegazioni.
+    root = logging.getLogger()
+    if not any(getattr(h, "_voxelai", False) for h in root.handlers):
+        h = logging.StreamHandler(sys.stderr)
+        h.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        h._voxelai = True
+        h.addFilter(SuppressWarningsFilter())
+        root.addHandler(h)
+    if root.level == logging.NOTSET or root.level > logging.INFO:
+        root.setLevel(logging.INFO)
+    if debug:
+        root.setLevel(logging.DEBUG)
+
+    mode_str = "illimitata (qualsiasi cartella)" if UNRESTRICTED else WORKDIR
+    sys.stderr.write("VoxelAI MCP — scrittura: %s (trasporto: %s)\n" % (mode_str, transport))
+
+    if debug and transport == "sse":
+        patch.install()
+
+    if transport == "sse":
+        sys.stderr.write("Server SSE attivo su http://%s:%s/sse\n" % (mcp.settings.host, mcp.settings.port))
     proxy = compat.protect_stdout()
-    mcp.run()
+    mcp.run(transport=transport)
+
     if proxy is not None and not proxy.buffer_used:
-        # Il trasporto non ha preso `.buffer`: non e' passato dal canale che
-        # abbiamo tenuto pulito, quindi i messaggi sono usciti da un'altra
-        # parte. Meglio dirlo che lasciare un server che sembra vivo.
         sys.stderr.write(
             "VoxelAI MCP: attenzione, il trasporto non ha usato stdout.buffer "
             "— la protezione dello stdout potrebbe non essere piu' valida.\n")
@@ -1530,3 +1642,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+

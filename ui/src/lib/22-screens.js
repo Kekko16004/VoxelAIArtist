@@ -279,20 +279,38 @@
                                '<button class="btn btn-primary" id="settingsChooseDirBtn" style="font-size:12px; padding:6px 12px;" data-i18n="common.browse"></button>' +
                             '</div>' +
                           '</div>' +
+                          '<div class="control-row">' +
+                            '<label style="flex:1; font-size:12px;">Conservazione generazioni/autosave (giorni):</label>' +
+                            '<input type="number" id="settingsAutosaveDays" class="field-strong" style="width:65px; padding:6px; font-size:12px;" min="1" max="365" value="14">' +
+                          '</div>' +
                           '<div class="screens-section-note" data-i18n="screens.autosaveNote"></div>' +
                           '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder"></button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
                     localize(wrap);
 
+                    const daysInput = document.getElementById('settingsAutosaveDays');
+                    if (daysInput && typeof window.getPref === 'function') {
+                        daysInput.value = window.getPref('autosaveDays', 14);
+                    }
+                    if (daysInput) {
+                        daysInput.addEventListener('change', () => {
+                            const val = Math.max(1, Math.min(365, parseInt(daysInput.value) || 14));
+                            daysInput.value = val;
+                            if (typeof window.savePref === 'function') window.savePref('autosaveDays', val);
+                        });
+                    }
+
                     const defaultSaveInput = document.getElementById('settingsDefaultSaveDir');
+
                     if (defaultSaveInput && typeof window.getPref === 'function') {
                         defaultSaveInput.value = window.getPref('default_save_dir', '');
                     }
                     const chooseDirBtn = document.getElementById('settingsChooseDirBtn');
                     if (chooseDirBtn) chooseDirBtn.addEventListener('click', async () => {
-                        if (!hasNativeDialogs()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
+                        if (!hasLocalBackend()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
                         try {
+
                             const res = await fetch(screensApi('/api/settings/choose-dir'));
                             const data = await res.json().catch(() => ({}));
                             if (!res.ok || data.error) {

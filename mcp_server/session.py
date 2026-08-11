@@ -43,20 +43,46 @@ class Session(object):
             n += 1
         return "%s %d" % (base, n)
 
+    def auto_save(self, doc):
+        """Copia di sicurezza nella cartella dell'app, se e' raggiungibile.
+
+        Due dettagli, entrambi gia' costati un guasto silenzioso:
+
+        `src/` si importa PIATTO. `from src import settings` solleva sempre
+        `ValueError: source code string cannot contain null bytes`, perche'
+        `src/__init__.py` sono sei byte di BOM UTF-16: il pacchetto non e'
+        importabile e non lo diventera'. Con l'`except` largo qui sotto
+        l'eccezione spariva a ogni chiamata e l'autosalvataggio non ha MAI
+        scritto niente, senza dirlo. Il percorso lo prepara `compat`.
+
+        L'`except` resta largo perche' una copia di sicurezza non deve poter far
+        fallire un'esportazione riuscita, ma ora il motivo si legge con --debug
+        invece di sparire.
+        """
+        try:
+            from . import compat
+            app_settings = compat.settings_module()
+            pid = self.name_of(doc) or getattr(doc, "name", "mcp_project")
+            disp = getattr(doc, "name", pid) or pid
+            if hasattr(doc, "objects") and doc.objects:
+                obj_names = [o.name for o in doc.objects if getattr(o, "name", None)]
+                if obj_names:
+                    disp = ", ".join(obj_names[:3])
+            app_settings.write_autosave(doc.to_payload(), pid, display_name=disp)
+        except Exception as e:
+            import logging
+            logging.getLogger("voxelai.mcp").debug("autosave non riuscito: %r", e)
+
+
     def put(self, doc, name=None):
         name = self.unique_name(name or doc.name)
         doc.name = name
         self.docs[name] = doc
         self.current = name
+        self.auto_save(doc)
         return name
 
     def get(self, name=None):
-        """Il documento richiesto, o quello corrente.
-
-        Un nome che non esiste e' un errore che ELENCA i nomi aperti: la causa
-        piu' comune e' un refuso o un documento chiuso, e in entrambi i casi la
-        risposta utile e' la lista, non "non trovato".
-        """
         if name is None or name == "":
             if self.current is None:
                 raise SessionError(
@@ -88,8 +114,6 @@ class Session(object):
         key = self.name_of(doc)
         self.docs.pop(key, None)
         if self.current == key:
-            # Il corrente diventa un altro documento aperto, non None: chiudere
-            # uno di due modelli non deve costringere a riselezionare l'altro.
             self.current = next(iter(self.docs), None)
         return key
 
@@ -98,15 +122,7 @@ class Session(object):
         doc = Document(name or "Progetto %d" % self._counter)
         return self.put(doc, name)
 
-    # --- disco ------------------------------------------------------------
-
     def open_path(self, path, name=None):
-        """Apre un `.voxai` o un `.json` di progetto.
-
-        I formati binari (`.vox`, GLB) NON passano di qui: hanno il loro
-        strumento di importazione, perche' aprire e importare sono due gesti
-        diversi — uno rimpiazza il documento, l'altro aggiunge a quello che c'e'.
-        """
         path = os.path.expanduser(str(path))
         if not os.path.isfile(path):
             raise SessionError("file non trovato: %s" % path)
@@ -123,13 +139,6 @@ class Session(object):
         return self.put(doc, doc.name)
 
     def save_path(self, doc, path=None):
-        """Scrive il progetto. Senza `path` riusa quello da cui e' stato aperto.
-
-        Il salvataggio e' l'unica operazione che tocca il disco dell'utente
-        senza che l'abbia nominato, quindi il percorso implicito esiste solo se
-        il documento ne ha gia' uno: un documento nuovo pretende un percorso
-        esplicito invece di inventarne uno in una cartella qualsiasi.
-        """
         target = path or doc.path
         if not target:
             raise SessionError(
@@ -146,7 +155,9 @@ class Session(object):
         except OSError as e:
             raise SessionError("non riesco a scrivere %s: %s" % (target, e))
         doc.path = target
+        self.auto_save(doc)
         return target
 
 
 SESSION = Session()
+

@@ -155,10 +155,15 @@ def get_public_settings():
 # ---------------------------------------------------------------------------
 
 def get_autosave_dir():
-    """Cartella degli autosave dentro appdata; creata se assente."""
-    path = os.path.join(get_appdata_dir(), "autosaves")
-    os.makedirs(path, exist_ok=True)
-    return path
+    try:
+        user_docs = os.path.join(os.path.expanduser("~"), "Documents", "VoxelAI", "autosaves")
+        os.makedirs(user_docs, exist_ok=True)
+        return user_docs
+    except Exception:
+        path = os.path.join(get_appdata_dir(), "autosaves")
+        os.makedirs(path, exist_ok=True)
+        return path
+
 
 
 def _sanitize_project_id(project_id):
@@ -179,18 +184,18 @@ def _is_within(base_dir, target_path):
         return False
 
 
-def write_autosave(data, project_id=None):
-    """Scrive uno snapshot autosave con timestamp e ruota i più vecchi
-    mantenendo al più AUTOSAVE_MAX_KEEP file per progetto. Ritorna il path."""
+def write_autosave(data, project_id=None, display_name=None):
     autosave_dir = get_autosave_dir()
     pid = _sanitize_project_id(project_id)
     epoch = int(time.time() * 1000)
     name = f"autosave_{pid}_{epoch}.voxai.json"
     path = os.path.join(autosave_dir, name)
+    disp = str(display_name or project_id or "").strip() or pid
     payload = {
         "format": "voxai",
         "version": 1,
         "projectId": pid,
+        "displayName": disp,
         "savedAt": _now_iso(),
         "data": data,
     }
@@ -200,28 +205,46 @@ def write_autosave(data, project_id=None):
     return path
 
 
-def _rotate_autosaves(autosave_dir, project_id):
-    """Mantiene solo gli ultimi AUTOSAVE_MAX_KEEP autosave del progetto dato."""
-    prefix = f"autosave_{project_id}_"
-    entries = []
+def get_autosave_days():
+    try:
+        val = int(get_setting("autosaveDays", 14))
+        return max(1, min(365, val))
+    except Exception:
+        return 14
+
+
+def _rotate_autosaves(autosave_dir, project_id=None):
+    days = get_autosave_days()
+    cutoff_epoch = time.time() - (days * 86400)
     for name in os.listdir(autosave_dir):
-        if name.startswith(prefix) and _AUTOSAVE_RE.match(name):
+        if _AUTOSAVE_RE.match(name):
             full = os.path.join(autosave_dir, name)
             try:
-                entries.append((os.path.getmtime(full), full))
+                if os.path.getmtime(full) < cutoff_epoch:
+                    os.remove(full)
             except OSError:
                 pass
-    entries.sort(reverse=True)  # più recenti prima
-    for _, full in entries[AUTOSAVE_MAX_KEEP:]:
-        try:
-            os.remove(full)
-        except OSError:
-            pass
+    if project_id:
+        prefix = f"autosave_{project_id}_"
+        entries = []
+        for name in os.listdir(autosave_dir):
+            if name.startswith(prefix) and _AUTOSAVE_RE.match(name):
+                full = os.path.join(autosave_dir, name)
+                try:
+                    entries.append((os.path.getmtime(full), full))
+                except OSError:
+                    pass
+        entries.sort(reverse=True)
+        for _, full in entries[AUTOSAVE_MAX_KEEP:]:
+            try:
+                os.remove(full)
+            except OSError:
+                pass
 
 
 def list_autosaves():
-    """Ritorna la lista degli autosave: {name, projectId, savedAt, epoch, size}."""
     autosave_dir = get_autosave_dir()
+    _rotate_autosaves(autosave_dir)
     out = []
     for name in os.listdir(autosave_dir):
         if not _AUTOSAVE_RE.match(name):
@@ -231,7 +254,6 @@ def list_autosaves():
             st = os.stat(full)
         except OSError:
             continue
-        # nome = autosave_<projectId>_<epoch>.voxai.json
         core = name[len("autosave_"):-len(".voxai.json")]
         epoch_str = core.rsplit("_", 1)[-1]
         pid = core.rsplit("_", 1)[0] if "_" in core else "default"
@@ -239,9 +261,26 @@ def list_autosaves():
             epoch = int(epoch_str)
         except ValueError:
             epoch = int(st.st_mtime * 1000)
+
+        display_name = pid
+        try:
+            with open(full, "r", encoding="utf-8") as f:
+                content = json.load(f)
+                display_name = content.get("displayName") or content.get("projectId") or pid
+                if not display_name or display_name == "default":
+                    inner_data = content.get("data", {})
+                    objs = inner_data.get("objects", []) if isinstance(inner_data, dict) else []
+                    if objs and isinstance(objs, list):
+                        names = [o.get("name") for o in objs if isinstance(o, dict) and o.get("name")]
+                        if names:
+                            display_name = ", ".join(names[:3])
+        except Exception:
+            pass
+
         out.append({
             "name": name,
             "projectId": pid,
+            "displayName": display_name,
             "epoch": epoch,
             "savedAt": _epoch_ms_to_iso(epoch),
             "size": st.st_size,
@@ -250,18 +289,23 @@ def list_autosaves():
     return out
 
 
+
 def read_autosave(name):
-    """Legge il contenuto di un autosave per nome (solo basename, anti-traversal).
-    Ritorna il dict JSON. Solleva se il nome non è valido o fuori cartella."""
     safe = os.path.basename(str(name))
     if not _AUTOSAVE_RE.match(safe):
         raise ValueError("nome autosave non valido")
-    autosave_dir = get_autosave_dir()
-    path = os.path.join(autosave_dir, safe)
-    if not _is_within(autosave_dir, path) or not os.path.exists(path):
+    dirs = [get_autosave_dir(), os.path.join(get_appdata_dir(), "autosaves")]
+    path = None
+    for d in dirs:
+        candidate = os.path.join(d, safe)
+        if os.path.exists(candidate) and _is_within(d, candidate):
+            path = candidate
+            break
+    if not path:
         raise FileNotFoundError("autosave non trovato")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
 
 
 # ---------------------------------------------------------------------------

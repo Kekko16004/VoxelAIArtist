@@ -67,3 +67,28 @@
 - [x] Genera e inserisci animazione Run (100%)
 - [x] Genera e inserisci animazione Jump (100%)
 - [x] Rendi NaturalWalk l'animazione di default rinominandola in Walk (100%)
+- [x] mcp start guide readme (100%)
+- [x] add sse transport & start_sse.bat (100%)
+- [x] fix kilo code sse type config (100%)
+- [x] add --unrestricted mode for all paths write (100%)
+- [x] 14-day generation autosave & retention settings (100%)
+- [x] autosave display name & UI prompt title (100%)
+- [x] fix autosave format unwrap for old/nested saves (100%)
+- [x] fix folder picker native dialog & VoxelAI autosave folder (100%)
+- [x] fix SSE POST 405 error & auto-save JSON on GLB export (100%)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

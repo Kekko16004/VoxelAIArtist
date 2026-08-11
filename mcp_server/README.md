@@ -37,9 +37,88 @@ Prova che parta, senza client:
 python -c "import sys,asyncio; sys.path.insert(0,'.'); from mcp_server import server; print(len(asyncio.run(server.mcp.list_tools())), 'strumenti')"
 ```
 
-## Collegarlo a un client
+## Come Avviare il Server MCP
 
-### Claude Code
+Hai **due modalità** per avviare e collegare il server MCP:
+
+---
+
+### 🌐 Modalità 1: Server HTTP / SSE con IP & Porta (Consigliata se vuoi un file `.bat` da avviare)
+
+Con questa modalità avvii il server con un doppio click, e il server rimane attivo in ascolto su un indirizzo IP e una porta (es. `http://127.0.0.1:8000/sse`).
+
+#### Come avviarlo:
+- Fai doppio click sul file `start_mcp_sse.bat` presente nella root del progetto.
+- Oppure lancia da terminale:
+  ```bash
+  python -m mcp_server --sse --host 127.0.0.1 --port 8000
+  ```
+
+#### Come collegarlo nei client via URL/IP:
+
+* **Kilo Code / Roo Code / Cline**:
+  *(ATTENZIONE: Devi mettere OBBLIGATORIAMENTE `"type": "sse"`, altrimenti Kilo rimane bloccato su `stdio`!)*
+  ```json
+  {
+    "mcpServers": {
+      "voxelai": {
+        "type": "sse",
+        "url": "http://127.0.0.1:8000/sse",
+        "disabled": false
+      }
+    }
+  }
+  ```
+
+* **Antigravity / VS Code MCP Config**:
+  ```json
+  {
+    "mcpServers": {
+      "voxelai": {
+        "url": "http://127.0.0.1:8000/sse"
+      }
+    }
+  }
+  ```
+
+* **Cursor / Windsurf**:
+  In **Settings** -> **Features** -> **MCP** -> **Add new MCP server**:
+  - **Name**: `voxelai`
+  - **Type**: `sse`
+  - **URL**: `http://127.0.0.1:8000/sse`
+
+---
+
+### ⚡ Modalità 2: Stdio (Avvio Automatico gestito dal Client)
+
+In modalità `stdio` non serve avviare manualmente nessun file `.bat`: il client AI (Claude, Kilo Code, Antigravity) lancia `python` come sotto-processo ogni volta che serve.
+
+#### Configurazione Stdio:
+```json
+{
+  "mcpServers": {
+    "voxelai": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\FRANCY\\Desktop\\Dev Things\\VoxelAIArtist\\mcp_server",
+        "--workdir",
+        "C:\\Users\\FRANCY\\Documents\\VoxelAI"
+      ]
+    }
+  }
+}
+```
+
+---
+
+### 1. Testare l'MCP prima di collegarlo (MCP Inspector)
+Puoi testare i 48 strumenti direttamente dal browser usando lo strumento ufficiale di test MCP:
+
+```bash
+npx @modelcontextprotocol/inspector python "C:\Users\FRANCY\Desktop\Dev Things\VoxelAIArtist\mcp_server"
+```
+
+### 2. Claude Code (CLI)
 
 Dalla cartella del repo:
 
@@ -47,15 +126,15 @@ Dalla cartella del repo:
 claude mcp add voxelai -- python -m mcp_server --workdir ~/VoxelAI
 ```
 
-Da un'altra cartella `python -m mcp_server` non trova il pacchetto
-(`No module named mcp_server`): passa il **percorso della cartella** come
-nell'esempio qui sotto, che funziona da ovunque.
+Oppure da qualunque posizione specificando il percorso completo:
 
-### Claude Desktop
+```bash
+claude mcp add voxelai -- python "C:\Users\FRANCY\Desktop\Dev Things\VoxelAIArtist\mcp_server"
+```
 
-In `claude_desktop_config.json` (Windows:
-`%APPDATA%\Claude\claude_desktop_config.json`; macOS:
-`~/Library/Application Support/Claude/claude_desktop_config.json`):
+### 3. Kilo Code / Roo Code / Cline (VS Code Extension)
+
+Apri le impostazioni MCP dall'estensione oppure modifica il file di configurazione (`cline_mcp_settings.json` o `kilo_mcp_settings.json`):
 
 ```json
 {
@@ -63,9 +142,56 @@ In `claude_desktop_config.json` (Windows:
     "voxelai": {
       "command": "python",
       "args": [
-        "C:\\Users\\TUONOME\\Desktop\\Dev Things\\VoxelAIArtist\\mcp_server",
+        "C:\\Users\\FRANCY\\Desktop\\Dev Things\\VoxelAIArtist\\mcp_server",
         "--workdir",
-        "C:\\Users\\TUONOME\\Documents\\VoxelAI"
+        "C:\\Users\\FRANCY\\Documents\\VoxelAI"
+      ],
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+### 4. Antigravity
+
+Aggiungi il server nella configurazione MCP globale (`C:\Users\FRANCY\.gemini\config\mcp_config.json` o nella sezione mcp_servers):
+
+```json
+{
+  "mcpServers": {
+    "voxelai": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\FRANCY\\Desktop\\Dev Things\\VoxelAIArtist\\mcp_server",
+        "--workdir",
+        "C:\\Users\\FRANCY\\Documents\\VoxelAI"
+      ]
+    }
+  }
+}
+```
+
+### 5. Cursor / Windsurf
+
+In Cursor vai su **Settings** -> **Features** -> **MCP** -> **Add new MCP server**:
+- **Name**: `voxelai`
+- **Type**: `command`
+- **Command**: `python "C:\Users\FRANCY\Desktop\Dev Things\VoxelAIArtist\mcp_server" --workdir "C:\Users\FRANCY\Documents\VoxelAI"`
+
+### 6. Claude Desktop
+
+In `claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "voxelai": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\FRANCY\\Desktop\\Dev Things\\VoxelAIArtist\\mcp_server",
+        "--workdir",
+        "C:\\Users\\FRANCY\\Documents\\VoxelAI"
       ]
     }
   }
@@ -86,15 +212,15 @@ Su macOS/Linux:
 }
 ```
 
-Si passa la **cartella del pacchetto**, non `-m`: cosi' non serve impostare la
+Si passa la **cartella del pacchetto**, non `-m`: così non serve impostare la
 directory di lavoro del client, che Claude Desktop non espone. Su Windows le
-barre rovesciate vanno raddoppiate.
+barre rovesciate vanno raddoppiate nelle stringhe JSON (`\\`).
 
 ### Un client qualunque
 
 Comando `python -m mcp_server` (dal repo) o `python /percorso/a/mcp_server` (da
-ovunque), trasporto **stdio**. Il saluto d'avvio esce su **stderr**: stdout e' il canale del
-protocollo, e una riga di troppo li' dentro corrompe il primo messaggio e chiude
+ovunque), trasporto **stdio**. Il saluto d'avvio esce su **stderr**: stdout è il canale del
+protocollo, e una riga di troppo lì dentro corrompe il primo messaggio e chiude
 il client senza spiegazioni. Per lo stesso motivo ogni `print` del processo viene
 dirottato su stderr prima di partire.
 

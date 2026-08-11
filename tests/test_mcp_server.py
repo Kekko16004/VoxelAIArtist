@@ -127,6 +127,117 @@ def test_tools_are_registered():
           "richiesti: %r" % (fill.inputSchema or {}).get("required"))
 
 
+def test_schema_coerente_col_valore_predefinito():
+    """Un parametro col predefinito numerico NON deve essere dichiarato stringa.
+
+    Questa guardia nasce da un guasto vero, e il modo in cui si presentava e' il
+    motivo per cui vale la pena averla: il pannello del client mostrava tre
+    `MCP error -32602 Invalid request parameters` e **il terminale del server
+    non stampava NIENTE**, nemmeno con il tracciamento acceso. Sembrava un
+    server muto; era un server che non era stato chiamato.
+
+    La causa: `voxel_export` era stato riannotato `scale: str | None = "1.0"`,
+    quindi lo schema pubblicato diceva `{"anyOf": [{"type": "string"}, ...]}`.
+    I client seri (Kilo Code fra questi) validano gli argomenti contro lo schema
+    **prima di spedirli**, quindi uno `scale: 1.0` — cioe' il valore naturale,
+    quello che il modello scrive da solo — veniva rifiutato dal client e la
+    richiesta non partiva mai. Nessun byte, nessuna riga di log, nessun modo di
+    inseguirlo dal lato server.
+
+    Il controllo si fa sul REGISTRO, cioe' sullo schema davvero pubblicato,
+    perche' e' quello che il client legge: le annotazioni nei sorgenti sono solo
+    il modo in cui ci si arriva. Le meta' sono due, e la prima da sola NON
+    basta: riannotando `scale: str = "1.0"` il predefinito diventa stringa
+    insieme al tipo, quindi i due CONCORDANO. Verificato reintroducendo il
+    guasto per davvero — con la sola prima meta' la prova restava verde. Il
+    segno che lo trova e' il secondo: un parametro dichiarato stringa il cui
+    predefinito si legge come numero (`"1.0"`) o come booleano (`"true"`).
+
+    Nessun elenco di nomi da tenere aggiornato: vale per tutti e 48 gli
+    strumenti e per qualunque strumento aggiunto poi.
+
+    Accettare largo nel CORPO resta giusto e non e' in contraddizione
+    (`_as_float` / `_as_bool` in server.py esistono per i client che appiattiscono
+    tutto a testo): la regola e' dichiarare stretto e accettare largo. Questa
+    guardia copre solo la meta' dichiarata.
+    """
+    tools = asyncio.get_event_loop().run_until_complete(server.mcp.list_tools())
+
+    def tipi_di(prop):
+        """I tipi ammessi, sia in forma diretta sia dentro un `anyOf`."""
+        tipi = set()
+        if "type" in prop:
+            tipi.add(prop["type"])
+        for ramo in prop.get("anyOf") or []:
+            if "type" in ramo:
+                tipi.add(ramo["type"])
+        return tipi
+
+    guasti = []
+    coperti = 0
+    for t in tools:
+        props = (t.inputSchema or {}).get("properties") or {}
+        for nome, prop in props.items():
+            if "default" not in prop:
+                continue
+            pred = prop["default"]
+            tipi = tipi_di(prop)
+            if not tipi:                     # nessun tipo dichiarato: niente da dire
+                continue
+
+            # Meta' 1 — il predefinito e' gia' del tipo giusto ma il tipo
+            # dichiarato lo contraddice. Caso raro ma gratuito da escludere.
+            # `bool` PRIMA di `int`: in Python `True` e' anche un intero, e
+            # invertendo i due rami un booleano passerebbe per numero.
+            if isinstance(pred, bool):
+                attesi = {"boolean"}
+            elif isinstance(pred, (int, float)):
+                attesi = {"number", "integer"}
+            elif isinstance(pred, list):
+                attesi = {"array"}
+            else:
+                attesi = None
+            if attesi is not None:
+                coperti += 1
+                if not (tipi & attesi):
+                    guasti.append("%s.%s: predefinito %r ma tipo dichiarato %r"
+                                  % (t.name, nome, pred, sorted(tipi)))
+                continue
+
+            # Meta' 2 — QUESTA e' quella che trova il guasto vero, e la prima da
+            # sola NON lo troverebbe: riannotando `scale: str = "1.0"` il
+            # predefinito diventa stringa INSIEME al tipo, quindi i due
+            # concordano e il primo controllo tace. Il segno e' un altro: un
+            # parametro dichiarato stringa il cui predefinito si LEGGE come
+            # numero o come booleano non e' testo, e' un numero travestito —
+            # cioe' esattamente il travestimento che fa rifiutare `scale: 1.0`
+            # dal client. Verificato reintroducendo il guasto: senza questa
+            # meta' la prova restava verde.
+            if not isinstance(pred, str) or "string" not in tipi:
+                continue
+            coperti += 1
+            testo = pred.strip().lower()
+            if not testo:
+                continue
+            numerico = True
+            try:
+                float(testo)
+            except ValueError:
+                numerico = False
+            if numerico or testo in ("true", "false"):
+                guasti.append(
+                    "%s.%s: dichiarato stringa ma il predefinito %r e' un %s"
+                    % (t.name, nome, pred,
+                       "numero" if numerico else "booleano"))
+
+    check("schema: nessun numero o booleano travestito da stringa",
+          not guasti, "; ".join(guasti[:6]))
+    # Senza questa seconda asserzione la prima passerebbe anche se gli schemi
+    # sparissero del tutto, che e' esattamente il guasto che deve trovare.
+    check("schema: la guardia ha davvero dei parametri da controllare",
+          coperti >= 20, "controllati solo %d parametri" % coperti)
+
+
 def test_nessuno_strumento_fantasma_nei_testi():
     """Nessun testo dell'MCP nomina uno strumento che non esiste.
 

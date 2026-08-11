@@ -55,22 +55,37 @@
                 return bytes.buffer;
             }
 
-            // Carica (SOSTITUISCE la scena) un oggetto-dati progetto gia' deserializzato.
-            // Accetta scena multi-oggetto ({objects:[...]}) o modello singolo (flat/compact).
+            function unwrapProjectData(data) {
+                let cur = data;
+                while (cur && typeof cur === 'object') {
+                    if (Array.isArray(cur.objects) || Array.isArray(cur.ops) || Array.isArray(cur.voxels) || Array.isArray(cur.parts)) {
+                        return cur;
+                    }
+                    if (cur.data && typeof cur.data === 'object') {
+                        cur = cur.data;
+                    } else {
+                        break;
+                    }
+                }
+                return cur;
+            }
+
             function loadProjectData(data) {
+                data = unwrapProjectData(data);
                 if (!data || typeof data !== 'object') { alert(t('project.invalidData')); return false; }
-                if (!Array.isArray(data.objects) && !Array.isArray(data.ops) && !Array.isArray(data.voxels)) {
+                if (!Array.isArray(data.objects) && !Array.isArray(data.ops) && !Array.isArray(data.voxels) && !Array.isArray(data.parts)) {
                     alert(t('project.invalidFormat'));
                     return false;
                 }
                 if (!data.metadata) data.metadata = {};
-                loadSceneFromParsed(data);   // reset + ricrea gli oggetti scena
+                loadSceneFromParsed(data);
                 buildModel();
                 if (data.rig && Array.isArray(data.rig.bones) && data.rig.bones.length && typeof restoreRig === 'function') {
                     restoreRig(data.rig);
                 }
                 return true;
             }
+
 
             // --- indicatore UI "Salvato automaticamente HH:MM" ------------------
             function setAutosaveStatus(text) {
@@ -320,8 +335,9 @@
                         row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--glass-border); border-radius:8px; margin-bottom:6px;';
                         const info = document.createElement('div');
                         info.style.cssText = 'font-size:12px; line-height:1.4; overflow:hidden;';
-                        info.innerHTML = '<div style="font-weight:600;">' + fmtSavedAt(it.savedAt) + '</div>' +
-                            '<div style="opacity:0.7;">' + (it.projectId || '') + ' &middot; ' + fmtBytes(it.size) + '</div>';
+                        info.innerHTML = '<div style="font-weight:600; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:260px;" title="' + (it.displayName || it.projectId || 'Progetto') + '">' + (it.displayName || it.projectId || 'Progetto') + '</div>' +
+                            '<div style="opacity:0.75; font-size:11px;">' + fmtSavedAt(it.savedAt) + ' &middot; ' + fmtBytes(it.size) + '</div>';
+
                         const btn = document.createElement('button');
                         btn.className = 'btn btn-secondary';
                         btn.textContent = t('common.restore');
@@ -344,8 +360,9 @@
                     if (!res || !res.ok) { alert(t('autosave.restoreLoadFailed')); return; }
                     const j = await res.json();
                     const wrapper = j && j.content;
-                    const data = (wrapper && wrapper.format === 'voxai' && wrapper.data) ? wrapper.data : wrapper;
+                    const data = unwrapProjectData(wrapper);
                     if (loadProjectData(data)) {
+
                         markProjectSaved();
                         closeAutosaveHistory();
                     }

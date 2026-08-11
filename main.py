@@ -85,7 +85,30 @@ def _resolve_app_mode(default_mode="web", argv=None, env=None):
 
 APP_MODE = _resolve_app_mode(APP_MODE)
 
+
+def _pick_folder_native(title="Seleziona cartella"):
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        folder = filedialog.askdirectory(title=title)
+        root.destroy()
+        return folder or None
+    except Exception:
+        pass
+    try:
+        cmd = 'Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = "%s"; if($f.ShowDialog() -eq "OK") { $f.SelectedPath }' % title
+        res = subprocess.run(["powershell", "-Command", cmd], capture_output=True, text=True)
+        out = res.stdout.strip()
+        return out if out else None
+    except Exception:
+        return None
+
+
 GUI_AVAILABLE = False
+
 GUI_LIBRARY = None
 
 if APP_MODE == "py":
@@ -1351,18 +1374,17 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         # --- Selettore cartella ---
         if route == '/api/settings/choose-dir':
             try:
-                # Usiamo il dialog NATIVO di Windows (come "Apri"/"Salva", che gia'
-                # funzionano): un dialog nativo e' una finestra a livello di OS e appare
-                # SOPRA la surface GPU del QWebEngineView. Il dialog non-nativo disegnato
-                # da Qt finiva invece COPERTO dalla webview composita ("Sfoglia" sembrava
-                # non aprirsi). Con AA_ShareOpenGLContexts il compositing e' stabile.
-                result = _run_on_gui(lambda w: w.choose_dir_dialog())
+                result = None
+                try:
+                    result = _run_on_gui(lambda w: w.choose_dir_dialog())
+                except Exception:
+                    pass
+                if not result:
+                    result = _pick_folder_native("Seleziona cartella predefinita")
                 if result:
                     self._send_json(200, {"folder": result})
                 else:
                     self._send_json(200, {"cancelled": True})
-            except RuntimeError as e:
-                self._send_json(501, {"error": str(e)})
             except Exception as e:
                 self._send_json(500, {"error": str(e)})
             return
@@ -1394,11 +1416,16 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         if route == '/api/autosave/open-folder':
             try:
                 folder = app_settings.get_autosave_dir()
-                subprocess.Popen(f'explorer "{folder}"')
+                os.makedirs(folder, exist_ok=True)
+                if sys.platform == "win32":
+                    os.startfile(folder)
+                else:
+                    subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', folder])
                 self._send_json(200, {"ok": True, "folder": folder})
             except Exception as e:
                 self._send_json(500, {"error": str(e)})
             return
+
 
         # --- Progetti recenti: lista ---
         if route == '/api/recent':
@@ -1615,7 +1642,12 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                         self._send_json(200, {"cancelled": True})
                         return
                 saved_path = _write_voxai(path, data)
+                try:
+                    app_settings.write_autosave(data, os.path.splitext(os.path.basename(saved_path))[0])
+                except Exception:
+                    pass
                 self._send_json(200, {"path": saved_path})
+
             except Exception as e:
                 self._send_json(500, {"error": str(e)})
             return
