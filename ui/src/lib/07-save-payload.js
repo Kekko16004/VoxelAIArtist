@@ -257,6 +257,27 @@
                 return out;
             }
 
+            // Archivia il JSON del modello nella cartella history (NON autosave).
+            // Lo chiama ogni export (GLB/OBJ/VOX/PNG): e' l'unico posto dove i
+            // finali sopravvivono alla rotazione degli autosave.
+            function archiveExportJson(nameHint) {
+                if (typeof hasLocalBackend === 'function' && !hasLocalBackend()) return;
+                let payload;
+                try {
+                    payload = (typeof getSceneSavePayload === 'function')
+                        ? getSceneSavePayload() : null;
+                } catch (e) { return; }
+                if (!payload) return;
+                const name = String(nameHint || ((currentModelData.metadata && currentModelData.metadata.name) || 'modello')).replace(/\s+/g, '_');
+                const url = (window.__API_BASE__ ? window.__API_BASE__ : '') + '/api/export-history';
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, data: payload })
+                }).catch(() => {});
+            }
+            window.archiveExportJson = archiveExportJson;
+
             document.getElementById('saveJsonBtn').addEventListener('click', () => {
                 const name = ((currentModelData.metadata && currentModelData.metadata.name) || "voxel_model").replace(/\s+/g, '_');
                 const out = getSceneSavePayload();

@@ -164,6 +164,10 @@ CALLS.clear()
 aiclient.ai_answer_text("x", model="gemini-3.1-pro")
 check(CALLS[0]['payload']['model'] == 'claude-opus-5',
       "un nome di modello Gemini dalla UI non finisce ad Anthropic")
+CALLS.clear()
+aiclient.ai_answer_text("x", model="claude-sonnet-5")
+check(CALLS[0]['payload']['model'] == 'claude-sonnet-5',
+      "un modello del provider attivo scelto in UI viene usato")
 
 print("\n=== blocchi non-testo e stop_reason ===")
 NEXT_HTTP[0] = {"content": [{"type": "thinking", "thinking": "ragiono..."},
@@ -246,6 +250,50 @@ for exc, expect_tries, name in ((http_status(429), 3, 'transitorio'),
           "errore %s: %d tentativi (atteso %d)" % (name, tries[0], expect_tries))
 aiclient._interactive_backoff = saved
 P._http_post_json = _fake_http
+
+print("\n=== catalogo modelli del provider attivo ===")
+GETS = []
+NEXT_GET = [None]
+_real_get = P._http_get_json
+
+def _fake_get(url, headers, timeout=15, label=""):
+    GETS.append({"url": url, "headers": dict(headers), "label": label})
+    v = NEXT_GET[0]
+    if isinstance(v, Exception):
+        raise v
+    return v
+
+P._http_get_json = _fake_get
+gemini_cat = P.list_models("gemini")
+check(gemini_cat["type"] == P.TYPE_GEMINI, "Gemini: tipo nel catalogo")
+check(all(m["id"].startswith("gemini") for m in gemini_cat["models"]),
+      "Gemini: solo modelli Gemini")
+check(not GETS, "Gemini: niente GET /v1/models")
+
+NEXT_GET[0] = {"data": [
+    {"id": "grok-3"}, {"id": "grok-3-mini"},
+    {"id": "text-embedding-3-small"}, {"id": "whisper-1"},
+]}
+oent_models = P.add_provider({
+    "type": "openai_compatible", "label": "Grok",
+    "base_url": "https://api.x.ai/v1", "model": "grok-3",
+    "api_key": OPENAI_SECRET})
+cat = P.list_models(oent_models["id"])
+check(cat["type"] == P.TYPE_OPENAI, "Grok: tipo openai_compatible")
+check(GETS and GETS[-1]["url"] == "https://api.x.ai/v1/models",
+      "Grok: GET {base}/v1/models")
+ids = [m["id"] for m in cat["models"]]
+check("grok-3" in ids and "grok-3-mini" in ids, "Grok: modelli xAI nel catalogo")
+check("text-embedding-3-small" not in ids and "whisper-1" not in ids,
+      "Grok: embedding/whisper esclusi")
+check(all(not i.startswith("gemini") for i in ids),
+      "Grok: nessun modello Gemini nel catalogo")
+NEXT_GET[0] = P.AIAuthError("chiave sbagliata")
+cat_fail = P.list_models(oent_models["id"])
+fail_ids = [m["id"] for m in cat_fail["models"]]
+check(fail_ids == ["grok-3"],
+      "Grok: catalogo irraggiungibile -> solo il modello configurato, non Gemini")
+P._http_get_json = _real_get
 
 print("\n=== provider OpenAI-compatibile ===")
 oent = P.add_provider({"type": "openai_compatible", "label": "LM Studio",
@@ -392,6 +440,11 @@ s, d = req('GET', '/api/providers')
 check(s == 200 and any(p['id'] == 'gemini' for p in d['providers']),
       "GET /api/providers elenca il predefinito")
 check(OPENAI_SECRET not in json.dumps(d), "GET /api/providers non fa trapelare chiavi")
+s, d = req('GET', '/api/providers/models')
+check(s == 200 and d.get('type') == P.TYPE_GEMINI,
+      "GET /api/providers/models a riposo e' Gemini")
+check(all(str(m.get('id', '')).startswith('gemini') for m in (d.get('models') or [])),
+      "Gemini cookie: il catalogo resta quello di sempre")
 
 s, d = req('POST', '/api/providers', {"type": "anthropic", "label": "Via HTTP",
                                       "model": "claude-sonnet-5",
@@ -413,6 +466,17 @@ check(s == 200 and d['active'] == HPID, "action=activate cambia l'attivo")
 s, d = req('GET', '/api/settings')
 check(d['provider']['usesCookies'] is False and d['provider']['activeType'] == 'anthropic',
       "/api/settings segue l'attivo")
+_saved_get = P._http_get_json
+P._http_get_json = lambda url, headers, timeout=15, label="": {
+    "data": [{"id": "claude-sonnet-5", "display_name": "Sonnet 5"}]}
+try:
+    s, d = req('GET', '/api/providers/models')
+finally:
+    P._http_get_json = _saved_get
+check(s == 200 and d.get('type') == 'anthropic',
+      "GET /api/providers/models segue l'attivo (non Gemini)")
+check(all(not str(m.get('id', '')).startswith('gemini') for m in (d.get('models') or [])),
+      "con Anthropic attivo il catalogo non contiene Gemini")
 
 NEXT_HTTP[0] = {"content": [{"type": "text", "text": "OK"}], "stop_reason": "end_turn"}
 s, d = req('POST', '/api/providers/test', {"id": HPID})

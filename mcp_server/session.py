@@ -73,6 +73,27 @@ class Session(object):
             import logging
             logging.getLogger("voxelai.mcp").debug("autosave non riuscito: %r", e)
 
+    def export_history(self, doc, name=None):
+        """JSON definitivo nella cartella history (NON l'autosave).
+
+        Stesso `except` largo dell'autosave: un export riuscito non deve
+        fallire perche' la cartella history non e' scrivibile.
+        """
+        try:
+            from . import compat
+            app_settings = compat.settings_module()
+            disp = (name or getattr(doc, "name", None)
+                    or self.name_of(doc) or "modello")
+            if hasattr(doc, "objects") and doc.objects:
+                obj_names = [o.name for o in doc.objects if getattr(o, "name", None)]
+                if obj_names and not name:
+                    disp = obj_names[0]
+            return app_settings.write_export_history(doc.to_payload(), disp)
+        except Exception as e:
+            import logging
+            logging.getLogger("voxelai.mcp").debug("export-history non riuscito: %r", e)
+            return None
+
 
     def put(self, doc, name=None):
         name = self.unique_name(name or doc.name)

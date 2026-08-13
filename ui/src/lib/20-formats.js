@@ -535,6 +535,7 @@
                     try {
                         const data = encodeVox(getFormatExportVoxels());
                         downloadBinary(data, getFormatExportName() + '.vox', 'application/octet-stream');
+                        if (typeof archiveExportJson === 'function') archiveExportJson(getFormatExportName());
                     } catch (e) {
                         alert(t('formats.voxExportError', { error: e.message }));
                     }
@@ -546,6 +547,7 @@
                         const nbt = encodeSchemNBT(getFormatExportVoxels());
                         const res = await gzipBytes(nbt);
                         downloadBinary(res.data, getFormatExportName() + '.schem', 'application/octet-stream');
+                        if (typeof archiveExportJson === 'function') archiveExportJson(getFormatExportName());
                         if (!res.gzipped) {
                             alert(t('formats.schemNoGzip'));
                         }

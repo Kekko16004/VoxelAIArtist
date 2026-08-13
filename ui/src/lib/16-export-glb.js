@@ -486,6 +486,7 @@
                         a.download = `${name}.glb`;
                         a.click();
                         URL.revokeObjectURL(a.href);
+                        if (typeof archiveExportJson === 'function') archiveExportJson(name);
                         finish();
                         // Dopo il download: il file c'e', l'avviso spiega solo perche'
                         // e' a tinte piatte.

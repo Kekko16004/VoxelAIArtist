@@ -122,9 +122,8 @@ def ai_answer_text(final_prompt, model=None, provider=None):
     esistente deve passarlo, e senza si usa quello attivo — che a configurazione
     zero e' Gemini a cookie, come prima.
 
-    `model` resta il valore del selettore della UI. Non sovrascrive il modello
-    configurato in un provider a chiave API: vale solo se quel provider non ne
-    dichiara uno (vedi `providers.complete`).
+    `model` e' il valore del selettore della UI. Se appartiene al provider
+    attivo lo usa; un nome Gemini non finisce mai a Grok/Anthropic.
     """
     try:
         return ai_providers.complete(final_prompt, provider=provider, model=model)

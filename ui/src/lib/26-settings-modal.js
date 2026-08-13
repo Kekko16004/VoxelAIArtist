@@ -853,6 +853,7 @@
                             state.active = out.active || id;
                             state.providers = out.providers || state.providers;
                             renderList();
+                            if (typeof window.refreshAiModels === 'function') window.refreshAiModels();
                             showFeedback(tr('settings.prov.activated', { label: provider.label || id }), 'ok');
                         } catch (err) {
                             showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');

@@ -329,6 +329,7 @@
                     downloadFile(buildMtlText(), `${name}.mtl`, 'text/plain');
                     // Small delay so browsers don't collapse the two downloads into one.
                     setTimeout(() => downloadFile(buildObjText(`${name}.mtl`), `${name}.obj`, 'text/plain'), 150);
+                    if (typeof archiveExportJson === 'function') archiveExportJson(name);
                     return;
                 }
                 const files = [
@@ -345,6 +346,7 @@
                     });
                 });
                 downloadBlob(createZipBlob(files), `${name}.zip`);
+                if (typeof archiveExportJson === 'function') archiveExportJson(name);
             });
 
             document.getElementById('exportMtlBtn').addEventListener('click', () => {

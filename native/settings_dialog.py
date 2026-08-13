@@ -87,6 +87,25 @@ class SettingsDialog(QDialog):
         open_autosave.clicked.connect(self._on_open_autosave)
         root.addWidget(open_autosave)
 
+        hist_lbl = QLabel("Cartella modelli JSON (history)")
+        hist_lbl.setObjectName("muted")
+        root.addWidget(hist_lbl)
+        hist_row = QHBoxLayout()
+        hist_row.setSpacing(8)
+        self._hist_field = QLineEdit()
+        self._hist_field.setReadOnly(True)
+        self._hist_field.setPlaceholderText("Predefinita: <cartella export>/history")
+        self._hist_field.setText(self._settings.get_setting("json_models_dir", "") or "")
+        hist_row.addWidget(self._hist_field, 1)
+        hist_browse = QPushButton("Sfoglia...")
+        hist_browse.setObjectName("primary")
+        hist_browse.clicked.connect(self._on_browse_history)
+        hist_row.addWidget(hist_browse)
+        root.addLayout(hist_row)
+        open_hist = QPushButton("Apri cartella history")
+        open_hist.clicked.connect(self._on_open_history)
+        root.addWidget(open_hist)
+
         root.addWidget(_hsep())
 
         if self._open_web_settings is not None:
@@ -122,6 +141,26 @@ class SettingsDialog(QDialog):
                 os.startfile(folder)  # Windows
             except AttributeError:
                 pass  # non-Windows: no-op
+
+    def _on_browse_history(self):
+        start = self._settings.get_setting("json_models_dir", "") or ""
+        if start and not os.path.exists(start):
+            start = self._settings.get_setting("default_save_dir", "") or ""
+        path = QFileDialog.getExistingDirectory(self, "Seleziona cartella history", start)
+        if path:
+            self._settings.set_setting("json_models_dir", path)
+            self._hist_field.setText(path)
+
+    def _on_open_history(self):
+        try:
+            folder = self._settings.get_json_models_dir()
+        except Exception:
+            folder = None
+        if folder and os.path.isdir(folder):
+            try:
+                os.startfile(folder)
+            except AttributeError:
+                pass
 
     def _on_open_web(self):
         if callable(self._open_web_settings):

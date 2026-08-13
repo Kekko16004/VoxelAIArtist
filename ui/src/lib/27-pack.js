@@ -222,6 +222,10 @@
             // I modelli AI disponibili sono gli stessi della generazione singola:
             // riuso la lista di 08-generate-ai.js invece di duplicarla.
             function packFillModels() {
+                if (typeof refreshAiModels === 'function') {
+                    refreshAiModels();
+                    return;
+                }
                 if (!packModelSelect || typeof geminiModels === 'undefined') return;
                 packModelSelect.innerHTML = '';
                 geminiModels.forEach(m => {

@@ -6897,6 +6897,7 @@
                     downloadFile(buildMtlText(), `${name}.mtl`, 'text/plain');
                     // Small delay so browsers don't collapse the two downloads into one.
                     setTimeout(() => downloadFile(buildObjText(`${name}.mtl`), `${name}.obj`, 'text/plain'), 150);
+                    if (typeof archiveExportJson === 'function') archiveExportJson(name);
                     return;
                 }
                 const files = [
@@ -6913,6 +6914,7 @@
                     });
                 });
                 downloadBlob(createZipBlob(files), `${name}.zip`);
+                if (typeof archiveExportJson === 'function') archiveExportJson(name);
             });
 
             document.getElementById('exportMtlBtn').addEventListener('click', () => {
@@ -7192,6 +7194,27 @@
                 return out;
             }
 
+            // Archivia il JSON del modello nella cartella history (NON autosave).
+            // Lo chiama ogni export (GLB/OBJ/VOX/PNG): e' l'unico posto dove i
+            // finali sopravvivono alla rotazione degli autosave.
+            function archiveExportJson(nameHint) {
+                if (typeof hasLocalBackend === 'function' && !hasLocalBackend()) return;
+                let payload;
+                try {
+                    payload = (typeof getSceneSavePayload === 'function')
+                        ? getSceneSavePayload() : null;
+                } catch (e) { return; }
+                if (!payload) return;
+                const name = String(nameHint || ((currentModelData.metadata && currentModelData.metadata.name) || 'modello')).replace(/\s+/g, '_');
+                const url = (window.__API_BASE__ ? window.__API_BASE__ : '') + '/api/export-history';
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, data: payload })
+                }).catch(() => {});
+            }
+            window.archiveExportJson = archiveExportJson;
+
             document.getElementById('saveJsonBtn').addEventListener('click', () => {
                 const name = ((currentModelData.metadata && currentModelData.metadata.name) || "voxel_model").replace(/\s+/g, '_');
                 const out = getSceneSavePayload();
@@ -7214,23 +7237,70 @@
             const gridSelect = document.getElementById('gridSelect');
             const loaderOverlay = document.getElementById('loaderOverlay');
 
+            // Catalogo del provider ATTIVO. Non e' piu' una lista Gemini fissa:
+            // con una chiave Grok qui devono comparire i modelli xAI.
             const geminiModels = [
-                // { val: "gemini-3.5-flash", label: "Gemini 2.0 Flash (Consigliato)" },
                 { val: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
                 { val: "gemini-3.5-flash", label: "Gemini 3.5 Flash" }
             ];
+            let aiModelCatalog = geminiModels.map(m => ({ id: m.val, label: m.label }));
 
-            function updateModelOptions() {
-                modelSelect.innerHTML = '';
-                geminiModels.forEach(m => {
+            function fillSelectWithModels(select, models, preferred) {
+                if (!select) return;
+                const prev = preferred || select.value;
+                select.innerHTML = '';
+                (models || []).forEach(m => {
                     const opt = document.createElement('option');
-                    opt.value = m.val;
-                    opt.textContent = m.label;
-                    modelSelect.appendChild(opt);
+                    opt.value = m.id || m.val;
+                    opt.textContent = m.label || m.id || m.val;
+                    select.appendChild(opt);
                 });
+                if (prev && [...select.options].some(o => o.value === prev)) {
+                    select.value = prev;
+                }
             }
 
-            updateModelOptions();
+            function applyAiModelCatalog(models) {
+                // `null` = Gemini a cookie (lista fissa, come prima).
+                // `[]` = provider a chiave senza catalogo: menu vuoto, NON Gemini.
+                if (models == null) {
+                    aiModelCatalog = geminiModels.map(m => ({ id: m.val, label: m.label }));
+                } else {
+                    aiModelCatalog = models;
+                }
+                fillSelectWithModels(modelSelect, aiModelCatalog);
+                const packSel = document.getElementById('packModelSelect');
+                if (packSel) fillSelectWithModels(packSel, aiModelCatalog);
+            }
+
+            async function refreshAiModels() {
+                const url = (window.__API_BASE__ ? window.__API_BASE__ : '') + '/api/providers/models';
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+                    const models = Array.isArray(data.models) ? data.models : [];
+                    if (models.length) {
+                        applyAiModelCatalog(models);
+                    } else if (data.configured) {
+                        applyAiModelCatalog([{ id: data.configured, label: data.configured }]);
+                    } else if (data.type && data.type !== 'gemini_cookies') {
+                        applyAiModelCatalog([]);
+                    } else {
+                        applyAiModelCatalog(null);
+                    }
+                    if (data.configured) fillSelectWithModels(modelSelect, aiModelCatalog, data.configured);
+                } catch (e) {
+                    /* Non ripiegare su Gemini se il provider attivo non lo e':
+                       meglio un menu vuoto che mandare gemini-3.1-pro a Grok. */
+                }
+            }
+
+            function updateModelOptions() { refreshAiModels(); }
+
+            window.refreshAiModels = refreshAiModels;
+            applyAiModelCatalog(null);
+            refreshAiModels();
 
             const modeSelect = document.getElementById('modeSelect');
             const uploadImageBtn = document.getElementById('uploadImageBtn');
@@ -13096,6 +13166,7 @@
                         a.download = `${name}.glb`;
                         a.click();
                         URL.revokeObjectURL(a.href);
+                        if (typeof archiveExportJson === 'function') archiveExportJson(name);
                         finish();
                         // Dopo il download: il file c'e', l'avviso spiega solo perche'
                         // e' a tinte piatte.
@@ -13244,6 +13315,13 @@
                     });
                 } catch (e) { /* offline / backend assente: già salvato localmente */ }
             }
+            function getPref(key, fallback) {
+                const blob = readPrefsBlob();
+                return (blob && blob[key] !== undefined) ? blob[key] : fallback;
+            }
+            window.getPref = getPref;
+            window.savePref = savePref;
+
             async function loadPrefs() {
                 // Prima il backend (fonte autorevole quando c'è).
                 try {
@@ -14061,6 +14139,7 @@
                     try {
                         const data = encodeVox(getFormatExportVoxels());
                         downloadBinary(data, getFormatExportName() + '.vox', 'application/octet-stream');
+                        if (typeof archiveExportJson === 'function') archiveExportJson(getFormatExportName());
                     } catch (e) {
                         alert(t('formats.voxExportError', { error: e.message }));
                     }
@@ -14072,6 +14151,7 @@
                         const nbt = encodeSchemNBT(getFormatExportVoxels());
                         const res = await gzipBytes(nbt);
                         downloadBinary(res.data, getFormatExportName() + '.schem', 'application/octet-stream');
+                        if (typeof archiveExportJson === 'function') archiveExportJson(getFormatExportName());
                         if (!res.gzipped) {
                             alert(t('formats.schemNoGzip'));
                         }
@@ -14784,6 +14864,15 @@
                           '</div>' +
                           '<div class="screens-section-note" data-i18n="screens.autosaveNote"></div>' +
                           '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder"></button>' +
+                          '<div class="control-row">' +
+                            '<label data-i18n="screens.historyDir"></label>' +
+                            '<div style="display:flex; gap:6px; flex:1;">' +
+                               '<input type="text" id="settingsJsonModelsDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly data-i18n-placeholder="screens.historyDirPlaceholder">' +
+                               '<button class="btn btn-primary" id="settingsChooseHistoryDirBtn" style="font-size:12px; padding:6px 12px;" data-i18n="common.browse"></button>' +
+                            '</div>' +
+                          '</div>' +
+                          '<div class="screens-section-note" data-i18n="screens.historyNote"></div>' +
+                          '<button class="btn btn-secondary" id="settingsOpenHistoryFolderBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openHistoryFolderTitle" data-i18n="screens.openHistoryFolder"></button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
                     localize(wrap);
@@ -14840,6 +14929,34 @@
                         if (typeof openAutosaveFolder === 'function') { try { await openAutosaveFolder(); } catch (e) { } return; }
                         if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
+                    });
+
+                    const historyInput = document.getElementById('settingsJsonModelsDir');
+                    if (historyInput && typeof window.getPref === 'function') {
+                        historyInput.value = window.getPref('json_models_dir', '');
+                    }
+                    const chooseHistBtn = document.getElementById('settingsChooseHistoryDirBtn');
+                    if (chooseHistBtn) chooseHistBtn.addEventListener('click', async () => {
+                        if (!hasLocalBackend()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
+                        try {
+                            const res = await fetch(screensApi('/api/settings/choose-dir'));
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || data.error) {
+                                alert(t('screens.chooseDirError', { error: data.error || ('HTTP ' + res.status) }));
+                                return;
+                            }
+                            if (data.folder) {
+                                historyInput.value = data.folder;
+                                if (typeof window.savePref === 'function') window.savePref('json_models_dir', data.folder);
+                            }
+                        } catch (e) {
+                            alert(t('screens.chooseDirFailed'));
+                        }
+                    });
+                    const openHistBtn = document.getElementById('settingsOpenHistoryFolderBtn');
+                    if (openHistBtn) openHistBtn.addEventListener('click', async () => {
+                        if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
+                        try { await fetch(screensApi('/api/export-history/open-folder')); } catch (e) { }
                     });
 
                     // Raggruppamento visivo (non funzionale) del pannello Scorciatoie T6:
@@ -16400,6 +16517,7 @@
                             state.active = out.active || id;
                             state.providers = out.providers || state.providers;
                             renderList();
+                            if (typeof window.refreshAiModels === 'function') window.refreshAiModels();
                             showFeedback(tr('settings.prov.activated', { label: provider.label || id }), 'ok');
                         } catch (err) {
                             showFeedback(tr('settings.prov.error', { error: String(err.message || err) }), 'error');
@@ -17288,6 +17406,10 @@
             // I modelli AI disponibili sono gli stessi della generazione singola:
             // riuso la lista di 08-generate-ai.js invece di duplicarla.
             function packFillModels() {
+                if (typeof refreshAiModels === 'function') {
+                    refreshAiModels();
+                    return;
+                }
                 if (!packModelSelect || typeof geminiModels === 'undefined') return;
                 packModelSelect.innerHTML = '';
                 geminiModels.forEach(m => {

@@ -151,6 +151,77 @@ def get_public_settings():
 
 
 # ---------------------------------------------------------------------------
+# History degli export (JSON definitivo, SENZA rotazione)
+# ---------------------------------------------------------------------------
+# Diversa dall'autosave: li' si tengono 20 copie per 14 giorni, qui ogni
+# export (GLB/OBJ/VOX/PNG dalla GUI o dall'MCP) lascia il .voxai del modello
+# e non si cancella da solo. E' l'archivio dei finali.
+
+HISTORY_SUBDIR = "history"
+
+
+def get_default_save_root():
+    """Radice dei file dell'utente: cartella scelta, altrimenti Documents/VoxelAI."""
+    chosen = get_setting("default_save_dir", "") or ""
+    chosen = str(chosen).strip()
+    if chosen:
+        try:
+            os.makedirs(chosen, exist_ok=True)
+            return chosen
+        except OSError:
+            pass
+    try:
+        root = os.path.join(os.path.expanduser("~"), "Documents", "VoxelAI")
+        os.makedirs(root, exist_ok=True)
+        return root
+    except OSError:
+        path = os.path.join(get_appdata_dir(), "exports")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+
+def get_json_models_dir():
+    """Cartella dei JSON di export. Impostazione `json_models_dir`, oppure
+    `<default_save_dir>/history` (stessa root, sottocartella nuova)."""
+    chosen = get_setting("json_models_dir", "") or ""
+    chosen = str(chosen).strip()
+    if chosen:
+        try:
+            os.makedirs(chosen, exist_ok=True)
+            return chosen
+        except OSError:
+            pass
+    path = os.path.join(get_default_save_root(), HISTORY_SUBDIR)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def write_export_history(data, name=None):
+    """Scrive un .voxai nella cartella history. NON ruota, NON cancella.
+
+    Il nome e' `{sanitized}_{epoch}.voxai` cosi' due export dello stesso
+    modello non si sovrascrivono e si puo' tornare a qualunque finale.
+    """
+    folder = get_json_models_dir()
+    raw = str(name or "").strip() or "modello"
+    token = _sanitize_project_id(raw)
+    epoch = int(time.time() * 1000)
+    fname = "%s_%s.voxai" % (token, epoch)
+    path = os.path.join(folder, fname)
+    payload = {
+        "format": "voxai",
+        "version": 1,
+        "displayName": raw,
+        "savedAt": _now_iso(),
+        "source": "export-history",
+        "data": data,
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+# ---------------------------------------------------------------------------
 # Autosave + versioning in cartella temp (appdata/autosaves/)
 # ---------------------------------------------------------------------------
 

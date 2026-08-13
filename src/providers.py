@@ -97,6 +97,20 @@ ANTHROPIC_VERSION = "2023-06-01"
 # un elenco chiuso invecchia e bloccherebbe l'utente su un modello uscito ieri.
 ANTHROPIC_MODELS = ("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5")
 
+# Stessa cosa per Gemini a cookie: il selettore della UI legge QUESTA lista
+# quando il provider attivo e' Gemini, non un array hardcoded nel frontend.
+GEMINI_MODELS = (
+    {"id": "gemini-3.1-pro", "label": "Gemini 3.1 Pro"},
+    {"id": "gemini-3.5-flash", "label": "Gemini 3.5 Flash"},
+)
+
+# Endpoint /v1/models restituisce anche embedding, TTS, immagini: non stanno
+# nel selettore di generazione.
+_NON_CHAT_HINTS = (
+    "embed", "whisper", "tts", "dall-e", "dalle", "image", "moderation",
+    "transcribe", "audio", "realtime", "sora",
+)
+
 DEFAULT_TIMEOUT = 180
 # Tetto di token in uscita. 16000 e' il valore consigliato per le richieste NON
 # in streaming: sta sotto i timeout HTTP e basta per un modello a ops compatte.
@@ -273,7 +287,8 @@ def list_providers():
     if not any(p["id"] == active for p in items):
         active = GEMINI_ID
     return {"providers": items, "active": active, "types": list(PROVIDER_TYPES),
-            "anthropicModels": list(ANTHROPIC_MODELS)}
+            "anthropicModels": list(ANTHROPIC_MODELS),
+            "geminiModels": [m["id"] for m in GEMINI_MODELS]}
 
 
 def get_provider(provider_id):
@@ -468,6 +483,36 @@ def _short(text, limit=400):
 
 
 # --- Trasporto HTTP ---------------------------------------------------------
+
+def _http_get_json(url, headers, timeout=15, label=""):
+    """GET JSON -> dict. Stesso trasporto e stesse classi d'errore del POST:
+    una chiave sbagliata su /v1/models e' un AIAuthError, non un 500 muto."""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url, method="GET")
+    for k, v in headers.items():
+        req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", "replace")
+        except Exception:                                   # noqa: BLE001
+            pass
+        raise classify_http_status(e.code, body or e.reason, label) from e
+    except urllib.error.URLError as e:
+        raise classify_network_error(e.reason or e, label) from e
+    except OSError as e:
+        raise classify_network_error(e, label) from e
+    try:
+        return json.loads(raw)
+    except ValueError as e:
+        raise AIFormatError(
+            "Risposta del provider non in JSON. Dettaglio: %s" % _short(raw)) from e
+
 
 def _http_post_json(url, headers, payload, timeout=DEFAULT_TIMEOUT, label=""):
     """POST JSON -> dict. Solo stdlib: `requests` sarebbe una dipendenza in piu'
@@ -700,6 +745,132 @@ def _complete_custom(entry, prompt):
     return text
 
 
+# --- Elenco modelli ---------------------------------------------------------
+
+def _looks_like_chat_model(mid):
+    s = str(mid or "").strip().lower()
+    if not s:
+        return False
+    return not any(h in s for h in _NON_CHAT_HINTS)
+
+
+def _models_url(base):
+    base = (base or "").rstrip("/")
+    if not base:
+        return ""
+    if base.endswith("/v1"):
+        return base + "/models"
+    return base + "/v1/models"
+
+
+def _parse_openai_models(data):
+    items = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    out = []
+    seen = set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        mid = str(it.get("id") or "").strip()
+        if not mid or mid in seen or not _looks_like_chat_model(mid):
+            continue
+        seen.add(mid)
+        out.append({"id": mid, "label": mid})
+    out.sort(key=lambda m: m["id"].lower())
+    return out
+
+
+def _list_openai_models(entry):
+    key = get_api_key(entry["id"])
+    base = (entry.get("base_url") or "").rstrip("/")
+    if not base:
+        raise AIFormatError("base_url non configurato per questo provider.")
+    headers = {}
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    headers.update(_normalize_headers(entry.get("headers")))
+    data = _http_get_json(_models_url(base), headers,
+                          label=entry.get("label") or "OpenAI")
+    return _parse_openai_models(data)
+
+
+def _list_anthropic_models(entry):
+    key = get_api_key(entry["id"])
+    if not key:
+        return [{"id": m, "label": m} for m in ANTHROPIC_MODELS]
+    base = (entry.get("base_url") or DEFAULT_ANTHROPIC_BASE).rstrip("/")
+    headers = {
+        "x-api-key": key,
+        "anthropic-version": ANTHROPIC_VERSION,
+    }
+    headers.update(_normalize_headers(entry.get("headers")))
+    try:
+        data = _http_get_json(base + "/v1/models", headers,
+                              label=entry.get("label") or "Anthropic")
+    except (AIAuthError, AITransientError, AIFormatError):
+        return [{"id": m, "label": m} for m in ANTHROPIC_MODELS]
+    items = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(items, list) or not items:
+        return [{"id": m, "label": m} for m in ANTHROPIC_MODELS]
+    out, seen = [], set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        mid = str(it.get("id") or "").strip()
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        out.append({"id": mid, "label": it.get("display_name") or mid})
+    return out or [{"id": m, "label": m} for m in ANTHROPIC_MODELS]
+
+
+def list_models(provider_id=None):
+    """Modelli del provider indicato (o di quello attivo).
+
+    Gemini: lista fissa (cookie, niente catalogo HTTP).
+    OpenAI-compatibile / custom: GET {base}/v1/models.
+    Anthropic: GET /v1/models, con ripiego sulla lista locale se l'endpoint
+    non risponde. Il selettore della UI deve mostrare SOLO questi, mai
+    quelli di un altro provider.
+    """
+    if provider_id:
+        entry = get_provider(provider_id)
+        if entry is None:
+            raise AIFormatError("Provider AI non trovato: %s" % provider_id)
+    else:
+        entry = get_active_provider()
+    ptype = entry.get("type")
+    configured = str(entry.get("model") or "").strip()
+    if ptype == TYPE_GEMINI:
+        models = [dict(m) for m in GEMINI_MODELS]
+        source = "builtin"
+    elif ptype == TYPE_ANTHROPIC:
+        models = _list_anthropic_models(entry)
+        source = "live"
+    elif ptype in (TYPE_OPENAI, TYPE_CUSTOM):
+        try:
+            models = _list_openai_models(entry)
+            source = "live"
+        except (AIAuthError, AITransientError, AIFormatError):
+            # Catalogo irraggiungibile: il modello configurato, non Gemini.
+            models = ([{"id": configured, "label": configured}]
+                      if configured else [])
+            source = "configured"
+    else:
+        raise AIFormatError("Tipo di provider sconosciuto: %s" % ptype)
+    if configured and not any(m["id"] == configured for m in models):
+        models.insert(0, {"id": configured, "label": configured})
+    return {
+        "provider": entry.get("id"),
+        "type": ptype,
+        "label": entry.get("label") or entry.get("id"),
+        "configured": configured or None,
+        "source": source,
+        "models": models,
+    }
+
+
 # --- Dispatch ---------------------------------------------------------------
 
 def _complete_gemini(entry, prompt, model=None):
@@ -714,14 +885,19 @@ def _complete_gemini(entry, prompt, model=None):
     return aiclient.gemini_answer_text(prompt, model)
 
 
+def _looks_like_gemini_model(name):
+    s = str(name or "").strip().lower()
+    return s.startswith("gemini") or s.startswith("gemma")
+
+
 def complete(prompt, provider=None, model=None):
     """UNA chiamata all'AI col provider indicato (o quello attivo) -> testo.
 
     `provider` puo' essere un id o un'entry gia' risolta. `model` e' il valore
-    che manda la UI (il selettore modello, che parla la lingua di Gemini): NON
-    puo' sovrascrivere il modello configurato in un provider a chiave API, o si
-    manderebbe un nome di modello Gemini ad Anthropic ottenendo un 400. Vale
-    solo come ripiego quando il provider non dichiara un modello proprio.
+    del selettore della UI: se appartiene al provider attivo lo usa, cosi'
+    si puo' scegliere grok-3 con la chiave Grok. Un nome Gemini (o vuoto)
+    NON sovrascrive il modello del provider a chiave: e' il caso in cui la
+    UI non ha ancora aggiornato il menu e manderebbe gemini-3.1-pro a xAI.
     """
     if isinstance(provider, dict):
         entry = provider
@@ -735,9 +911,10 @@ def complete(prompt, provider=None, model=None):
     ptype = entry.get("type")
     if ptype == TYPE_GEMINI:
         return _complete_gemini(entry, prompt, model)
-    if not entry.get("model") and model:
+    chosen = str(model or "").strip()
+    if chosen and not _looks_like_gemini_model(chosen):
         entry = dict(entry)
-        entry["model"] = model
+        entry["model"] = chosen
     if ptype == TYPE_ANTHROPIC:
         return _complete_anthropic(entry, prompt)
     if ptype == TYPE_OPENAI:

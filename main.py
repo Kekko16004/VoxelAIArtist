@@ -1339,6 +1339,22 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:                          # noqa: BLE001
                 self._send_json(500, {"error": str(e)})
             return
+        parsed_early = urlparse(self.path)
+        if parsed_early.path == '/api/providers/models':
+            # Catalogo del provider ATTIVO (o di `?id=`). La UI lo usa per
+            # riempire il selettore: con Grok devono comparire i modelli
+            # xAI, non Gemini.
+            try:
+                q = parse_qs(parsed_early.query)
+                pid = (q.get('id') or [''])[0] or None
+                self._send_json(200, ai_providers.list_models(pid))
+            except ai_providers.AIAuthError as e:
+                self._send_json(401, {"error": str(e)})
+            except ai_providers.AIFormatError as e:
+                self._send_json(400, {"error": str(e)})
+            except Exception as e:                          # noqa: BLE001
+                self._send_json(500, {"error": str(e)})
+            return
         if self.path == '/api/settings/open-folder':
             folder = app_settings.get_appdata_dir()
             subprocess.Popen(f'explorer "{folder}"')
@@ -1416,6 +1432,20 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         if route == '/api/autosave/open-folder':
             try:
                 folder = app_settings.get_autosave_dir()
+                os.makedirs(folder, exist_ok=True)
+                if sys.platform == "win32":
+                    os.startfile(folder)
+                else:
+                    subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', folder])
+                self._send_json(200, {"ok": True, "folder": folder})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # --- History export: apri cartella (NON e' l'autosave) ---
+        if route == '/api/export-history/open-folder':
+            try:
+                folder = app_settings.get_json_models_dir()
                 os.makedirs(folder, exist_ok=True)
                 if sys.platform == "win32":
                     os.startfile(folder)
@@ -1648,6 +1678,19 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                     pass
                 self._send_json(200, {"path": saved_path})
 
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        # --- History export: JSON definitivo, SENZA rotazione ---
+        if self.path == '/api/export-history':
+            try:
+                body = self._read_json_body()
+                data = body.get("data", {})
+                name = body.get("name") or ""
+                path = app_settings.write_export_history(data, name)
+                self._send_json(200, {"path": path, "name": os.path.basename(path),
+                                      "folder": app_settings.get_json_models_dir()})
             except Exception as e:
                 self._send_json(500, {"error": str(e)})
             return

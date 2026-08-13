@@ -1221,9 +1221,16 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
     ext = (fmt or os.path.splitext(path)[1]).lower().lstrip(".")
     scale = _as_float(scale, 1.0)
     _center = _as_bool(center, True)
+
+    def _done(msg):
+        hist = SESSION.export_history(doc, o.name)
+        if hist:
+            return msg + " JSON in history: %s." % hist
+        return msg
+
     if ext == "glb":
-        return "Esportato in %s." % _write(path, exporters.build_glb(
-            doc, o, scale, _center))
+        return _done("Esportato in %s." % _write(path, exporters.build_glb(
+            doc, o, scale, _center)))
     if ext == "gltf":
         gltf, blob = exporters.build_gltf(doc, o, scale, _center)
         if blob:
@@ -1232,7 +1239,7 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
                 "byteLength": len(blob),
                 "uri": "data:application/octet-stream;base64,"
                        + base64.b64encode(blob).decode("ascii")}]
-        return "Esportato in %s." % _write(path, json.dumps(gltf))
+        return _done("Esportato in %s." % _write(path, json.dumps(gltf)))
     if ext == "obj":
         base = os.path.splitext(os.path.basename(path))[0]
         folder = os.path.dirname(path)
@@ -1241,16 +1248,17 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
                 doc, o, base, scale, _center):
             written.append(os.path.basename(
                 _write(os.path.join(folder, name) if folder else name, data)))
-        return ("Esportati accanto: %s. Tienili nella stessa cartella, o i "
-                "materiali non si vedono." % ", ".join(written))
+        return _done("Esportati accanto: %s. Tienili nella stessa cartella, o i "
+                     "materiali non si vedono." % ", ".join(written))
     if ext == "vox":
-        return "Esportato in %s." % _write(path, exporters.build_vox(doc, o))
+        return _done("Esportato in %s." % _write(path, exporters.build_vox(doc, o)))
     if ext == "png":
         buf, w, h = exporters.render_ortho(o, view="front", scale=max(1, int(scale)))
-        return "Esportato in %s (%dx%d)." % (_write(path, pngmod.encode_png(buf, w, h)), w, h)
+        return _done("Esportato in %s (%dx%d)." % (
+            _write(path, pngmod.encode_png(buf, w, h)), w, h))
     if ext == "json":
-        return "Esportato in %s." % _write(
-            path, json.dumps(doc.to_payload(), ensure_ascii=False))
+        return _done("Esportato in %s." % _write(
+            path, json.dumps(doc.to_payload(), ensure_ascii=False)))
     raise SessionError(
         "formato di esportazione sconosciuto: '%s'. Uso glb, gltf, obj, vox, "
         "png, json" % ext)
@@ -1556,6 +1564,7 @@ def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
     _cust = _as_bool(custom, True)
     data = rig.export_rigged_glb(doc, o, _scale, _all, _pre, _cust, only)
     full = _write(path, data)
+    SESSION.export_history(doc, o.name)
     # I nomi vanno letti col filtro applicato, non dai valori di partenza: con
     # `clips=['walk']` il file ne contiene una sola, e annunciarle tutte e' un
     # messaggio che smentisce il file appena scritto.

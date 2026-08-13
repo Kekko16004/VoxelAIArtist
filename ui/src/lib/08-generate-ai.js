@@ -5,23 +5,70 @@
             const gridSelect = document.getElementById('gridSelect');
             const loaderOverlay = document.getElementById('loaderOverlay');
 
+            // Catalogo del provider ATTIVO. Non e' piu' una lista Gemini fissa:
+            // con una chiave Grok qui devono comparire i modelli xAI.
             const geminiModels = [
-                // { val: "gemini-3.5-flash", label: "Gemini 2.0 Flash (Consigliato)" },
                 { val: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
                 { val: "gemini-3.5-flash", label: "Gemini 3.5 Flash" }
             ];
+            let aiModelCatalog = geminiModels.map(m => ({ id: m.val, label: m.label }));
 
-            function updateModelOptions() {
-                modelSelect.innerHTML = '';
-                geminiModels.forEach(m => {
+            function fillSelectWithModels(select, models, preferred) {
+                if (!select) return;
+                const prev = preferred || select.value;
+                select.innerHTML = '';
+                (models || []).forEach(m => {
                     const opt = document.createElement('option');
-                    opt.value = m.val;
-                    opt.textContent = m.label;
-                    modelSelect.appendChild(opt);
+                    opt.value = m.id || m.val;
+                    opt.textContent = m.label || m.id || m.val;
+                    select.appendChild(opt);
                 });
+                if (prev && [...select.options].some(o => o.value === prev)) {
+                    select.value = prev;
+                }
             }
 
-            updateModelOptions();
+            function applyAiModelCatalog(models) {
+                // `null` = Gemini a cookie (lista fissa, come prima).
+                // `[]` = provider a chiave senza catalogo: menu vuoto, NON Gemini.
+                if (models == null) {
+                    aiModelCatalog = geminiModels.map(m => ({ id: m.val, label: m.label }));
+                } else {
+                    aiModelCatalog = models;
+                }
+                fillSelectWithModels(modelSelect, aiModelCatalog);
+                const packSel = document.getElementById('packModelSelect');
+                if (packSel) fillSelectWithModels(packSel, aiModelCatalog);
+            }
+
+            async function refreshAiModels() {
+                const url = (window.__API_BASE__ ? window.__API_BASE__ : '') + '/api/providers/models';
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+                    const models = Array.isArray(data.models) ? data.models : [];
+                    if (models.length) {
+                        applyAiModelCatalog(models);
+                    } else if (data.configured) {
+                        applyAiModelCatalog([{ id: data.configured, label: data.configured }]);
+                    } else if (data.type && data.type !== 'gemini_cookies') {
+                        applyAiModelCatalog([]);
+                    } else {
+                        applyAiModelCatalog(null);
+                    }
+                    if (data.configured) fillSelectWithModels(modelSelect, aiModelCatalog, data.configured);
+                } catch (e) {
+                    /* Non ripiegare su Gemini se il provider attivo non lo e':
+                       meglio un menu vuoto che mandare gemini-3.1-pro a Grok. */
+                }
+            }
+
+            function updateModelOptions() { refreshAiModels(); }
+
+            window.refreshAiModels = refreshAiModels;
+            applyAiModelCatalog(null);
+            refreshAiModels();
 
             const modeSelect = document.getElementById('modeSelect');
             const uploadImageBtn = document.getElementById('uploadImageBtn');

@@ -686,6 +686,29 @@ def test_export_glb_is_valid(tmp):
              total, len(blob))
 
 
+def test_export_scrive_history_json(tmp):
+    reset()
+    server.WORKDIR = tmp
+    hist = os.path.join(tmp, "history")
+    os.makedirs(hist, exist_ok=True)
+    app_settings = compat.settings_module()
+    orig = app_settings.get_json_models_dir
+    app_settings.get_json_models_dir = lambda: hist
+    try:
+        call("voxel_new", name="Palla")
+        call("voxel_fill", shape="box",
+             args={"x0": 0, "y0": 0, "z0": 0, "x1": 1, "y1": 1, "z1": 1},
+             color="#22AA55")
+        out = call("voxel_export", path="palla.glb")
+        files = [n for n in os.listdir(hist) if n.endswith(".voxai")]
+        check("export: JSON in history, non solo autosave",
+              len(files) >= 1, repr(os.listdir(hist)))
+        check("export: lo dice nella risposta",
+              "history" in out.lower() or "JSON" in out, out)
+    finally:
+        app_settings.get_json_models_dir = orig
+
+
 def test_export_png(tmp):
     reset()
     server.WORKDIR = tmp

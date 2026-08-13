@@ -285,6 +285,15 @@
                           '</div>' +
                           '<div class="screens-section-note" data-i18n="screens.autosaveNote"></div>' +
                           '<button class="btn btn-secondary" id="settingsOpenAutosaveFolderBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openAutosaveFolderTitle" data-i18n="screens.openAutosaveFolder"></button>' +
+                          '<div class="control-row">' +
+                            '<label data-i18n="screens.historyDir"></label>' +
+                            '<div style="display:flex; gap:6px; flex:1;">' +
+                               '<input type="text" id="settingsJsonModelsDir" class="field-strong" style="flex:1; padding:6px; font-size:12px;" readonly data-i18n-placeholder="screens.historyDirPlaceholder">' +
+                               '<button class="btn btn-primary" id="settingsChooseHistoryDirBtn" style="font-size:12px; padding:6px 12px;" data-i18n="common.browse"></button>' +
+                            '</div>' +
+                          '</div>' +
+                          '<div class="screens-section-note" data-i18n="screens.historyNote"></div>' +
+                          '<button class="btn btn-secondary" id="settingsOpenHistoryFolderBtn" style="font-size:12px;padding:9px;" data-i18n-title="screens.openHistoryFolderTitle" data-i18n="screens.openHistoryFolder"></button>' +
                         '</div>';
                     viewPanel.appendChild(wrap);
                     localize(wrap);
@@ -341,6 +350,34 @@
                         if (typeof openAutosaveFolder === 'function') { try { await openAutosaveFolder(); } catch (e) { } return; }
                         if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
                         try { await fetch(screensApi('/api/autosave/open-folder')); } catch (e) { }
+                    });
+
+                    const historyInput = document.getElementById('settingsJsonModelsDir');
+                    if (historyInput && typeof window.getPref === 'function') {
+                        historyInput.value = window.getPref('json_models_dir', '');
+                    }
+                    const chooseHistBtn = document.getElementById('settingsChooseHistoryDirBtn');
+                    if (chooseHistBtn) chooseHistBtn.addEventListener('click', async () => {
+                        if (!hasLocalBackend()) { alert(t('screens.chooseDirNeedsDesktop')); return; }
+                        try {
+                            const res = await fetch(screensApi('/api/settings/choose-dir'));
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || data.error) {
+                                alert(t('screens.chooseDirError', { error: data.error || ('HTTP ' + res.status) }));
+                                return;
+                            }
+                            if (data.folder) {
+                                historyInput.value = data.folder;
+                                if (typeof window.savePref === 'function') window.savePref('json_models_dir', data.folder);
+                            }
+                        } catch (e) {
+                            alert(t('screens.chooseDirFailed'));
+                        }
+                    });
+                    const openHistBtn = document.getElementById('settingsOpenHistoryFolderBtn');
+                    if (openHistBtn) openHistBtn.addEventListener('click', async () => {
+                        if (!hasLocalBackend()) { alert(t('autosave.needsAppFolder')); return; }
+                        try { await fetch(screensApi('/api/export-history/open-folder')); } catch (e) { }
                     });
 
                     // Raggruppamento visivo (non funzionale) del pannello Scorciatoie T6:

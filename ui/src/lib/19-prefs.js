@@ -39,6 +39,13 @@
                     });
                 } catch (e) { /* offline / backend assente: già salvato localmente */ }
             }
+            function getPref(key, fallback) {
+                const blob = readPrefsBlob();
+                return (blob && blob[key] !== undefined) ? blob[key] : fallback;
+            }
+            window.getPref = getPref;
+            window.savePref = savePref;
+
             async function loadPrefs() {
                 // Prima il backend (fonte autorevole quando c'è).
                 try {
