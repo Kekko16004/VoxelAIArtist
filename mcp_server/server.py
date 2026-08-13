@@ -470,9 +470,9 @@ def voxel_ai_status() -> str:
 
 
 @mcp.tool()
-def voxel_ops(ops: list, palette: dict = None, obj: str = "",
+def voxel_ops(ops: list = None, palette: dict = None, obj: str = "",
               document: str = "", replace: bool = False,
-              label: str = "") -> str:
+              label: str = "", parts: dict = None) -> str:
     """Costruisci tu il modello, con le ops compatte. NESSUNA AI esterna.
 
     E' la via piu' diretta: sei tu il modello che disegna, e queste sono le
@@ -480,27 +480,43 @@ def voxel_ops(ops: list, palette: dict = None, obj: str = "",
     cookie, nessuna chiave, nessuna attesa. Ed e' anche la piu' precisa, perche'
     puoi correggere una op alla volta invece di rigenerare tutto.
 
-    Le ops si applicano NELL'ORDINE, e le ultime sovrascrivono le prime. Ogni
-    op e' una lista; il colore e' una chiave di `palette` oppure `#RRGGBB`:
+    Due forme, a scelta:
 
-      ["fill", x0,y0,z0, x1,y1,z1, colore]   scatola piena
-      ["box",  x0,y0,z0, x1,y1,z1, colore]   scatola vuota (solo il guscio)
-      ["line", x0,y0,z0, x1,y1,z1, colore]   segmento 3D
-      ["rect", asse, livello, a0,b0, a1,b1, colore]   piano ("x"/"y"/"z")
-      ["set",  colore, x,y,z, x,y,z, ...]    voxel sparsi dello stesso colore
-      ["del",  x0,y0,z0, x1,y1,z1]           scava (toglie)
+    1. `ops` — un solo blocco, UNA mesh in export. Ogni op e' una lista;
+       il colore e' una chiave di `palette` oppure `#RRGGBB`:
+
+         ["fill", x0,y0,z0, x1,y1,z1, colore]   scatola piena
+         ["box",  x0,y0,z0, x1,y1,z1, colore]   scatola vuota (solo il guscio)
+         ["line", x0,y0,z0, x1,y1,z1, colore]   segmento 3D
+         ["rect", asse, livello, a0,b0, a1,b1, colore]   piano ("x"/"y"/"z")
+         ["set",  colore, x,y,z, x,y,z, ...]    voxel sparsi dello stesso colore
+         ["del",  x0,y0,z0, x1,y1,z1]           scava (toglie)
+
+    2. `parts` — {nome: [ops, ...]}. Ogni chiave e' un pezzo (es. "base",
+       "leva", "plate") e diventa una MESH SEPARATA in `.glb`/`.obj`.
+       Obbligatorio per leve, pulsanti, pressure plate, coperchi, ruote:
+       senza, Unity/Blender vedono un blocco solo e non si anima niente.
 
     Y e' l'ALTEZZA e il modello poggia su y=0. Per difetto le ops si
     SOVRAPPONGONO a cio' che c'e' gia' (`del` scava davvero nel modello
     esistente); con `replace=True` sostituiscono tutto l'oggetto.
 
     Un voxel che cambia colore perde il materiale ma non la parte del rig.
+    Se passi sia `parts` che `ops`, vince `parts`.
     """
     doc = SESSION.get(document or None)
     o = doc.object_by_ref(obj or None)
-    added, removed = ai.overlay_ops(doc, o, ops, palette=palette,
-                                    label=label or "Ops", replace=bool(replace))
-    return "%s (+%d, -%d)." % (_describe(doc, o), added, removed)
+    if parts:
+        added, removed = ai.overlay_parts(
+            doc, o, parts, palette=palette,
+            label=label or "Parti", replace=bool(replace))
+    else:
+        added, removed = ai.overlay_ops(
+            doc, o, ops or [], palette=palette,
+            label=label or "Ops", replace=bool(replace))
+    named = sorted(o.parts())
+    extra = (" Parti: %s." % ", ".join(named)) if named else ""
+    return "%s (+%d, -%d).%s" % (_describe(doc, o), added, removed, extra)
 
 
 @mcp.tool()
@@ -514,10 +530,17 @@ def voxel_generate(prompt: str, document: str = "", grid: int = 0,
     Usa gli stessi prompt del pulsante "Crea" dell'app, quindi da' gli stessi
     risultati. Se preferisci disegnare tu, `voxel_ops` non richiede credenziali.
 
-    - `humanoid`: personaggio con le parti gia' nominate per il rig (testa,
-      braccia, gambe): e' cio' che rende il modello animabile senza ritagliarlo
-      a mano dopo.
-    - `multi_part`: piu' pezzi nominati anche se non e' un personaggio.
+    MESH UNICA o PEZZI SEPARATI (scegli, non e' automatico):
+    - `multi_part=false` (default): UN oggetto, UNA mesh in export. Va bene
+      per statue, casse, muri, alberi — cose che non si muovono a pezzi.
+    - `multi_part=true`: l'AI scrive `parts` (base, leva, plate, ...).
+      In `.glb`/`.obj` ogni parte e' una mesh a se'. OBBLIGATORIO per
+      pressure plate, leve, pulsanti, porte, coperchi, ruote: senza, Unity
+      importa un blocco solo e i pezzi non si animano.
+    - `humanoid`: come `multi_part`, ma con i nomi degli arti per il rig
+      (testa, braccio_R, gamba_L, ...).
+
+    Altri flag:
     - `big_structure`: edifici/scenari che devono riempire tutta la griglia,
       con interni, tetti e scale invece di un blocco pieno.
     - `modular`: pezzo di un set che deve incastrarsi con altri.
@@ -1178,9 +1201,12 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
     """Esporta per un altro programma. Il formato si deduce dall'estensione.
 
     - `.glb` / `.gltf`: per Blender, Unity, Godot, three.js. Le texture sono
-      incorporate.
+      incorporate. Se l'oggetto ha PARTI nominate, ogni parte e' una mesh
+      figlia (leva, plate, pulsante si selezionano e si animano da sole).
+      Senza parti esce una mesh sola.
     - `.obj`: scrive ANCHE il .mtl e i PNG accanto, perche' senza il .mtl al
-      suo fianco Blender mostra il modello bianco.
+      suo fianco Blender mostra il modello bianco. Le parti diventano
+      oggetti `o` distinti.
     - `.vox`: per MagicaVoxel (massimo 256 per lato).
     - `.png`: un rendering ortografico.
     - `.json`: i voxel piatti.

@@ -1393,6 +1393,37 @@ def test_generate_usa_i_prompt_dell_app():
           "voxel" in out and '"ops"' not in out, out)
 
 
+def test_generate_multi_part_e_una_scelta():
+    reset()
+    call("voxel_new", name="Pezzi", grid=16)
+    with risponde(MODELLO_FINTO) as r:
+        call("voxel_generate", prompt="una statua")
+    p = r.prompts[0]
+    regola = getattr(compat.main_module(), "MULTI_PART_RULE")
+    check("generate: di default NON chiede parti separate",
+          regola.strip()[:60] not in p)
+    with risponde(MODELLO_FINTO) as r:
+        call("voxel_generate", prompt="una leva", multi_part=True)
+    check("generate: multi_part=true aggiunge la regola delle parti",
+          regola.strip()[:60] in r.prompts[0])
+
+
+def test_ops_parts_nominano_i_pezzi():
+    reset()
+    call("voxel_new", name="Leva", grid=16)
+    out = call("voxel_ops",
+               palette={"a": "#886644", "b": "#CCCCCC"},
+               parts={"base": [["fill", 0, 0, 0, 4, 0, 4, "a"]],
+                      "leva": [["fill", 2, 1, 2, 2, 4, 2, "b"]]},
+               replace=True)
+    info = json.loads(call("voxel_info"))
+    check_eq("ops parts: due parti nominate",
+             sorted(info["parti"]), ["base", "leva"])
+    check("ops parts: lo dice nella risposta",
+          "base" in out and "leva" in out, out)
+    check("ops parts: i voxel ci sono", info["voxel"] > 0, repr(info["voxel"]))
+
+
 def test_generate_lascia_UNA_voce_di_cronologia():
     reset()
     call("voxel_new", name="Uno", grid=16)

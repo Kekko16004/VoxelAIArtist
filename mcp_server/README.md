@@ -359,10 +359,15 @@ Esportando in `.obj` vengono scritti anche `.mtl` e i PNG **accanto**: senza il
 `voxel_pack_result` · `voxel_pack_cancel`
 
 `voxel_generate` usa gli stessi prompt del pulsante "Crea" dell'app, quindi da'
-gli stessi risultati. I flag che contano: `humanoid` nomina le parti per il rig
-(e' cio' che rende il modello animabile senza ritagliarlo a mano dopo),
-`big_structure` per edifici che devono riempire la griglia con interni e scale,
-`modular` per un pezzo che deve incastrarsi con altri.
+gli stessi risultati. I flag che contano: **`multi_part` spezza il modello in
+mesh separate** (leva, plate, pulsante: senza, Unity/Blender importano un
+blocco solo), `humanoid` nomina le parti per il rig (e' cio' che rende il
+modello animabile senza ritagliarlo a mano dopo), `big_structure` per edifici
+che devono riempire la griglia con interni e scale, `modular` per un pezzo che
+deve incastrarsi con altri.
+
+`voxel_ops` accetta la stessa scelta senza AI: `ops` = mesh unica, `parts` =
+`{nome: [ops...]}` e ogni nome diventa una mesh in export.
 
 Un **pack** genera N oggetti con lo stesso stile: la palette del primo asset
 riuscito viene *applicata* agli altri, non solo chiesta nel prompt. Gira in

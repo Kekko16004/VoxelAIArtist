@@ -30,7 +30,7 @@ import struct
 
 from . import png as pngmod
 from .materials import material_render_mode
-from .meshing import greedy_mesh, quad_uvs
+from .meshing import cells_by_part, greedy_mesh, quad_uvs
 from .palette import enforce_palette, hex_to_rgb, normalize_hex
 
 # --- OBJ / MTL ---------------------------------------------------------------
@@ -43,40 +43,66 @@ def _mat_name(token):
     return "col_" + token.lstrip("#")
 
 
+def _export_origin(obj, center, origin=None):
+    if origin is not None:
+        return origin
+    if not center:
+        return (0.0, 0.0, 0.0)
+    b = obj.bounds()
+    if not b:
+        return (0.0, 0.0, 0.0)
+    return ((b[0] + b[3] + 1) / 2.0, b[1], (b[2] + b[5] + 1) / 2.0)
+
+
+def _part_groups(obj):
+    """Gruppi da meshare da soli. Una parte = una mesh: le facce fra due
+    parti restano, cosi' in Unity/Blender si anima la leva senza il basamento."""
+    return cells_by_part(obj.cells, fallback=obj.name or "Object")
+
+
 def build_obj(doc, obj, mtl_name="model.mtl", scale=1.0, origin=None):
     """OBJ testuale. `origin` sposta il modello (di solito il suo centro a terra),
-    `scale` porta il voxel a metri — 1 voxel = 1 unita' se resta 1."""
-    quads = greedy_mesh(obj.cells)
+    `scale` porta il voxel a metri — 1 voxel = 1 unita' se resta 1.
+
+    Ogni parte nominata diventa un oggetto `o` a se': senza, Blender e Unity
+    importano un blocco solo e una pressure plate non si puo' abbassare.
+    """
     ox, oy, oz = origin or (0.0, 0.0, 0.0)
     lines = ["# VoxelAIArtist - export MCP",
              "mtllib " + mtl_name]
     verts, uvs = [], []
     vindex, uindex = {}, {}
-    faces_by_mat = {}
-    for q in quads:
-        idx = []
-        for corner, uv in zip(q.corners, quad_uvs(q)):
-            p = ((corner[0] - ox) * scale, (corner[1] - oy) * scale,
-                 (corner[2] - oz) * scale)
-            vi = vindex.get(p)
-            if vi is None:
-                verts.append(p)
-                vi = vindex[p] = len(verts)
-            ui = uindex.get(uv)
-            if ui is None:
-                uvs.append(uv)
-                ui = uindex[uv] = len(uvs)
-            idx.append((vi, ui))
-        faces_by_mat.setdefault(q.token, []).append(idx)
+    groups = []
+    for part_name, cells in _part_groups(obj).items():
+        faces_by_mat = {}
+        for q in greedy_mesh(cells):
+            idx = []
+            for corner, uv in zip(q.corners, quad_uvs(q)):
+                p = ((corner[0] - ox) * scale, (corner[1] - oy) * scale,
+                     (corner[2] - oz) * scale)
+                vi = vindex.get(p)
+                if vi is None:
+                    verts.append(p)
+                    vi = vindex[p] = len(verts)
+                ui = uindex.get(uv)
+                if ui is None:
+                    uvs.append(uv)
+                    ui = uindex[uv] = len(uvs)
+                idx.append((vi, ui))
+            faces_by_mat.setdefault(q.token, []).append(idx)
+        if faces_by_mat:
+            groups.append((part_name, faces_by_mat))
 
     for v in verts:
         lines.append("v %.6g %.6g %.6g" % v)
     for u in uvs:
         lines.append("vt %.6g %.6g" % u)
-    for token, faces in faces_by_mat.items():
-        lines.append("usemtl " + _mat_name(token))
-        for f in faces:
-            lines.append("f " + " ".join("%d/%d" % pair for pair in f))
+    for part_name, faces_by_mat in groups:
+        lines.append("o " + part_name)
+        for token, faces in faces_by_mat.items():
+            lines.append("usemtl " + _mat_name(token))
+            for f in faces:
+                lines.append("f " + " ".join("%d/%d" % pair for pair in f))
     return "\n".join(lines) + "\n"
 
 
@@ -275,25 +301,11 @@ class _GltfBuilder(object):
         return b"".join(self.parts)
 
 
-def build_gltf(doc, obj, scale=1.0, center=True):
-    """glTF 2.0 come dizionario, piu' il blob binario a cui punta.
-
-    Un modello STATICO: la mesh e' un guscio greedy, un primitivo per materiale.
-    Il modello riggato passa da `rig.py`, che ha sei invarianti propri (vedi
-    CLAUDE.md) e non si puo' ridurre a questo.
-    """
-    quads = greedy_mesh(obj.cells)
-    ox, oy, oz = (0.0, 0.0, 0.0)
-    if center:
-        b = obj.bounds()
-        if b:
-            ox, oy, oz = ((b[0] + b[3] + 1) / 2.0, b[1], (b[2] + b[5] + 1) / 2.0)
-
+def _gltf_primitives(gb, doc, cells, ox, oy, oz, scale):
+    """Un primitivo per token. Ritorna [] se la parte non ha facce."""
     by_token = {}
-    for q in quads:
+    for q in greedy_mesh(cells):
         by_token.setdefault(q.token, []).append(q)
-
-    gb = _GltfBuilder()
     primitives = []
     for token, group in sorted(by_token.items()):
         pos, nrm, uv, idx = [], [], [], []
@@ -308,8 +320,9 @@ def build_gltf(doc, obj, scale=1.0, center=True):
                 # le nostre texture in alto a sinistra (convenzione immagine).
                 uv += [tuv[0], q.uh - tuv[1]]
             idx += [base, base + 1, base + 2, base, base + 2, base + 3]
-
         count = len(pos) // 3
+        if count == 0:
+            continue
         a_pos = gb.push_accessor(
             pos, "f", 34962, 5126, count, "VEC3",
             [min(pos[0::3]), min(pos[1::3]), min(pos[2::3])],
@@ -323,14 +336,52 @@ def build_gltf(doc, obj, scale=1.0, center=True):
             "indices": a_idx,
             "material": gb.material_for(doc, token),
         })
+    return primitives
+
+
+def build_gltf(doc, obj, scale=1.0, center=True):
+    """glTF 2.0 come dizionario, piu' il blob binario a cui punta.
+
+    Un modello STATICO: una mesh per PARTE (guscio greedy, un primitivo per
+    materiale). Senza parti resta una mesh sola, come prima. Il modello
+    riggato passa da `rig.py`, che ha sei invarianti propri (vedi CLAUDE.md)
+    e non si puo' ridurre a questo.
+    """
+    ox, oy, oz = _export_origin(obj, center)
+
+    gb = _GltfBuilder()
+    meshes = []
+    mesh_nodes = []
+    for part_name, cells in _part_groups(obj).items():
+        primitives = _gltf_primitives(gb, doc, cells, ox, oy, oz, scale)
+        if not primitives:
+            continue
+        mesh_nodes.append(len(meshes))
+        meshes.append({"name": part_name, "primitives": primitives})
+
+    if not meshes:
+        meshes = [{"name": obj.name, "primitives": []}]
+        mesh_nodes = [0]
+
+    # Un nodo radice tiene le mesh-figlio: cosi' Unity/Blender vedono un
+    # prefab con i pezzi selezionabili, non N oggetti sciolti.
+    if len(mesh_nodes) == 1:
+        nodes = [{"mesh": mesh_nodes[0], "name": meshes[0]["name"]}]
+        scene_nodes = [0]
+    else:
+        children = list(range(1, len(mesh_nodes) + 1))
+        nodes = [{"name": obj.name, "children": children}]
+        for mi in mesh_nodes:
+            nodes.append({"mesh": mi, "name": meshes[mi]["name"]})
+        scene_nodes = [0]
 
     blob = gb.blob()
     gltf = {
         "asset": {"version": "2.0", "generator": "VoxelAIArtist MCP"},
         "scene": 0,
-        "scenes": [{"nodes": [0]}],
-        "nodes": [{"mesh": 0, "name": obj.name}],
-        "meshes": [{"name": obj.name, "primitives": primitives}],
+        "scenes": [{"nodes": scene_nodes}],
+        "nodes": nodes,
+        "meshes": meshes,
         "bufferViews": gb.buffer_views,
         "accessors": gb.accessors,
         "materials": gb.materials or [{"pbrMetallicRoughness": {

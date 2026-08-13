@@ -270,6 +270,81 @@ def test_glb(doc, obj):
               "%d su %d" % (end, len(blob)))
 
 
+def part_doc():
+    """Due cubi adiacenti, due parti: il caso pressure-plate / leva.
+
+    Se il mesher vede TUTTO insieme, la faccia di contatto sparisce e in
+    Unity i due pezzi sono saldati. Meshando per parte, quella faccia resta.
+    """
+    doc = Document()
+    obj = doc.active
+    obj.name = "Leva"
+    obj.grid_size = (16, 16, 16)
+    with doc.edit("parti"):
+        for x in range(3):
+            for z in range(3):
+                doc.set_cell(obj, (x, 0, z), Cell("#886644", None, "base"))
+        for y in range(1, 4):
+            doc.set_cell(obj, (1, y, 1), Cell("#CCCCCC", None, "leva"))
+    return doc, obj
+
+
+def test_obj_parts():
+    doc, obj = part_doc()
+    text = build_obj(doc, obj, "leva.mtl")
+    names = [l[2:] for l in text.splitlines() if l.startswith("o ")]
+    check("OBJ parti: due oggetti nominati",
+          set(names) == {"base", "leva"}, repr(names))
+    base_cells = {k: c for k, c in obj.cells.items() if c.part == "base"}
+    leva_cells = {k: c for k, c in obj.cells.items() if c.part == "leva"}
+    together = greedy_mesh(obj.cells)
+    split_quads = greedy_mesh(base_cells) + greedy_mesh(leva_cells)
+    # Area del tetto della base (y=1). Da sola e' 3x3=9; fusa con la leva
+    # il centro e' sepolto e restano 8. Quelle 9 celle sono la faccia di
+    # contatto: senza, in Unity la leva e' saldata al basamento.
+    def top_area(quads):
+        return sum(q.uw * q.uh for q in quads if q.face == "py"
+                   and all(abs(c[1] - 1) < 1e-9 for c in q.corners))
+    check("OBJ parti: la base tiene il tetto intero (contatto con la leva)",
+          top_area(greedy_mesh(base_cells)) == 9,
+          "area tetto = %s (fusa sarebbe %s)"
+          % (top_area(greedy_mesh(base_cells)), top_area(together)))
+    f_lines = [l for l in text.splitlines() if l.startswith("f ")]
+    check("OBJ parti: le facce sono quelle separate, non le fuse",
+          len(f_lines) == len(split_quads),
+          "%d facce, attese %d (fuse sarebbero %d)"
+          % (len(f_lines), len(split_quads), len(together)))
+
+
+def test_gltf_parts():
+    doc, obj = part_doc()
+    gltf, _blob = build_gltf(doc, obj, scale=1.0, center=True)
+    mesh_names = [m["name"] for m in gltf["meshes"]]
+    check("glTF parti: una mesh per parte",
+          set(mesh_names) == {"base", "leva"}, repr(mesh_names))
+    check("glTF parti: un nodo radice tiene i figli",
+          "children" in gltf["nodes"][0], repr(gltf["nodes"][0]))
+    child_names = [gltf["nodes"][i]["name"] for i in gltf["nodes"][0]["children"]]
+    check("glTF parti: i figli si chiamano come le parti",
+          set(child_names) == {"base", "leva"}, repr(child_names))
+    # Il centraggio si misura sull'UNIONE: ogni mesh e' un pezzo, il primo
+    # da solo non poggia a terra al centro.
+    mins = []
+    maxs = []
+    for mesh in gltf["meshes"]:
+        for p in mesh["primitives"]:
+            acc = gltf["accessors"][p["attributes"]["POSITION"]]
+            mins.append(acc["min"])
+            maxs.append(acc["max"])
+    all_min = [min(m[i] for m in mins) for i in range(3)]
+    all_max = [max(m[i] for m in maxs) for i in range(3)]
+    check("glTF parti: il modello intero poggia a y=0",
+          abs(all_min[1]) < 1e-6, "min y = %r" % all_min[1])
+    check("glTF parti: centrato su X",
+          abs(all_min[0] + all_max[0]) < 1e-6,
+          "x da %r a %r" % (all_min[0], all_max[0]))
+
+
 def test_gltf_untextured():
     """Un modello senza materiali: il percorso in cui non si scrive nessuna
     immagine. Serve a controllare che l'offset non si sposti comunque."""
@@ -484,6 +559,8 @@ def main():
     test_obj(doc, obj)
     test_gltf(doc, obj)
     test_glb(doc, obj)
+    test_obj_parts()
+    test_gltf_parts()
     test_gltf_untextured()
     test_gltf_orphan_material()
     test_vox(doc, obj)

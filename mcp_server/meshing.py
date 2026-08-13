@@ -59,6 +59,24 @@ def token_of(cell):
     return cell.color
 
 
+def cells_by_part(cells, fallback="Object"):
+    """{(x,y,z): Cell} -> {nome_parte: {key: Cell}}.
+
+    Senza etichette torna un solo gruppo. Con le parti, ogni gruppo e' un
+    volume A SE': il mesher non vede i vicini dell'altra parte, quindi le
+    facce di contatto restano (leva, pulsante, plate devono staccarsi).
+    """
+    names = []
+    for cell in cells.values():
+        if cell.part and cell.part not in names:
+            names.append(cell.part)
+    fb = names[0] if names else fallback
+    groups = {}
+    for key, cell in cells.items():
+        groups.setdefault(cell.part or fb, {})[key] = cell
+    return groups
+
+
 def greedy_mesh(cells):
     """{(x,y,z): Cell} -> lista di Quad.
 

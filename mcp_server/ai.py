@@ -329,6 +329,50 @@ def overlay_ops(doc, obj, ops, palette=None, label="Ops AI", replace=False):
     return added, removed
 
 
+def overlay_parts(doc, obj, parts, palette=None, label="Parti", replace=False):
+    """Come `overlay_ops`, ma ogni voxel tiene il nome della parte.
+
+    Serve a leve, pulsanti, pressure plate: senza l'etichetta l'export
+    fonderebbe tutto in una mesh e i pezzi non si muoverebbero da soli.
+    """
+    parts = dict(parts or {})
+    if not parts and not replace:
+        return 0, 0
+    payload = {
+        "metadata": {"grid_size": list(obj.grid_size)},
+        "palette": dict(palette or {}),
+        "parts": parts,
+    }
+    expanded = compat.expand_ops(payload)
+    voxels = (expanded or {}).get("voxels") or []
+
+    wanted = {}
+    for v in voxels:
+        try:
+            key = (int(v["x"]), int(v["y"]), int(v["z"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        wanted[key] = (v.get("color") or "#CCCCCC", v.get("part") or None)
+
+    added = removed = 0
+    with doc.edit(label, obj):
+        if replace:
+            for key in [k for k in obj.cells if k not in wanted]:
+                if doc.del_cell(obj, key):
+                    removed += 1
+        for key, (color, part) in wanted.items():
+            old = obj.cells.get(key)
+            if old is not None and old.color == color and old.part == part:
+                continue
+            material = None
+            if old is not None and old.color == color:
+                material = old.material
+            keep_part = part if part is not None else (old.part if old else None)
+            if doc.set_cell(obj, key, Cell(color, material, keep_part)):
+                added += 1
+    return added, removed
+
+
 def looks_like_rewrite(patch_ops, current_count, palette, grid):
     """La patch e' in realta' un modello intero riscritto?
 
