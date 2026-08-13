@@ -167,7 +167,9 @@ def ai_answer_text_retrying(final_prompt, model=None, sleep=None, provider=None)
             last = e
             if attempt >= len(backoff):
                 raise
-            print("[ai] errore transitorio, ritento fra %ds: %s"
-                  % (backoff[attempt], e))
-            sleep(backoff[attempt])
+            # 504/524 = proxy tagliato: 20s di attesa non aiutano, ritento subito.
+            wait = 1 if getattr(e, "status", None) in (502, 503, 504, 520, 521, 522, 523, 524) \
+                else backoff[attempt]
+            print("[ai] errore transitorio, ritento fra %ds: %s" % (wait, e))
+            sleep(wait)
     raise last  # pragma: no cover - il loop esce sempre da return/raise

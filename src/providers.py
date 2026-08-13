@@ -66,6 +66,10 @@ class AIAuthError(RuntimeError):
 class AITransientError(RuntimeError):
     """Rete, quota o rate-limit: la stessa richiesta puo' funzionare piu' tardi."""
 
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
+
 
 class AIFormatError(RuntimeError):
     """Il modello ha risposto, ma non con qualcosa di utilizzabile."""
@@ -115,6 +119,10 @@ DEFAULT_TIMEOUT = 180
 # Tetto di token in uscita. 16000 e' il valore consigliato per le richieste NON
 # in streaming: sta sotto i timeout HTTP e basta per un modello a ops compatte.
 DEFAULT_MAX_TOKENS = 16000
+
+# 502-504 e i 52x di Cloudflare: il proxy ha tagliato, non e' un 429.
+# Ritentarli dopo 20s con lo stesso prompt enorme fallisce di nuovo.
+GATEWAY_TIMEOUTS = (502, 503, 504, 520, 521, 522, 523, 524)
 
 _ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
@@ -460,10 +468,15 @@ def classify_http_status(status, body, label=""):
             "Aprire le Impostazioni e reimpostarla. Dettaglio: %s"
             % (who, status, detail))
     if status == 429 or status >= 500:
+        if status in GATEWAY_TIMEOUTS:
+            return AITransientError(
+                "%sil proxy ha tagliato la richiesta (HTTP %s) prima che il "
+                "modello finisse. Riprovo subito in streaming. Dettaglio: %s"
+                % (who, status, detail), status=status)
         return AITransientError(
             "%sservizio momentaneamente non disponibile o limite di richieste "
             "raggiunto (HTTP %s). Riprovare fra qualche minuto. Dettaglio: %s"
-            % (who, status, detail))
+            % (who, status, detail), status=status)
     return AIFormatError(
         "%srichiesta rifiutata dal provider (HTTP %s). Controllare modello, "
         "base URL e parametri. Dettaglio: %s" % (who, status, detail))
@@ -514,22 +527,83 @@ def _http_get_json(url, headers, timeout=15, label=""):
             "Risposta del provider non in JSON. Dettaglio: %s" % _short(raw)) from e
 
 
+def _delta_text(obj):
+    """Testo visibile da un chunk SSE o da un message OpenAI-compatibile."""
+    if not isinstance(obj, dict):
+        return ""
+    parts = []
+    for key in ("content", "text"):
+        val = obj.get(key)
+        if isinstance(val, str) and val:
+            parts.append(val)
+        elif isinstance(val, list):
+            parts.append("".join(
+                b.get("text", "") for b in val if isinstance(b, dict)))
+    return "".join(parts)
+
+
+def _read_openai_sse(resp):
+    """Accumula i delta SSE in un dict con la stessa forma del non-stream."""
+    chunks, reason = [], []
+    buf = b""
+    while True:
+        piece = resp.read(1024)
+        if not piece:
+            break
+        buf += piece
+        while b"\n" in buf:
+            raw_line, buf = buf.split(b"\n", 1)
+            line = raw_line.decode("utf-8", "replace").strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                text = "".join(chunks).strip()
+                if not text:
+                    text = "".join(reason).strip()
+                return {"choices": [{"message": {"content": text}}]}
+            try:
+                ev = json.loads(data)
+            except ValueError:
+                continue
+            choice = (ev.get("choices") or [{}])[0] if isinstance(ev, dict) else {}
+            if not isinstance(choice, dict):
+                continue
+            delta = choice.get("delta") or choice.get("message") or {}
+            if isinstance(delta, dict):
+                bit = _delta_text(delta)
+                if bit:
+                    chunks.append(bit)
+                rc = delta.get("reasoning_content")
+                if isinstance(rc, str) and rc:
+                    reason.append(rc)
+    text = "".join(chunks).strip() or "".join(reason).strip()
+    return {"choices": [{"message": {"content": text}}]}
+
+
 def _http_post_json(url, headers, payload, timeout=DEFAULT_TIMEOUT, label=""):
     """POST JSON -> dict. Solo stdlib: `requests` sarebbe una dipendenza in piu'
     per fare la stessa cosa, e questo modulo deve poter girare in un bundle
     PyInstaller senza aggiungere niente al .spec.
+
+    Con `stream: true` legge SSE a pezzi: Cloudflare (524) taglia se il
+    primo byte non arriva, e Grok 4.5 ragiona a lungo prima di chiudere
+    una risposta intera. I chunk tengono vivo il tunnel.
 
     L'import di urllib e' locale per coerenza col resto del modulo (nessun costo
     a import-time per chi non genera mai)."""
     import urllib.error
     import urllib.request
 
+    stream = isinstance(payload, dict) and payload.get("stream")
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST")
     for k, v in headers.items():
         req.add_header(k, v)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if stream:
+                return _read_openai_sse(resp)
             raw = resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         body = ""
@@ -675,12 +749,23 @@ def _complete_openai(entry, prompt):
     if key:
         headers["Authorization"] = "Bearer " + key
     headers.update(_normalize_headers(entry.get("headers")))
+    model = entry.get("model") or "gpt-4o-mini"
     payload = {
-        "model": entry.get("model") or "gpt-4o-mini",
+        "model": model,
         "messages": [{"role": "user", "content": prompt}],
+        # Streaming: Grok 4.5 ragiona a lungo; senza chunk Cloudflare
+        # (504/524) taglia prima che arrivi il primo byte.
+        "stream": True,
     }
-    if entry.get("max_tokens"):
-        payload["max_tokens"] = entry["max_tokens"]
+    limit = entry.get("max_tokens") or DEFAULT_MAX_TOKENS
+    # grok/o1/o3/o4 rifiutano `max_tokens` (deprecato). Gli altri endpoint
+    # OpenAI-compatibili accettano ancora quello.
+    mid = str(model).lower()
+    if mid.startswith("grok") or mid.startswith("o1") or mid.startswith("o3") \
+            or mid.startswith("o4"):
+        payload["max_completion_tokens"] = limit
+    elif limit:
+        payload["max_tokens"] = limit
     data = _http_post_json(url, headers, payload,
                            label=entry.get("label") or "OpenAI")
     text = _dig(data, "choices.0.message.content")

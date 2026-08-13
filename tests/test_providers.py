@@ -309,6 +309,10 @@ check(CALLS[0]['url'] == 'http://127.0.0.1:1234/v1/chat/completions',
       "base_url che finisce con /v1 non viene raddoppiato: %s" % CALLS[0]['url'])
 check(CALLS[0]['headers'].get('Authorization') == 'Bearer ' + OPENAI_SECRET,
       "la chiave viaggia come Bearer")
+check(CALLS[0]['payload'].get('stream') is True,
+      "OpenAI-compatibile: stream acceso (anti 524 Cloudflare)")
+check('max_tokens' in CALLS[0]['payload'],
+      "qwen tiene max_tokens (non e' un grok)")
 P.update_provider(OPID, {"base_url": "http://127.0.0.1:1234"})
 CALLS.clear()
 aiclient.ai_answer_text("x")
@@ -317,6 +321,14 @@ check(CALLS[0]['url'] == 'http://127.0.0.1:1234/v1/chat/completions',
 NEXT_HTTP[0] = {"choices": [{"message": {"content": [{"type": "text", "text": "a blocchi"}]}}]}
 check(aiclient.ai_answer_text("x") == "a blocchi",
       "un gateway che rende `content` a blocchi viene comunque letto")
+P.update_provider(OPID, {"model": "grok-4.5"})
+CALLS.clear()
+aiclient.ai_answer_text("x")
+check(CALLS[0]['payload'].get('max_completion_tokens') == P.DEFAULT_MAX_TOKENS,
+      "grok-4.5 usa max_completion_tokens, non max_tokens")
+check('max_tokens' not in CALLS[0]['payload'],
+      "grok-4.5 non manda il campo deprecato max_tokens")
+P.update_provider(OPID, {"model": "qwen3-8b"})
 NEXT_HTTP[0] = {"choices": []}
 try:
     aiclient.ai_answer_text("x"); check(False, "risposta senza testo deve sollevare")
