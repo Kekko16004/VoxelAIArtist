@@ -201,13 +201,19 @@
                 out[String(c.name)] = String(c.value == null ? '' : c.value);
             }
         } else if (data && typeof data === 'object') {
-            for (const k in data) {
-                if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
-                const v = data[k];
-                // Solo i valori semplici: un oggetto annidato qui vorrebbe dire
-                // che il formato non e' quello che crediamo, e mandarlo al
-                // server salverebbe un file che poi non si riesce a rileggere.
-                if (typeof v === 'string' || typeof v === 'number') out[k] = String(v);
+            const list = Array.isArray(data.cookies) ? data.cookies : null;
+            if (list) {
+                for (let i = 0; i < list.length; i++) {
+                    const c = list[i];
+                    if (!c || !c.name) continue;
+                    out[String(c.name)] = String(c.value == null ? '' : c.value);
+                }
+            } else {
+                for (const k in data) {
+                    if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
+                    const v = data[k];
+                    if (typeof v === 'string' || typeof v === 'number') out[k] = String(v);
+                }
             }
         }
         return Object.keys(out).length ? out : null;

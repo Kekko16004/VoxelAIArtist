@@ -165,6 +165,7 @@ else:
 # punto che lo istanzia, e lo fa in modo PIGRO cosi' il modulo resta importabile
 # (test headless compresi) anche senza il pacchetto installato.
 
+DEFAULT_PORT = int(os.environ.get("VOXELAI_PORT", 8755))
 PORT = 0
 
 # Riferimento globale alla finestra principale (impostato in MainWindow.__init__).
@@ -2177,10 +2178,13 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             super().do_POST()
 
 
-def start_server():
+def start_server(port=DEFAULT_PORT):
     global PORT
     from http.server import ThreadingHTTPServer
-    server = ThreadingHTTPServer(("127.0.0.1", 0), VoxelAIRequestHandler)
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), VoxelAIRequestHandler)
+    except OSError:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), VoxelAIRequestHandler)
     PORT = server.server_address[1]
     print(f"Server started on port {PORT}")
     server.serve_forever()

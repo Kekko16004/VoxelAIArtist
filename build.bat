@@ -4,13 +4,21 @@ echo  VoxelAI Artist - Build Script
 echo ========================================
 echo.
 
-echo [1/3] Installazione dipendenze...
+cd /d "%~dp0"
+
+if not exist ".venv\Scripts\python.exe" (
+    echo  Venv non trovato. Esegui prima setup.bat .
+    pause
+    exit /b 1
+)
+
+echo [1/3] Installazione dipendenze (runtime + build)...
 REM Nota: il modulo `gemini` viene da python-gemini-api (NON da gemini-api).
-pip install -r requirements.txt -r requirements-build.txt
+".venv\Scripts\python.exe" -m pip install -r requirements.txt -r requirements-build.txt
 
 echo.
 echo [2/3] Build exe in corso (onefile)...
-pyinstaller --clean VoxelAI.spec
+".venv\Scripts\python.exe" -m PyInstaller --clean VoxelAI.spec
 
 echo.
 if exist "dist\VoxelAIArtist.exe" (

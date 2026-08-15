@@ -63,8 +63,7 @@ def has_cookies():
     if not os.path.exists(p):
         return False
     try:
-        data = json.loads(open(p, "r", encoding="utf-8").read())
-        return bool(data)
+        return bool(load_cookies())
     except Exception:
         return False
 
@@ -76,8 +75,10 @@ def load_cookies():
         with open(p, "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, list):
-            return {c["name"]: c["value"] for c in data if "name" in c and "value" in c}
+            return {c["name"]: c["value"] for c in data if isinstance(c, dict) and "name" in c and "value" in c}
         if isinstance(data, dict):
+            if "cookies" in data and isinstance(data["cookies"], list):
+                return {c["name"]: c["value"] for c in data["cookies"] if isinstance(c, dict) and "name" in c and "value" in c}
             return data
     except Exception:
         pass

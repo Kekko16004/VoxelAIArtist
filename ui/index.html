@@ -15943,10 +15943,17 @@
                             if (c && typeof c === 'object' && c.name && typeof c.value === 'string') out[c.name] = c.value;
                         });
                     } else if (data && typeof data === 'object') {
-                        Object.keys(data).forEach(k => {
-                            const v = data[k];
-                            if (typeof v === 'string' || typeof v === 'number') out[k] = String(v);
-                        });
+                        const list = Array.isArray(data.cookies) ? data.cookies : null;
+                        if (list) {
+                            list.forEach(c => {
+                                if (c && typeof c === 'object' && c.name && typeof c.value === 'string') out[c.name] = c.value;
+                            });
+                        } else {
+                            Object.keys(data).forEach(k => {
+                                const v = data[k];
+                                if (typeof v === 'string' || typeof v === 'number') out[k] = String(v);
+                            });
+                        }
                     }
                     return Object.keys(out).length ? out : null;
                 }

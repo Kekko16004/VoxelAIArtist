@@ -21,6 +21,11 @@ PyQt6-WebEngine-Qt6==6.11.1
 # Fornisce il modulo `gemini`.
 python-gemini-api==2.4.12
 
+# --- MCP server (mcp_server/) ---
+# Fornisce `mcp.server.fastmcp` usato da mcp_server/server.py. Prima era
+# installato nel Python di sistema: ora e' una dipendenza del venv.
+mcp==1.7.1
+
 # --- Provider AI aggiuntivi: NESSUNA dipendenza ---
 # src/providers.py parla con Anthropic, con i servizi compatibili OpenAI e con i
 # provider personalizzati usando SOLO urllib della libreria standard: sono API
