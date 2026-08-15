@@ -700,9 +700,15 @@ def test_export_scrive_history_json(tmp):
              args={"x0": 0, "y0": 0, "z0": 0, "x1": 1, "y1": 1, "z1": 1},
              color="#22AA55")
         out = call("voxel_export", path="palla.glb")
-        files = [n for n in os.listdir(hist) if n.endswith(".voxai")]
+        files = [n for n in os.listdir(hist) if n.endswith(".json")]
         check("export: JSON in history, non solo autosave",
               len(files) >= 1, repr(os.listdir(hist)))
+        raw = json.loads(open(os.path.join(hist, files[0]), encoding="utf-8").read())
+        check("export: history e' scena apribile, non busta .voxai",
+              isinstance(raw, dict) and raw.get("format") != "voxai"
+              and (raw.get("ops") or raw.get("parts") or raw.get("objects")
+                   or raw.get("voxels")),
+              repr(list(raw)[:8]))
         check("export: lo dice nella risposta",
               "history" in out.lower() or "JSON" in out, out)
     finally:

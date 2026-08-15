@@ -154,7 +154,7 @@ def get_public_settings():
 # History degli export (JSON definitivo, SENZA rotazione)
 # ---------------------------------------------------------------------------
 # Diversa dall'autosave: li' si tengono 20 copie per 14 giorni, qui ogni
-# export (GLB/OBJ/VOX/PNG dalla GUI o dall'MCP) lascia il .voxai del modello
+# export (GLB/OBJ/VOX/PNG dalla GUI o dall'MCP) lascia il .json del modello
 # e non si cancella da solo. E' l'archivio dei finali.
 
 HISTORY_SUBDIR = "history"
@@ -197,27 +197,21 @@ def get_json_models_dir():
 
 
 def write_export_history(data, name=None):
-    """Scrive un .voxai nella cartella history. NON ruota, NON cancella.
+    """Scrive un .json di scena nella cartella history. NON ruota, NON cancella.
 
-    Il nome e' `{sanitized}_{epoch}.voxai` cosi' due export dello stesso
-    modello non si sovrascrivono e si puo' tornare a qualunque finale.
+    Stesso payload che la dropzone e 'Apri' gia' sanno leggere (ops/parts/
+    objects), SENZA busta .voxai: quella l'input file della UI non la
+    elencava, e i finali risultavano apribili solo dal dialog nativo.
+    Il nome e' `{sanitized}_{epoch}.json` cosi' due export non si sovrascrivono.
     """
     folder = get_json_models_dir()
     raw = str(name or "").strip() or "modello"
     token = _sanitize_project_id(raw)
     epoch = int(time.time() * 1000)
-    fname = "%s_%s.voxai" % (token, epoch)
+    fname = "%s_%s.json" % (token, epoch)
     path = os.path.join(folder, fname)
-    payload = {
-        "format": "voxai",
-        "version": 1,
-        "displayName": raw,
-        "savedAt": _now_iso(),
-        "source": "export-history",
-        "data": data,
-    }
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2)
     return path
 
 
