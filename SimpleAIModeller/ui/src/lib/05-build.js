@@ -14,7 +14,7 @@ function resolveNode(node, params) {
     else n.s = [1, 1, 1];
     n.at = node.at != null ? evalVec3(node.at, params, [0, 0, 0]) : [0, 0, 0];
     if (node.rot != null) n.rot = evalVec3(node.rot, params, [0, 0, 0]);
-    for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'wall', 'bevel',
+    for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'arcAt', 'wall', 'bevel',
                      'amp', 'freq', 'turns', 'inner', 'twist', 'bendA']) {
         if (node[k] != null) n[k] = evalExpr(node[k], params);
     }

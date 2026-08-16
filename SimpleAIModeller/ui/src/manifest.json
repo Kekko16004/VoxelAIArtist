@@ -15,6 +15,7 @@
   "lib/09d-editor.js",
   "lib/10-i18n.js",
   "lib/11-api.js",
+  "lib/12b-demo.js",
   "lib/12-ui.js",
   "lib/13-boot.js"
 ]

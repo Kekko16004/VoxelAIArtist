@@ -334,13 +334,23 @@ PART_PROMPT_FALLBACK = (
 
 
 def build_part_prompt(request, plan_obj, task, detail=2, style="lowpoly",
-                      notes=""):
+                      notes="", current_spec=None):
     """Prompt per UN pezzo. La richiesta resta l'ULTIMA riga."""
     template = _read_prompt_file("prompt-part.txt", PART_PROMPT_FALLBACK)
     text = template.replace("[INSERISCI QUI IL PIANO]",
                             sam_plan.plan_text(plan_obj))
-    text = text.replace("[INSERISCI QUI IL COMPITO]",
-                        sam_plan.task_text(plan_obj, task))
+    # Un compito puo' essere un PEZZO o uno STADIO di lavorazione. Gli stadi
+    # vedono l'oggetto intero, e per rifinire o aggiungere dettagli devono
+    # vedere anche cio' che c'e' gia'.
+    kind = task.get("kind") or ""
+    if kind in ("blockout", "refine", "details"):
+        compito = sam_plan.stage_text(plan_obj, task)
+        if kind in ("refine", "details") and isinstance(current_spec, dict):
+            compito += ("\n\nOGGETTO ATTUALE (da rifinire, non da rifare):\n"
+                        + sam_spec.spec_digest(current_spec))
+    else:
+        compito = sam_plan.task_text(plan_obj, task)
+    text = text.replace("[INSERISCI QUI IL COMPITO]", compito)
 
     mats = plan_obj.get("materials") or []
     if mats:
@@ -354,8 +364,15 @@ def build_part_prompt(request, plan_obj, task, detail=2, style="lowpoly",
         mats_txt = ("  (il piano non ne dichiara: inventane 2-3 coerenti e usa "
                     "gli stessi nomi in tutti i pezzi)")
     text = text.replace("[INSERISCI QUI I MATERIALI]", mats_txt)
+    if kind in ("blockout", "refine", "details"):
+        # Uno stadio vede l'oggetto INTERO, quindi gli servono tutti i params:
+        # restringerli come si fa per un pezzo gli impedirebbe di collegare le
+        # parti fra loro.
+        params_for_task = sam_plan.plan_params(plan_obj)
+    else:
+        params_for_task = sam_plan.task_params(plan_obj, task)
     text = text.replace("[INSERISCI QUI I PARAMS]",
-                        json.dumps(sam_plan.task_params(plan_obj, task),
+                        json.dumps(params_for_task,
                                    separators=(",", ": "), ensure_ascii=False))
 
     detail = max(0, min(3, int(detail if detail is not None else 2)))
@@ -1044,6 +1061,120 @@ class SAMRequestHandler(http.server.SimpleHTTPRequestHandler):
             "warnings": warns,
         })
 
+    def _handle_stage(self):
+        """POST /api/asset/stage — uno STADIO di lavorazione sull'oggetto intero.
+
+        Blocco, rifinitura, dettagli: e' come lavora un modellatore, e ogni
+        stadio vede TUTTO l'oggetto. Costa meno chiamate della costruzione a
+        pezzi (una spada: piano + due stadi) e non perde le proporzioni fra le
+        parti — che nessuna chiamata "un pezzo per volta" poteva vedere, perche'
+        nessuna aveva davanti l'oggetto intero.
+        """
+        try:
+            payload = self._read_json_body()
+        except Exception as e:                                  # noqa: BLE001
+            self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "Atteso un oggetto JSON."})
+            return
+        plan_obj = payload.get("plan")
+        if not isinstance(plan_obj, dict) or not plan_obj.get("chain"):
+            self._send_json(400, {"error": "Piano mancante o senza catena."})
+            return
+        detail = payload.get("detail")
+        stages = sam_plan.plan_stages(plan_obj, detail if detail is not None else 2)
+        try:
+            idx = int(payload.get("index", 0))
+        except (TypeError, ValueError):
+            idx = 0
+        if idx < 0 or idx >= len(stages):
+            self._send_json(400, {"error": "Indice di stadio fuori range."})
+            return
+        stage = stages[idx]
+        current = payload.get("spec") if isinstance(payload.get("spec"), dict) else None
+
+        style = str(payload.get("style") or "lowpoly").strip().lower()
+        style = sam_spec.STYLE_ALIASES.get(style, style)
+        if style not in sam_spec.STYLES:
+            style = "lowpoly"
+        request = str(payload.get("prompt") or payload.get("request") or "").strip()
+
+        answer = None
+        try:
+            prompt = build_part_prompt(request, plan_obj, stage, detail=detail,
+                                       style=style,
+                                       notes=str(payload.get("notes") or ""),
+                                       current_spec=current)
+            answer = ai_answer_text_retrying(prompt, payload.get("model"))
+        except (AIAuthError, AITransientError, AIFormatError) as e:
+            self._send_ai_error(e, "ASSET STAGE %s" % stage.get("name"))
+            return
+        except Exception as e:                                  # noqa: BLE001
+            self._send_ai_error(_classify_ai_error(e), "ASSET STAGE")
+            return
+
+        try:
+            raw = extract_and_parse_json(answer)
+        except Exception as e:                                  # noqa: BLE001
+            self._log_ai_answer("ASSET STAGE %s" % stage.get("name"), answer, e)
+            self._send_json(400, {
+                "error": "Lo stadio '%s' non e' tornato in JSON: %s"
+                         % (stage.get("name"), e),
+                "rawPreview": (answer or "")[:400],
+            })
+            return
+        if isinstance(raw, list):
+            raw = {"nodes": raw}
+        if not isinstance(raw, dict):
+            self._send_json(400, {"error": "Risposta non utilizzabile per lo stadio."})
+            return
+
+        mini = {
+            "id": (plan_obj.get("asset") or "asset"),
+            "cat": str(payload.get("cat") or "prop"),
+            "style": style,
+            "detail": detail if detail is not None else 2,
+            "nodes": raw.get("nodes") or raw.get("parts") or [],
+            "params": dict(sam_plan.plan_params(plan_obj)),
+            "mats": {m["n"]: {"col": m["col"]}
+                     for m in (plan_obj.get("materials") or [])},
+            "size": list(plan_obj["total"]),
+        }
+        extra_params = raw.get("params")
+        if isinstance(extra_params, dict):
+            for k, v in extra_params.items():
+                # I params del piano vincono: un nodo che ridefinisce una quota
+                # della catena la sposterebbe per tutti.
+                if k not in mini["params"]:
+                    mini["params"][k] = v
+        try:
+            normalized, warns = sam_spec.normalize_spec(mini, request={
+                "cat": mini["cat"], "style": style, "hasPlan": True,
+            })
+        except ValueError as e:
+            self._log_ai_answer("ASSET STAGE %s" % stage.get("name"), answer, e)
+            self._send_json(400, {
+                "error": "Lo stadio '%s' non ha prodotto nodi utilizzabili: %s"
+                         % (stage.get("name"), e),
+                "rawPreview": (answer or "")[:400],
+            })
+            return
+
+        self._send_json(200, {
+            "stage": stage.get("kind"),
+            "name": stage.get("name"),
+            "index": idx,
+            "count": len(stages),
+            # `replace` dice al client se sostituire o aggiungere: blocco e
+            # rifinitura riscrivono tutto, i dettagli si sommano.
+            "replace": stage.get("kind") in ("blockout", "refine"),
+            "nodes": normalized.get("nodes") or [],
+            "params": normalized.get("params") or {},
+            "mats": normalized.get("mats") or {},
+            "warnings": warns,
+        })
+
     def _handle_vision_probe(self):
         """POST /api/vision/probe — misura se il provider vede le immagini."""
         try:
@@ -1087,6 +1218,26 @@ class SAMRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
         if route in ("/api/asset/plan", "/api/plan"):
             self._handle_plan()
+            return
+        if route in ("/api/asset/stages", "/api/stages"):
+            try:
+                payload = self._read_json_body()
+            except Exception as e:                              # noqa: BLE001
+                self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+                return
+            plan_obj = payload.get("plan") if isinstance(payload, dict) else None
+            if not isinstance(plan_obj, dict) or not plan_obj.get("chain"):
+                self._send_json(400, {"error": "Piano mancante o senza catena."})
+                return
+            det = payload.get("detail")
+            stages = sam_plan.plan_stages(plan_obj, det if det is not None else 2)
+            self._send_json(200, {
+                "stages": stages, "count": len(stages),
+                "texts": [sam_plan.stage_text(plan_obj, st) for st in stages],
+            })
+            return
+        if route in ("/api/asset/stage", "/api/stage"):
+            self._handle_stage()
             return
         if route in ("/api/asset/tasks", "/api/tasks"):
             self._handle_tasks()

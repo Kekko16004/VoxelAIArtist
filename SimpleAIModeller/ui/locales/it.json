@@ -64,7 +64,7 @@
   "status.repaired": "Auto-riparati {n} aspetti geometrici.",
   "status.critiqueDone": "Critica: {verdict} (score {score}) · {n} difetti",
   "status.patched": "Patch applicata ({applied} op) · {defects} difetti residui",
-  "status.demo": "Demo caricata (cassa di legno).",
+  "status.demo": "Demo caricata (cassa del tesoro low-poly).",
   "status.exported": "Esportato come {fmt}.",
   "status.normalized": "Spec normalizzata ({n} avvisi).",
   "status.needsCookies": "Nessun cookie: apri Impostazioni per la generazione AI.",
@@ -132,7 +132,7 @@
   "err.unsupportedFile": "Formato non gestito: {name}. Usa .json, .glb, .gltf o .obj.",
   "status.fixWorse": "Correzione scartata: peggiorava (punteggio {score} contro {best}). Tenuto il risultato migliore.",
   "status.patchWorse": "Patch applicata ({applied} op) ma i difetti sono aumentati ({defects}). Ctrl+Z per annullare.",
-  "form.staged": "Costruzione a pezzi (più lenta, più precisa)",
+  "form.staged": "Lavorazione a stadi (blocco → rifinitura → dettagli)",
   "status.buildingPart": "Pezzo {i}/{n}: {name}…",
   "status.partsFailed": "Pezzi non riusciti: {names}. L'asset è incompleto ({defects} difetti).",
   "err.noTasks": "Il piano non produce compiti: catena vuota.",
@@ -142,5 +142,6 @@
   "status.smoothOn": "Auto smooth attivo (soglia {angle}°). Shift+clic per cambiarla.",
   "status.smoothOff": "Auto smooth spento: sfaccettato.",
   "smooth.titleOn": "Auto smooth attivo, soglia {angle}° · A per spegnere, Shift+clic per la soglia",
-  "smooth.titleOff": "Auto smooth: arrotonda le normali senza aggiungere poligoni (A)"
+  "smooth.titleOff": "Auto smooth: arrotonda le normali senza aggiungere poligoni (A)",
+  "status.buildingStage": "Stadio {i}/{n}: {name}…"
 }

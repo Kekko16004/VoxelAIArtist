@@ -67,6 +67,7 @@ FAKE_PATCH = {"patch": [["set", "params.lama_b", 0.95],
 
 calls = {"plan": 0, "asset": 0, "patch": 0, "critique": 0, "part": 0}
 parts_seen = []
+stages_seen = []
 
 
 def _fence(obj):
@@ -76,6 +77,21 @@ def _fence(obj):
 
 def fake_ai(prompt, model=None, sleep=None, provider=None, images=None):
     text = str(prompt)
+    if "STADIO" in text:
+        calls["stage"] = calls.get("stage", 0) + 1
+        import re as _re
+        m = _re.search(r"STADIO \d+ di \d+: (\w+)", text)
+        stages_seen.append(m.group(1) if m else "?")
+        # Il blocco sostituisce, i dettagli si sommano: si risponde con nodi
+        # riconoscibili per stadio, cosi' il test vede quale ha vinto.
+        kind = stages_seen[-1].lower()
+        pref = "blk" if kind.startswith("blocc") else ("ref" if kind.startswith("rifin") else "det")
+        return _fence({"nodes": [
+            {"n": pref + "_a", "p": "box", "s": [0.05, 0.1, 0.05], "at": [0, 0.05, 0],
+             "mat": "acciaio"},
+            {"n": pref + "_b", "p": "cyl", "r": 0.02, "len": 0.1, "axis": "y",
+             "at": [0, 0.2, 0], "mat": "acciaio"},
+        ]})
     if "MODELLATORE 3D" in text or "PEZZO DA COSTRUIRE" in text:
         calls["part"] += 1
         # Si estrae il nome del pezzo dal compito: la finta AI deve rispondere
@@ -252,6 +268,47 @@ def main():
     ok(code == 400, "indice fuori range -> 400")
     code, _ = post(base, "/api/asset/part", {"index": 0})
     ok(code == 400, "senza piano -> 400")
+
+    print("[13] stadi: pochi passaggi, non uno per segmento")
+    code, sd = post(base, "/api/asset/stages",
+                    {"plan": data["plan"], "detail": 2})
+    ok(code == 200, "stages 200")
+    # 5 segmenti e 0 extras = oggetto SEMPLICE: due stadi, non cinque pezzi.
+    ok(sd["count"] == 2, "una spada sta in DUE stadi (%d)" % sd["count"])
+    ok([x["name"] for x in sd["stages"]] == ["blocco", "rifinitura"],
+       "blocco e rifinitura: %s" % [x["name"] for x in sd["stages"]])
+    ok(sd["stages"][1]["mergeDetails"] is True,
+       "su un oggetto semplice i dettagli si fondono nella rifinitura")
+    ok("STADIO 1 di 2" in sd["texts"][0], "il testo dello stadio e' pronto")
+
+    code, sd0 = post(base, "/api/asset/stages", {"plan": data["plan"], "detail": 0})
+    ok(sd0["count"] == 1, "a dettaglio bozza UN solo stadio (%d)" % sd0["count"])
+
+    print("[14] uno stadio per volta")
+    before = calls.get("stage", 0)
+    code, s1 = post(base, "/api/asset/stage",
+                    {"plan": data["plan"], "index": 0, "detail": 2,
+                     "prompt": "spada"})
+    ok(code == 200, "stage 200")
+    ok(calls.get("stage", 0) == before + 1, "una chiamata per stadio")
+    ok(s1["replace"] is True, "il blocco SOSTITUISCE")
+    ok(all(n["n"].startswith("blk_") for n in s1["nodes"]),
+       "ha ricevuto lo stadio giusto: %s" % [n["n"] for n in s1["nodes"]])
+    ok("punta_a" in s1["params"] and "pomolo_a" in s1["params"],
+       "uno stadio vede TUTTI i params (l'oggetto intero)")
+
+    code, s2 = post(base, "/api/asset/stage",
+                    {"plan": data["plan"], "index": 1, "detail": 2,
+                     "prompt": "spada", "spec": {"id": "x", "nodes": [
+                         {"n": "blk_a", "p": "box", "s": [1, 1, 1]}],
+                         "params": {}, "mats": {}}})
+    ok(s2["replace"] is True, "anche la rifinitura sostituisce")
+    ok(all(n["n"].startswith("ref_") for n in s2["nodes"]),
+       "stadio di rifinitura riconosciuto: %s" % [n["n"] for n in s2["nodes"]])
+
+    print("[15] indice di stadio fuori range")
+    code, _ = post(base, "/api/asset/stage", {"plan": data["plan"], "index": 9})
+    ok(code == 400, "400 fuori range")
 
     print()
     print("PASS %d  FAIL %d" % (pass_n, fail_n))

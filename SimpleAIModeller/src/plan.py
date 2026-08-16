@@ -856,3 +856,143 @@ def task_params(plan, task):
             out[k] = v
     return out
 
+
+# --- STADI DI LAVORAZIONE -----------------------------------------------------
+
+def plan_stages(plan, detail=2):
+    """Il piano diventa 1-3 STADI, non N pezzi.
+
+    Perche' a stadi e non a pezzi
+    -----------------------------
+    Un pezzo per volta risolve la precisione ma introduce due problemi suoi: il
+    numero di chiamate cresce col numero di segmenti (una spada finiva in sei
+    passaggi, quando due o tre bastano), e nessuna chiamata vede mai l'oggetto
+    INTERO — cosi' si perde il senso delle proporzioni fra le parti, che e'
+    esattamente il difetto riportato.
+
+    Un modellatore non lavora a pezzi: lavora a OPERAZIONI. Prima blocca tutto
+    l'oggetto con volumi grezzi (e' li' che si fissano le proporzioni), poi
+    rifinisce le forme (tornio, raccordi, rastremature), poi aggiunge i dettagli.
+    Ogni stadio vede l'oggetto COMPLETO e ha UN mestiere da esercitare.
+
+    Numero di stadi:
+      dettaglio 0   ->  blocco                          (1 chiamata)
+      dettaglio 1   ->  blocco + rifinitura             (2)
+      dettaglio 2/3 ->  blocco + rifinitura + dettagli  (3)
+    e su un oggetto SEMPLICE (pochi segmenti e pochi extras) i dettagli si
+    fondono nella rifinitura: una spada resta a due stadi, cioe' tre chiamate
+    contando il piano.
+    """
+    chain = plan.get("chain") or []
+    extras = plan.get("extras") or []
+    detail = max(0, min(3, int(detail if detail is not None else 2)))
+    simple = len(chain) <= 5 and len(extras) <= 3
+
+    stages = [{"kind": "blockout", "name": "blocco"}]
+    if detail >= 1:
+        stages.append({"kind": "refine", "name": "rifinitura"})
+    if detail >= 2 and not simple:
+        stages.append({"kind": "details", "name": "dettagli"})
+
+    # Su un oggetto semplice la rifinitura porta anche i dettagli: si DICE nel
+    # compito, cosi' chi rifinisce sa che non ci sara' un terzo giro e non
+    # rimanda i dettagli a uno stadio che non arrivera'.
+    merged = (detail >= 2 and simple)
+    total = len(stages)
+    for i, st in enumerate(stages):
+        st["i"] = i
+        st["n"] = total
+        st["detail"] = detail
+        st["mergeDetails"] = bool(merged and st["kind"] == "refine")
+        st["segments"] = len(chain)
+        st["extras"] = extras
+        st["budget"] = (max(4, len(chain) + 2) if st["kind"] == "blockout"
+                        else max(6, len(chain) + len(extras) + 2))
+    return stages
+
+
+def stage_text(plan, stage):
+    """Lo stadio come compito: entra nello stesso prompt che serve i pezzi."""
+    ax = plan["axis"].upper()
+    kind = stage["kind"]
+    L = []
+    L.append("STADIO %d di %d: %s" % (stage["i"] + 1, stage["n"],
+                                      stage["name"].upper()))
+    L.append("")
+
+    if kind == "blockout":
+        L.append("Costruisci TUTTO l'oggetto con i volumi principali, seguendo la")
+        L.append("catena. Niente dettagli, niente decorazioni: questo stadio serve")
+        L.append("a fissare le PROPORZIONI, ed e' l'unico in cui un errore poi non")
+        L.append("si recupera.")
+        L.append("")
+        L.append("  - il primitivo giusto per la forma: tondo attorno a un asse ->")
+        L.append("    `lathe`; lama o carrozzeria -> `loft`; scatolato -> `box`;")
+        L.append("    coperchio bombato o volta -> `cyl` con `arc`;")
+        L.append("  - le quote esatte della tabella, niente numeri inventati;")
+        L.append("  - i pezzi si TOCCANO: ogni segmento comincia dove finisce il")
+        L.append("    precedente, quindi combaciano per costruzione;")
+        L.append("  - a ogni nodo il suo materiale, dalla palette.")
+        L.append("")
+        L.append("  Nodi attesi: da %d a %d." % (max(1, stage["segments"]),
+                                                 stage["budget"] + 2))
+        if plan.get("strategy") == "revolve":
+            L.append("")
+            L.append("  ATTENZIONE: questo oggetto e' di RIVOLUZIONE. Il corpo e' UN")
+            L.append("  SOLO nodo `lathe` con il profilo completo che passa per tutte")
+            L.append("  le stazioni della tabella — NON un nodo per segmento.")
+            L.append("  Impilare cilindri di raggio diverso da' una pila di dischi.")
+        return "\n".join(L)
+
+    if kind == "refine":
+        L.append("Hai davanti l'oggetto bloccato (te lo trovi qui sotto). RIFINISCI")
+        L.append("le forme senza cambiare le proporzioni ne' le quote della catena.")
+        L.append("")
+        L.append("Cosa si fa in questo stadio — solo cio' che serve a QUESTO oggetto:")
+        L.append("  - sostituire i volumi grezzi col primitivo giusto: piu' cilindri")
+        L.append("    impilati diventano UN `lathe` col profilo completo; una lastra")
+        L.append("    che deve essere una lama diventa `loft` con `shape:\"lens\"`;")
+        L.append("    un coperchio bombato diventa `cyl` con `arc`;")
+        L.append("  - `bevel` sugli spigoli che nella realta' sono lavorati;")
+        L.append("  - `taperTo` / `taper0` dove il pezzo si stringe, per-asse se si")
+        L.append("    stringe solo in una direzione (e' il filo di una lama);")
+        L.append("  - `wall` sui recipienti, perche' siano cavi;")
+        L.append("  - `shear`, `twist`, `bendA`, `warp` dove la forma lo chiede;")
+        L.append("  - `sides` piu' alto sui pezzi tondi grandi e in primo piano.")
+        if stage.get("mergeDetails"):
+            L.append("")
+            L.append("Questo oggetto e' semplice, quindi NON ci sara' un terzo stadio:")
+            L.append("aggiungi ORA anche i dettagli che merita — collari alle")
+            L.append("giunzioni, avvolgimenti con `arr`, scanalature con `sub`,")
+            L.append("terminali sagomati, borchie.")
+            if stage["extras"]:
+                L.append("Dettagli previsti dal piano:")
+                for e in stage["extras"]:
+                    L.append("  - %-16s da %.4f a %.4f, sezione %.4f x %.4f"
+                             % (e["n"], e["from"], e["to"], e["w"], e["d"]))
+        L.append("")
+        L.append("Rispondi con la lista COMPLETA dei nodi: sostituisce la")
+        L.append("precedente, non e' una differenza.")
+        return "\n".join(L)
+
+    L.append("Hai davanti l'oggetto rifinito (qui sotto). AGGIUNGI i dettagli")
+    L.append("senza toccare i volumi che ci sono.")
+    L.append("")
+    L.append("Su ogni GIUNZIONE fra due pezzi diversi ci va un collare, una")
+    L.append("fascetta o un cambio di materiale: le giunzioni nude sono la prima")
+    L.append("cosa che si nota in un modello.")
+    L.append("Le ripetizioni si fanno con `arr` (lineare) o con `arr` + `rot`")
+    L.append("(polare attorno all'asse): avvolgimenti, borchie, doghe, bulloni,")
+    L.append("raggi, greche. Mai copie scritte a mano.")
+    if stage["extras"]:
+        L.append("")
+        L.append("Dettagli previsti dal piano:")
+        for e in stage["extras"]:
+            L.append("  - %-16s su %-14s da %.4f a %.4f, sezione %.4f x %.4f"
+                     % (e["n"], (e.get("of") or "-"), e["from"], e["to"],
+                        e["w"], e["d"]))
+    L.append("")
+    L.append("Rispondi con i nodi NUOVI soltanto: quelli che ci sono restano.")
+    L.append("  Nodi attesi: da %d a %d." % (max(2, len(stage["extras"])),
+                                             stage["budget"] + 4))
+    return "\n".join(L)

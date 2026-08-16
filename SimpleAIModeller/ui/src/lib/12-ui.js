@@ -289,13 +289,30 @@ function adoptState(st) {
  * L'asset si mostra DOPO OGNI PEZZO: si vede crescere, e se un pezzo esce male
  * si vede subito quale.
  */
+/**
+ * Costruzione A STADI: blocco -> rifinitura -> dettagli.
+ *
+ * Non un pezzo per volta. Un pezzo per volta risolveva la precisione ma
+ * introduceva due problemi suoi: il numero di chiamate cresceva col numero di
+ * segmenti (una spada finiva in sei passaggi), e nessuna chiamata vedeva mai
+ * l'oggetto INTERO — cosi' si perdeva il senso delle proporzioni fra le parti.
+ *
+ * Un modellatore lavora a OPERAZIONI: blocca tutto con volumi grezzi (li' si
+ * fissano le proporzioni), poi rifinisce le forme, poi aggiunge i dettagli. Ogni
+ * stadio vede l'oggetto completo e ha un mestiere solo. Una spada: piano + due
+ * stadi = tre chiamate.
+ *
+ * L'asset si mostra DOPO OGNI STADIO: si vede il blocco diventare oggetto, e se
+ * uno stadio peggiora si vede quale.
+ */
 async function buildStaged(form, plan) {
-    const tasksData = await apiPost('/api/asset/tasks', { plan: plan });
-    const tasks = tasksData.tasks || [];
-    if (!tasks.length) throw new Error(t('err.noTasks'));
+    const info = await apiPost('/api/asset/stages', {
+        plan: plan, detail: form.detail,
+    });
+    const stages = info.stages || [];
+    if (!stages.length) throw new Error(t('err.noTasks'));
 
-    // Spec accumulata: params e materiali vengono dal PIANO, non dai pezzi.
-    const spec = {
+    let spec = {
         v: 1,
         id: (plan.asset || form.prompt || 'asset').toLowerCase()
             .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'asset',
@@ -314,38 +331,46 @@ async function buildStaged(form, plan) {
     }
 
     const failed = [];
-    for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        setBusy(true, t('status.buildingPart', {
-            i: i + 1, n: tasks.length, name: task.name,
+    for (let i = 0; i < stages.length; i++) {
+        const st = stages[i];
+        setBusy(true, t('status.buildingStage', {
+            i: i + 1, n: stages.length, name: st.name,
         }));
-        let part;
+        let res;
         try {
-            part = await apiPost('/api/asset/part', {
-                plan: plan, task: task, index: i,
-                prompt: form.prompt, detail: form.detail,
-                style: form.style, notes: form.notes, model: form.model,
+            res = await apiPost('/api/asset/stage', {
+                plan: plan, index: i, detail: form.detail,
+                style: form.style, cat: form.cat,
+                prompt: form.prompt, notes: form.notes, model: form.model,
+                // Rifinitura e dettagli devono vedere cio' che c'e' gia'.
+                spec: (i > 0 ? spec : null),
             });
         } catch (e) {
-            // Un pezzo che non esce NON ferma gli altri: si segnala e si tira
-            // avanti. Fermarsi butterebbe via anche i pezzi gia' riusciti.
-            console.warn('[part]', task.name, e);
-            failed.push(task.name);
+            // Uno stadio fallito NON butta via i precedenti: il blocco senza
+            // rifinitura e' un asset grezzo, ma e' un asset.
+            console.warn('[stage]', st.name, e);
+            failed.push(st.name);
             continue;
         }
-        for (const [k, v] of Object.entries(part.params || {})) {
+        for (const [k, v] of Object.entries(res.params || {})) {
             if (!(k in spec.params)) spec.params[k] = v;
         }
-        const existing = new Set(spec.nodes.map(n => n.n));
-        for (const node of (part.nodes || [])) {
-            // Collisione di nomi fra pezzi: si prefissa col nome del compito
-            // invece di sovrascrivere. Un nodo perso e' un dettaglio perso.
-            if (existing.has(node.n)) node.n = task.name + '_' + node.n;
-            existing.add(node.n);
-            spec.nodes.push(node);
+        for (const [k, v] of Object.entries(res.mats || {})) {
+            if (!(k in spec.mats)) spec.mats[k] = v;
         }
-        // Si mostra la crescita: vedere il pezzo comparire e' anche il modo piu'
-        // rapido di capire quale sbaglia.
+        if (res.replace) {
+            // Blocco e rifinitura riscrivono: la rifinitura DEVE poter fondere
+            // tre cilindri in un tornio, e con una lista additiva resterebbero
+            // sia i cilindri sia il tornio, uno dentro l'altro.
+            if ((res.nodes || []).length) spec.nodes = res.nodes;
+        } else {
+            const existing = new Set(spec.nodes.map(n => n.n));
+            for (const node of (res.nodes || [])) {
+                if (existing.has(node.n)) node.n = node.n + '_' + (i + 1);
+                existing.add(node.n);
+                spec.nodes.push(node);
+            }
+        }
         if (spec.nodes.length) {
             appState.spec = spec;
             appState.built = showSpec(spec);
@@ -353,7 +378,7 @@ async function buildStaged(form, plan) {
         }
     }
     if (!spec.nodes.length) throw new Error(t('err.allPartsFailed'));
-    return { spec: spec, failed: failed, tasks: tasks.length };
+    return { spec: spec, failed: failed, tasks: stages.length };
 }
 
 async function doGenerate() {
@@ -672,50 +697,15 @@ async function saveCookies() {
 // --- Demo asset (senza AI) -------------------------------------------------
 
 function loadDemo() {
-    const demo = {
-        id: 'cassa_demo',
-        cat: 'prop',
-        style: 'lowpoly',
-        detail: 2,
-        size: [0.9, 0.7, 0.6],
-        ground: true,
-        params: { w: 0.9, h: 0.62, d: 0.6, t: 0.05, lid: 0.08 },
-        mats: {
-            legno: { col: '#6B4A2F', rough: 0.85,
-                     noise: { t: 'stripe', scale: 26, amp: 0.22, col2: '#4A3120' } },
-            ferro: { col: '#4A4F57', rough: 0.4, metal: 0.85,
-                     noise: { t: 'scratch', scale: 60, amp: 0.15 } },
-        },
-        nodes: [
-            { n: 'corpo', p: 'box', s: ['w', 'h', 'd'], at: [0, 'h/2', 0],
-              bevel: 0.02, mat: 'legno' },
-            { n: 'cavo', p: 'box', s: ['w-2*t', 'h-t', 'd-2*t'],
-              at: [0, 'h/2+t', 0], op: 'sub', of: 'corpo' },
-            { n: 'fascia', p: 'box', s: ['w+t*0.4', 't*1.2', 'd+t*0.4'],
-              at: [0, 'h*0.25', 0], mat: 'ferro',
-              arr: { n: 2, step: [0, 'h*0.5', 0] } },
-            { n: 'coperchio', p: 'box', s: ['w', 'lid', 'd'],
-              at: [0, 'h+lid/2', 0], mat: 'legno', bone: 'cardine', interactive: true },
-            { n: 'cardine', p: 'cyl', r: 't*0.6', len: 'w*0.8', axis: 'x',
-              at: [0, 'h+lid*0.5', '-d/2+t*0.6'], mat: 'ferro' },
-        ],
-        rig: [{ b: 'cardine', piv: [0, 'h', '-d/2'], axis: 'x', lim: [-100, 0] }],
-        clips: {
-            apri: { dur: 0.6, loop: false,
-                    keys: [[0, { cardine: [0, 0, 0] }],
-                           [0.6, { cardine: [-95, 0, 0] }]] },
-        },
-        logic: [{ on: 'coperchio', var: 'aperta', trig: 'interact', clip: 'apri' }],
-        col: [{ t: 'box', at: [0, 'h/2', 0], s: ['w', 'h+lid', 'd'] }],
-        flags: ['hollow'],
-    };
-    // Le espressioni restano stringhe: le risolve buildSpec.
-    // Ma bevel numerico e' gia' risolto.
+    // La spec sta in 12b-demo.js: e' lunga, e tenerla qui renderebbe illeggibile
+    // il modulo della UI.
+    const demo = demoSpec();
     const built = showSpec(demo);
     appState.plan = null;
     renderPlan(null);
     const defects = validateAll(demo, built, { hasPlan: false });
     showSpecInUi(demo, built, defects);
+    if (typeof refreshSmoothButton === 'function') refreshSmoothButton();
     setStatus(t('status.demo'), 'ok');
 }
 

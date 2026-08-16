@@ -64,7 +64,7 @@
   "status.repaired": "Auto-repaired {n} geometric issues.",
   "status.critiqueDone": "Critique: {verdict} (score {score}) · {n} defects",
   "status.patched": "Patch applied ({applied} ops) · {defects} remaining defects",
-  "status.demo": "Demo loaded (wooden crate).",
+  "status.demo": "Demo loaded (low-poly treasure chest).",
   "status.exported": "Exported as {fmt}.",
   "status.normalized": "Spec normalized ({n} warnings).",
   "status.needsCookies": "No cookies: open Settings for AI generation.",
@@ -132,7 +132,7 @@
   "err.unsupportedFile": "Unsupported format: {name}. Use .json, .glb, .gltf or .obj.",
   "status.fixWorse": "Fix discarded: it made things worse (score {score} vs {best}). Kept the best result.",
   "status.patchWorse": "Patch applied ({applied} ops) but defects went up ({defects}). Ctrl+Z to undo.",
-  "form.staged": "Build part by part (slower, more precise)",
+  "form.staged": "Staged workflow (blockout → refine → details)",
   "status.buildingPart": "Part {i}/{n}: {name}…",
   "status.partsFailed": "Failed parts: {names}. The asset is incomplete ({defects} defects).",
   "err.noTasks": "The plan yields no tasks: empty chain.",
@@ -142,5 +142,6 @@
   "status.smoothOn": "Auto smooth on (angle {angle}°). Shift+click to change it.",
   "status.smoothOff": "Auto smooth off: faceted.",
   "smooth.titleOn": "Auto smooth on, angle {angle}° · A to turn off, Shift+click for the angle",
-  "smooth.titleOff": "Auto smooth: rounds the normals without adding polygons (A)"
+  "smooth.titleOff": "Auto smooth: rounds the normals without adding polygons (A)",
+  "status.buildingStage": "Stage {i}/{n}: {name}…"
 }

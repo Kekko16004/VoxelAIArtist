@@ -70,24 +70,70 @@ function primSphere(r, seg) {
     return meshCreate(pos, idx);
 }
 
-/** Cilindro lungo `axis` (default Y). `taper` e' il raggio in cima / raggio base. */
-function primCyl(r, len, seg, taper, axis) {
+/**
+ * Cilindro lungo `axis` (default Y). `taper` e' il raggio in cima / raggio base.
+ *
+ * `arc` in GRADI: sotto 360 e' un SETTORE, chiuso da due pareti radiali. E' la
+ * forma piu' comune che mancava — il coperchio bombato di una cassa, una volta a
+ * botte, un tunnel, una grondaia, una nicchia, un tetto Quonset. Prima si
+ * tentava di ottenerla torturando un `lathe` con l'asse ruotato, e finiva
+ * dritta per terra invece che sopra la cassa (provato a mano: succede anche a
+ * chi conosce il motore).
+ */
+function primCyl(r, len, seg, taper, axis, arc, arcAt) {
     seg = Math.max(6, seg | 0);
     if (taper == null) taper = 1;
+    if (arc == null) arc = 360;
+    arc = Math.max(5, Math.min(360, arc));
+    const full = arc >= 359.5;
+    const arcR = arc * Math.PI / 180;
+    const segs = full ? seg : Math.max(3, Math.ceil(seg * arc / 360));
+    // Un settore si CENTRA sul VERSO IN ALTO dopo l'orientamento d'asse.
+    //
+    // Senza questa convenzione, `arc:180` su un cilindro lungo X nasce rivolto
+    // verso +Z e dopo la rotazione d'asse finisce in piedi di fianco: il
+    // coperchio di una cassa esce come due mezzi dischi verticali. E' successo
+    // due volte modellando a mano, con il motore sotto gli occhi — quindi non e'
+    // qualcosa che si puo' chiedere a chi scrive la spec di tenere a mente.
+    //
+    // Con la convenzione, `cyl arc:180 axis:"x"` E' il coperchio bombato di una
+    // cassa, una volta a botte, un tunnel, una grondaia. `arcAt` resta per chi
+    // vuole un'altra giacitura.
+    const centre = (arcAt != null) ? arcAt
+        : (axis === 'x' ? 180 : (axis === 'z' ? 270 : 0));
+    const a0 = (centre - arc / 2) * Math.PI / 180;
     const half = len * 0.5;
     const rTop = r * taper;
     const pos = [];
     const idx = [];
     // laterale: 2 anelli
-    for (let i = 0; i <= seg; i++) {
-        const a = (i / seg) * Math.PI * 2;
+    for (let i = 0; i <= segs; i++) {
+        const a = full ? (i / segs) * Math.PI * 2 : a0 + (i / segs) * arcR;
         const c = Math.cos(a), s = Math.sin(a);
         pos.push(r * c, -half, r * s);
         pos.push(rTop * c, half, rTop * s);
     }
-    for (let i = 0; i < seg; i++) {
+    for (let i = 0; i < segs; i++) {
         const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
         idx.push(a, c, b, b, c, d);
+    }
+    if (!full) {
+        // Settore: i due tagli radiali e i due spicchi di coperchio, altrimenti
+        // il pezzo e' un guscio aperto e si vede da dentro.
+        const cBot = (pos.length / 3) | 0;
+        pos.push(0, -half, 0);
+        const cTop = cBot + 1;
+        pos.push(0, half, 0);
+        for (let i = 0; i < segs; i++) {
+            const o = i * 2;
+            idx.push(cBot, o + 2, o);            // fondo
+            idx.push(cTop, o + 1, o + 3);        // coperchio
+        }
+        // parete radiale iniziale (i=0) e finale (i=segs)
+        const l0 = 0, l1 = segs * 2;
+        idx.push(cBot, l0, cTop, l0, l0 + 1, cTop);
+        idx.push(cBot, cTop, l1, cTop, l1 + 1, l1);
+        return _orientAxis(meshCreate(pos, idx), axis);
     }
     // coperchi (fan)
     if (r > 1e-6) {
@@ -114,7 +160,11 @@ function primCyl(r, len, seg, taper, axis) {
             idx.push(topCenter, topStart + i, topStart + ((i + 1) % seg));
         }
     }
-    let m = meshCreate(pos, idx);
+    return _orientAxis(meshCreate(pos, idx), axis);
+}
+
+/** Porta una primitiva costruita lungo Y sull'asse richiesto. */
+function _orientAxis(m, axis) {
     if (axis === 'x') meshRotate(m, 0, 0, -90);
     else if (axis === 'z') meshRotate(m, 90, 0, 0);
     return m;
@@ -158,17 +208,32 @@ function primCaps(r, len, seg, axis) {
     return m;
 }
 
-function primTorus(R, r, seg, arc) {
+/**
+ * Toro, con ASSE e ARCO.
+ *
+ * Un arco di toro e' la fascia che segue una curva: la cerchiatura sul
+ * coperchio bombato di una cassa, un maniglione, un arco rampante, un anello
+ * spezzato. Un `cyl` con arco darebbe una FETTA DI TORTA piena — che e'
+ * esattamente l'errore in cui sono cascato modellando la cassa a mano.
+ *
+ * L'arco si CENTRA IN ALTO come nel cilindro, e per la stessa ragione: senza,
+ * nasce rivolto verso +Z e dopo l'orientamento d'asse finisce coricato.
+ */
+function primTorus(R, r, seg, arc, axis, arcAt) {
     seg = Math.max(6, seg | 0);
     const tube = Math.max(6, (seg / 2) | 0);
     if (arc == null) arc = 360;
+    arc = Math.max(5, Math.min(360, arc));
     const arcR = (arc / 360) * Math.PI * 2;
-    const closed = Math.abs(arc - 360) < 0.5;
+    const closed = arc >= 359.5;
     const segs = closed ? seg : Math.max(3, Math.ceil(seg * arc / 360));
+    const centre = (arcAt != null) ? arcAt
+        : (axis === 'x' ? 180 : (axis === 'z' ? 270 : 0));
+    const u0 = closed ? 0 : (centre - arc / 2) * Math.PI / 180;
     const pos = [];
     const idx = [];
     for (let i = 0; i <= segs; i++) {
-        const u = (i / segs) * arcR;
+        const u = u0 + (i / segs) * arcR;
         const cu = Math.cos(u), su = Math.sin(u);
         for (let j = 0; j <= tube; j++) {
             const v = (j / tube) * Math.PI * 2;
@@ -183,7 +248,20 @@ function primTorus(R, r, seg, arc) {
             idx.push(a, b, a + 1, a + 1, b, b + 1);
         }
     }
-    return meshCreate(pos, idx);
+    if (!closed) {
+        // Tappi ai due capi: un arco aperto si vede da dentro.
+        for (const [ring, flip] of [[0, true], [segs, false]]) {
+            const base = ring * stride;
+            const ci = (pos.length / 3) | 0;
+            const u = u0 + (ring / segs) * arcR;
+            pos.push(R * Math.cos(u), 0, R * Math.sin(u));
+            for (let j = 0; j < tube; j++) {
+                if (flip) idx.push(ci, base + j, base + j + 1);
+                else idx.push(ci, base + j + 1, base + j);
+            }
+        }
+    }
+    return _orientAxis(meshCreate(pos, idx), axis);
 }
 
 function primWedge(sx, sy, sz) {
@@ -624,13 +702,13 @@ function primBuild(node, seg, bevelSeg) {
         }
         case 'cyl':    return primCyl(node.r != null ? node.r : s[0] * 0.5,
                                       node.len != null ? node.len : s[1],
-                                      seg, node.taper, axis);
+                                      seg, node.taper, axis, node.arc, node.arcAt);
         case 'caps':   return primCaps(node.r != null ? node.r : s[0] * 0.5,
                                        node.len != null ? node.len : s[1],
                                        seg, axis);
         case 'torus':  return primTorus(node.r != null ? node.r : s[0] * 0.5,
                                         node.r2 != null ? node.r2 : (node.r || s[0] * 0.5) * 0.3,
-                                        seg, node.arc);
+                                        seg, node.arc, axis, node.arcAt);
         case 'wedge':  return primWedge(s[0], s[1], s[2]);
         case 'pyr':    return primPyr(s[0], s[1], s[2]);
         case 'tube':

@@ -220,7 +220,7 @@ body.dragging::after {
       </div>
       <label class="check"><input type="checkbox" id="groundCheck" checked> <span data-i18n="form.ground">Appoggiato a terra</span></label>
       <label class="check"><input type="checkbox" id="planCheck" checked> <span data-i18n="form.plan">Piano dell'architetto (consigliato)</span></label>
-      <label class="check"><input type="checkbox" id="stagedCheck" checked> <span data-i18n="form.staged">Costruzione a pezzi (piu' lenta, piu' precisa)</span></label>
+      <label class="check"><input type="checkbox" id="stagedCheck" checked> <span data-i18n="form.staged">Lavorazione a stadi (blocco → rifinitura → dettagli)</span></label>
       <label class="check"><input type="checkbox" id="autofixCheck" checked> <span data-i18n="form.autofix">Correzione automatica delle misure</span></label>
       <label class="check"><input type="checkbox" id="visionCheck" checked> <span data-i18n="form.vision">Critica visiva AI</span></label>
       <div class="muted" id="visionStatus"></div>
@@ -946,24 +946,70 @@ function primSphere(r, seg) {
     return meshCreate(pos, idx);
 }
 
-/** Cilindro lungo `axis` (default Y). `taper` e' il raggio in cima / raggio base. */
-function primCyl(r, len, seg, taper, axis) {
+/**
+ * Cilindro lungo `axis` (default Y). `taper` e' il raggio in cima / raggio base.
+ *
+ * `arc` in GRADI: sotto 360 e' un SETTORE, chiuso da due pareti radiali. E' la
+ * forma piu' comune che mancava — il coperchio bombato di una cassa, una volta a
+ * botte, un tunnel, una grondaia, una nicchia, un tetto Quonset. Prima si
+ * tentava di ottenerla torturando un `lathe` con l'asse ruotato, e finiva
+ * dritta per terra invece che sopra la cassa (provato a mano: succede anche a
+ * chi conosce il motore).
+ */
+function primCyl(r, len, seg, taper, axis, arc, arcAt) {
     seg = Math.max(6, seg | 0);
     if (taper == null) taper = 1;
+    if (arc == null) arc = 360;
+    arc = Math.max(5, Math.min(360, arc));
+    const full = arc >= 359.5;
+    const arcR = arc * Math.PI / 180;
+    const segs = full ? seg : Math.max(3, Math.ceil(seg * arc / 360));
+    // Un settore si CENTRA sul VERSO IN ALTO dopo l'orientamento d'asse.
+    //
+    // Senza questa convenzione, `arc:180` su un cilindro lungo X nasce rivolto
+    // verso +Z e dopo la rotazione d'asse finisce in piedi di fianco: il
+    // coperchio di una cassa esce come due mezzi dischi verticali. E' successo
+    // due volte modellando a mano, con il motore sotto gli occhi — quindi non e'
+    // qualcosa che si puo' chiedere a chi scrive la spec di tenere a mente.
+    //
+    // Con la convenzione, `cyl arc:180 axis:"x"` E' il coperchio bombato di una
+    // cassa, una volta a botte, un tunnel, una grondaia. `arcAt` resta per chi
+    // vuole un'altra giacitura.
+    const centre = (arcAt != null) ? arcAt
+        : (axis === 'x' ? 180 : (axis === 'z' ? 270 : 0));
+    const a0 = (centre - arc / 2) * Math.PI / 180;
     const half = len * 0.5;
     const rTop = r * taper;
     const pos = [];
     const idx = [];
     // laterale: 2 anelli
-    for (let i = 0; i <= seg; i++) {
-        const a = (i / seg) * Math.PI * 2;
+    for (let i = 0; i <= segs; i++) {
+        const a = full ? (i / segs) * Math.PI * 2 : a0 + (i / segs) * arcR;
         const c = Math.cos(a), s = Math.sin(a);
         pos.push(r * c, -half, r * s);
         pos.push(rTop * c, half, rTop * s);
     }
-    for (let i = 0; i < seg; i++) {
+    for (let i = 0; i < segs; i++) {
         const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
         idx.push(a, c, b, b, c, d);
+    }
+    if (!full) {
+        // Settore: i due tagli radiali e i due spicchi di coperchio, altrimenti
+        // il pezzo e' un guscio aperto e si vede da dentro.
+        const cBot = (pos.length / 3) | 0;
+        pos.push(0, -half, 0);
+        const cTop = cBot + 1;
+        pos.push(0, half, 0);
+        for (let i = 0; i < segs; i++) {
+            const o = i * 2;
+            idx.push(cBot, o + 2, o);            // fondo
+            idx.push(cTop, o + 1, o + 3);        // coperchio
+        }
+        // parete radiale iniziale (i=0) e finale (i=segs)
+        const l0 = 0, l1 = segs * 2;
+        idx.push(cBot, l0, cTop, l0, l0 + 1, cTop);
+        idx.push(cBot, cTop, l1, cTop, l1 + 1, l1);
+        return _orientAxis(meshCreate(pos, idx), axis);
     }
     // coperchi (fan)
     if (r > 1e-6) {
@@ -990,7 +1036,11 @@ function primCyl(r, len, seg, taper, axis) {
             idx.push(topCenter, topStart + i, topStart + ((i + 1) % seg));
         }
     }
-    let m = meshCreate(pos, idx);
+    return _orientAxis(meshCreate(pos, idx), axis);
+}
+
+/** Porta una primitiva costruita lungo Y sull'asse richiesto. */
+function _orientAxis(m, axis) {
     if (axis === 'x') meshRotate(m, 0, 0, -90);
     else if (axis === 'z') meshRotate(m, 90, 0, 0);
     return m;
@@ -1034,17 +1084,32 @@ function primCaps(r, len, seg, axis) {
     return m;
 }
 
-function primTorus(R, r, seg, arc) {
+/**
+ * Toro, con ASSE e ARCO.
+ *
+ * Un arco di toro e' la fascia che segue una curva: la cerchiatura sul
+ * coperchio bombato di una cassa, un maniglione, un arco rampante, un anello
+ * spezzato. Un `cyl` con arco darebbe una FETTA DI TORTA piena — che e'
+ * esattamente l'errore in cui sono cascato modellando la cassa a mano.
+ *
+ * L'arco si CENTRA IN ALTO come nel cilindro, e per la stessa ragione: senza,
+ * nasce rivolto verso +Z e dopo l'orientamento d'asse finisce coricato.
+ */
+function primTorus(R, r, seg, arc, axis, arcAt) {
     seg = Math.max(6, seg | 0);
     const tube = Math.max(6, (seg / 2) | 0);
     if (arc == null) arc = 360;
+    arc = Math.max(5, Math.min(360, arc));
     const arcR = (arc / 360) * Math.PI * 2;
-    const closed = Math.abs(arc - 360) < 0.5;
+    const closed = arc >= 359.5;
     const segs = closed ? seg : Math.max(3, Math.ceil(seg * arc / 360));
+    const centre = (arcAt != null) ? arcAt
+        : (axis === 'x' ? 180 : (axis === 'z' ? 270 : 0));
+    const u0 = closed ? 0 : (centre - arc / 2) * Math.PI / 180;
     const pos = [];
     const idx = [];
     for (let i = 0; i <= segs; i++) {
-        const u = (i / segs) * arcR;
+        const u = u0 + (i / segs) * arcR;
         const cu = Math.cos(u), su = Math.sin(u);
         for (let j = 0; j <= tube; j++) {
             const v = (j / tube) * Math.PI * 2;
@@ -1059,7 +1124,20 @@ function primTorus(R, r, seg, arc) {
             idx.push(a, b, a + 1, a + 1, b, b + 1);
         }
     }
-    return meshCreate(pos, idx);
+    if (!closed) {
+        // Tappi ai due capi: un arco aperto si vede da dentro.
+        for (const [ring, flip] of [[0, true], [segs, false]]) {
+            const base = ring * stride;
+            const ci = (pos.length / 3) | 0;
+            const u = u0 + (ring / segs) * arcR;
+            pos.push(R * Math.cos(u), 0, R * Math.sin(u));
+            for (let j = 0; j < tube; j++) {
+                if (flip) idx.push(ci, base + j, base + j + 1);
+                else idx.push(ci, base + j + 1, base + j);
+            }
+        }
+    }
+    return _orientAxis(meshCreate(pos, idx), axis);
 }
 
 function primWedge(sx, sy, sz) {
@@ -1500,13 +1578,13 @@ function primBuild(node, seg, bevelSeg) {
         }
         case 'cyl':    return primCyl(node.r != null ? node.r : s[0] * 0.5,
                                       node.len != null ? node.len : s[1],
-                                      seg, node.taper, axis);
+                                      seg, node.taper, axis, node.arc, node.arcAt);
         case 'caps':   return primCaps(node.r != null ? node.r : s[0] * 0.5,
                                        node.len != null ? node.len : s[1],
                                        seg, axis);
         case 'torus':  return primTorus(node.r != null ? node.r : s[0] * 0.5,
                                         node.r2 != null ? node.r2 : (node.r || s[0] * 0.5) * 0.3,
-                                        seg, node.arc);
+                                        seg, node.arc, axis, node.arcAt);
         case 'wedge':  return primWedge(s[0], s[1], s[2]);
         case 'pyr':    return primPyr(s[0], s[1], s[2]);
         case 'tube':
@@ -2692,7 +2770,7 @@ function resolveNode(node, params) {
     else n.s = [1, 1, 1];
     n.at = node.at != null ? evalVec3(node.at, params, [0, 0, 0]) : [0, 0, 0];
     if (node.rot != null) n.rot = evalVec3(node.rot, params, [0, 0, 0]);
-    for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'wall', 'bevel',
+    for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'arcAt', 'wall', 'bevel',
                      'amp', 'freq', 'turns', 'inner', 'twist', 'bendA']) {
         if (node[k] != null) n[k] = evalExpr(node[k], params);
     }
@@ -5493,6 +5571,289 @@ function apiGet(path) { return api('GET', path); }
 function apiPost(path, body) { return api('POST', path, body); }
 function apiDelete(path, body) { return api('DELETE', path, body); }
 
+
+/**
+ * DEMO senza AI: una cassa del tesoro low-poly, modellata a mano con la stessa
+ * spec che produce il generatore.
+ *
+ * Non e' un segnaposto: e' il banco di prova del formato. Modellandola si sono
+ * trovate tre lacune del motore che nessun test vedeva — il settore di cilindro
+ * (il coperchio bombato), l'arco di toro (le cerchiature) e la convenzione che
+ * centra gli archi IN ALTO. Se una cassa del tesoro con doghe, fasce, borchie,
+ * serratura, cerniere e maniglie sta in sedici nodi e zero difetti, il formato
+ * regge; se non ci stesse, sarebbe il formato da cambiare, non il prompt.
+ */
+function demoSpec() {
+    return {
+        id: "cassa_tesoro",
+        cat: "prop",
+        style: "lowpoly",
+        detail: 3,
+        ground: true,
+        size: [0.92, 0.68, 0.56],
+        smooth: {
+            on: true,
+            angle: 30
+        },
+        params: {
+            w: 0.88,
+            d: 0.52,
+            corpo_h: 0.34,
+            piede_h: 0.05,
+            lid_r: 0.24,
+            sp: 0.02,
+            fe: 0.014
+        },
+        mats: {
+            legno: {
+                col: "#6B4226",
+                rough: 0.88,
+                noise: {
+                    t: "stripe",
+                    scale: 46,
+                    amp: 0.32,
+                    col2: "#4A2C17"
+                }
+            },
+            ferro: {
+                col: "#43474E",
+                rough: 0.5,
+                metal: 0.75,
+                noise: {
+                    t: "scratch",
+                    scale: 70,
+                    amp: 0.3,
+                    col2: "#282B31"
+                }
+            },
+            oro: {
+                col: "#C9A24A",
+                rough: 0.28,
+                metal: 0.9,
+                noise: {
+                    t: "scratch",
+                    scale: 100,
+                    amp: 0.22,
+                    col2: "#8A6A22"
+                }
+            }
+        },
+        nodes: [
+            {
+                n: "corpo",
+                p: "box",
+                s: ["w", "corpo_h", "d"],
+                at: [0, "piede_h+corpo_h/2", 0],
+                bevel: 0.014,
+                mat: "legno"
+            },
+            {
+                n: "vano",
+                p: "box",
+                s: ["w-2*sp", "corpo_h", "d-2*sp"],
+                at: [0, "piede_h+corpo_h/2+sp", 0],
+                op: "sub",
+                of: "corpo"
+            },
+            {
+                n: "coperchio",
+                p: "cyl",
+                axis: "x",
+                arc: 180,
+                r: "lid_r",
+                len: "w",
+                sides: 28,
+                rot: [0, 0, 0],
+                mat: "legno",
+                at: [0, "piede_h+corpo_h+0.004", 0]
+            },
+            {
+                n: "piede",
+                p: "box",
+                s: [0.1, "piede_h", 0.1],
+                at: ["w/2-0.075", "piede_h/2", "d/2-0.075"],
+                bevel: 0.01,
+                mat: "legno",
+                arr: {
+                    n: 2,
+                    step: [0, 0, "-(d-0.15)"]
+                },
+                mir: "x"
+            },
+            {
+                n: "cornice_sup",
+                p: "box",
+                s: ["w+0.016", 0.03, "d+0.016"],
+                at: [0, "piede_h+corpo_h-0.012", 0],
+                bevel: 0.005,
+                mat: "ferro"
+            },
+            {
+                n: "cornice_sup_vano",
+                p: "box",
+                s: ["w-2*sp*1.2", 0.06, "d-2*sp*1.2"],
+                at: [0, "piede_h+corpo_h-0.012", 0],
+                op: "sub",
+                of: "cornice_sup"
+            },
+            {
+                n: "cornice_inf",
+                p: "box",
+                s: ["w+0.012", 0.024, "d+0.012"],
+                at: [0, "piede_h+0.014", 0],
+                bevel: 0.004,
+                mat: "ferro"
+            },
+            {
+                n: "fascia",
+                p: "box",
+                s: ["fe*1.6", "corpo_h+0.02", "d+0.02"],
+                at: [-0.3, "piede_h+corpo_h/2", 0],
+                bevel: 0.003,
+                mat: "ferro",
+                arr: {
+                    n: 3,
+                    step: [0.3, 0, 0]
+                }
+            },
+            {
+                n: "cerchio_cop",
+                p: "torus",
+                axis: "x",
+                arc: 182,
+                r: "lid_r+0.004",
+                r2: 0.011,
+                sides: 28,
+                mat: "ferro",
+                at: [-0.3, "piede_h+corpo_h+0.004", 0],
+                arr: {
+                    n: 3,
+                    step: [0.3, 0, 0]
+                }
+            },
+            {
+                n: "spigolo",
+                p: "box",
+                s: [0.05, 0.05, "fe"],
+                at: ["w/2-0.03", "piede_h+0.04", "d/2+0.004"],
+                bevel: 0.004,
+                mat: "ferro",
+                arr: {
+                    n: 2,
+                    step: [0, "corpo_h-0.10", 0]
+                },
+                mir: "x"
+            },
+            {
+                n: "piastra",
+                p: "box",
+                s: [0.14, 0.16, 0.016],
+                at: [0, "piede_h+corpo_h-0.055", "d/2+0.006"],
+                bevel: 0.007,
+                mat: "oro"
+            },
+            {
+                n: "buco_chiave",
+                p: "cyl",
+                r: 0.017,
+                len: 0.06,
+                axis: "z",
+                at: [0, "piede_h+corpo_h-0.07", "d/2+0.006"],
+                op: "sub",
+                of: "piastra"
+            },
+            {
+                n: "gancio",
+                p: "box",
+                s: [0.05, 0.07, 0.012],
+                at: [0, "piede_h+corpo_h+0.03", "d/2+0.008"],
+                bevel: 0.004,
+                mat: "oro"
+            },
+            {
+                n: "cerniera",
+                p: "cyl",
+                r: 0.017,
+                len: 0.12,
+                axis: "x",
+                at: [-0.26, "piede_h+corpo_h+0.004", "-d/2+0.018"],
+                mat: "ferro",
+                arr: {
+                    n: 3,
+                    step: [0.26, 0, 0]
+                }
+            },
+            {
+                n: "borchia",
+                p: "sphere",
+                r: 0.012,
+                at: [-0.36, "piede_h+0.055", "d/2+0.008"],
+                mat: "ferro",
+                arr: {
+                    n: 13,
+                    step: [0.06, 0, 0]
+                }
+            },
+            {
+                n: "maniglia",
+                p: "tube",
+                r: 0.012,
+                path: [
+                    [-0.445, "piede_h+corpo_h*0.62", 0.06],
+                    [-0.495, "piede_h+corpo_h*0.5", 0.0],
+                    [-0.445, "piede_h+corpo_h*0.38", -0.06]
+                ],
+                mat: "ferro",
+                mir: "x"
+            }
+        ],
+        rig: [
+            {
+                b: "cardine",
+                piv: [0, 0.39, -0.26],
+                axis: "x",
+                lim: [-105, 0]
+            }
+        ],
+        clips: {
+            apri: {
+                dur: 0.7,
+                loop: false,
+                keys: [
+                    [
+                        0,
+                        {
+                            cardine: [0, 0, 0]
+                        }
+                    ],
+                    [
+                        0.7,
+                        {
+                            cardine: [-100, 0, 0]
+                        }
+                    ]
+                ]
+            }
+        },
+        logic: [
+            {
+                on: "coperchio",
+                var: "aperta",
+                trig: "interact",
+                clip: "apri"
+            }
+        ],
+        col: [
+            {
+                t: "box",
+                at: [0, 0.34, 0],
+                s: [0.92, 0.68, 0.56]
+            }
+        ],
+        flags: ["hollow"]
+    };
+}
+
 // =======================================================================
 //  12 - UI: generazione, pannelli, critica, impostazioni
 // =======================================================================
@@ -5784,13 +6145,30 @@ function adoptState(st) {
  * L'asset si mostra DOPO OGNI PEZZO: si vede crescere, e se un pezzo esce male
  * si vede subito quale.
  */
+/**
+ * Costruzione A STADI: blocco -> rifinitura -> dettagli.
+ *
+ * Non un pezzo per volta. Un pezzo per volta risolveva la precisione ma
+ * introduceva due problemi suoi: il numero di chiamate cresceva col numero di
+ * segmenti (una spada finiva in sei passaggi), e nessuna chiamata vedeva mai
+ * l'oggetto INTERO — cosi' si perdeva il senso delle proporzioni fra le parti.
+ *
+ * Un modellatore lavora a OPERAZIONI: blocca tutto con volumi grezzi (li' si
+ * fissano le proporzioni), poi rifinisce le forme, poi aggiunge i dettagli. Ogni
+ * stadio vede l'oggetto completo e ha un mestiere solo. Una spada: piano + due
+ * stadi = tre chiamate.
+ *
+ * L'asset si mostra DOPO OGNI STADIO: si vede il blocco diventare oggetto, e se
+ * uno stadio peggiora si vede quale.
+ */
 async function buildStaged(form, plan) {
-    const tasksData = await apiPost('/api/asset/tasks', { plan: plan });
-    const tasks = tasksData.tasks || [];
-    if (!tasks.length) throw new Error(t('err.noTasks'));
+    const info = await apiPost('/api/asset/stages', {
+        plan: plan, detail: form.detail,
+    });
+    const stages = info.stages || [];
+    if (!stages.length) throw new Error(t('err.noTasks'));
 
-    // Spec accumulata: params e materiali vengono dal PIANO, non dai pezzi.
-    const spec = {
+    let spec = {
         v: 1,
         id: (plan.asset || form.prompt || 'asset').toLowerCase()
             .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'asset',
@@ -5809,38 +6187,46 @@ async function buildStaged(form, plan) {
     }
 
     const failed = [];
-    for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        setBusy(true, t('status.buildingPart', {
-            i: i + 1, n: tasks.length, name: task.name,
+    for (let i = 0; i < stages.length; i++) {
+        const st = stages[i];
+        setBusy(true, t('status.buildingStage', {
+            i: i + 1, n: stages.length, name: st.name,
         }));
-        let part;
+        let res;
         try {
-            part = await apiPost('/api/asset/part', {
-                plan: plan, task: task, index: i,
-                prompt: form.prompt, detail: form.detail,
-                style: form.style, notes: form.notes, model: form.model,
+            res = await apiPost('/api/asset/stage', {
+                plan: plan, index: i, detail: form.detail,
+                style: form.style, cat: form.cat,
+                prompt: form.prompt, notes: form.notes, model: form.model,
+                // Rifinitura e dettagli devono vedere cio' che c'e' gia'.
+                spec: (i > 0 ? spec : null),
             });
         } catch (e) {
-            // Un pezzo che non esce NON ferma gli altri: si segnala e si tira
-            // avanti. Fermarsi butterebbe via anche i pezzi gia' riusciti.
-            console.warn('[part]', task.name, e);
-            failed.push(task.name);
+            // Uno stadio fallito NON butta via i precedenti: il blocco senza
+            // rifinitura e' un asset grezzo, ma e' un asset.
+            console.warn('[stage]', st.name, e);
+            failed.push(st.name);
             continue;
         }
-        for (const [k, v] of Object.entries(part.params || {})) {
+        for (const [k, v] of Object.entries(res.params || {})) {
             if (!(k in spec.params)) spec.params[k] = v;
         }
-        const existing = new Set(spec.nodes.map(n => n.n));
-        for (const node of (part.nodes || [])) {
-            // Collisione di nomi fra pezzi: si prefissa col nome del compito
-            // invece di sovrascrivere. Un nodo perso e' un dettaglio perso.
-            if (existing.has(node.n)) node.n = task.name + '_' + node.n;
-            existing.add(node.n);
-            spec.nodes.push(node);
+        for (const [k, v] of Object.entries(res.mats || {})) {
+            if (!(k in spec.mats)) spec.mats[k] = v;
         }
-        // Si mostra la crescita: vedere il pezzo comparire e' anche il modo piu'
-        // rapido di capire quale sbaglia.
+        if (res.replace) {
+            // Blocco e rifinitura riscrivono: la rifinitura DEVE poter fondere
+            // tre cilindri in un tornio, e con una lista additiva resterebbero
+            // sia i cilindri sia il tornio, uno dentro l'altro.
+            if ((res.nodes || []).length) spec.nodes = res.nodes;
+        } else {
+            const existing = new Set(spec.nodes.map(n => n.n));
+            for (const node of (res.nodes || [])) {
+                if (existing.has(node.n)) node.n = node.n + '_' + (i + 1);
+                existing.add(node.n);
+                spec.nodes.push(node);
+            }
+        }
         if (spec.nodes.length) {
             appState.spec = spec;
             appState.built = showSpec(spec);
@@ -5848,7 +6234,7 @@ async function buildStaged(form, plan) {
         }
     }
     if (!spec.nodes.length) throw new Error(t('err.allPartsFailed'));
-    return { spec: spec, failed: failed, tasks: tasks.length };
+    return { spec: spec, failed: failed, tasks: stages.length };
 }
 
 async function doGenerate() {
@@ -6167,50 +6553,15 @@ async function saveCookies() {
 // --- Demo asset (senza AI) -------------------------------------------------
 
 function loadDemo() {
-    const demo = {
-        id: 'cassa_demo',
-        cat: 'prop',
-        style: 'lowpoly',
-        detail: 2,
-        size: [0.9, 0.7, 0.6],
-        ground: true,
-        params: { w: 0.9, h: 0.62, d: 0.6, t: 0.05, lid: 0.08 },
-        mats: {
-            legno: { col: '#6B4A2F', rough: 0.85,
-                     noise: { t: 'stripe', scale: 26, amp: 0.22, col2: '#4A3120' } },
-            ferro: { col: '#4A4F57', rough: 0.4, metal: 0.85,
-                     noise: { t: 'scratch', scale: 60, amp: 0.15 } },
-        },
-        nodes: [
-            { n: 'corpo', p: 'box', s: ['w', 'h', 'd'], at: [0, 'h/2', 0],
-              bevel: 0.02, mat: 'legno' },
-            { n: 'cavo', p: 'box', s: ['w-2*t', 'h-t', 'd-2*t'],
-              at: [0, 'h/2+t', 0], op: 'sub', of: 'corpo' },
-            { n: 'fascia', p: 'box', s: ['w+t*0.4', 't*1.2', 'd+t*0.4'],
-              at: [0, 'h*0.25', 0], mat: 'ferro',
-              arr: { n: 2, step: [0, 'h*0.5', 0] } },
-            { n: 'coperchio', p: 'box', s: ['w', 'lid', 'd'],
-              at: [0, 'h+lid/2', 0], mat: 'legno', bone: 'cardine', interactive: true },
-            { n: 'cardine', p: 'cyl', r: 't*0.6', len: 'w*0.8', axis: 'x',
-              at: [0, 'h+lid*0.5', '-d/2+t*0.6'], mat: 'ferro' },
-        ],
-        rig: [{ b: 'cardine', piv: [0, 'h', '-d/2'], axis: 'x', lim: [-100, 0] }],
-        clips: {
-            apri: { dur: 0.6, loop: false,
-                    keys: [[0, { cardine: [0, 0, 0] }],
-                           [0.6, { cardine: [-95, 0, 0] }]] },
-        },
-        logic: [{ on: 'coperchio', var: 'aperta', trig: 'interact', clip: 'apri' }],
-        col: [{ t: 'box', at: [0, 'h/2', 0], s: ['w', 'h+lid', 'd'] }],
-        flags: ['hollow'],
-    };
-    // Le espressioni restano stringhe: le risolve buildSpec.
-    // Ma bevel numerico e' gia' risolto.
+    // La spec sta in 12b-demo.js: e' lunga, e tenerla qui renderebbe illeggibile
+    // il modulo della UI.
+    const demo = demoSpec();
     const built = showSpec(demo);
     appState.plan = null;
     renderPlan(null);
     const defects = validateAll(demo, built, { hasPlan: false });
     showSpecInUi(demo, built, defects);
+    if (typeof refreshSmoothButton === 'function') refreshSmoothButton();
     setStatus(t('status.demo'), 'ok');
 }
 

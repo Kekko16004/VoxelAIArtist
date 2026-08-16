@@ -917,6 +917,53 @@ sovrascriverla sarebbe cancellare il lavoro di chi ha costruito. I nodi `locked`
 non si toccano, e la moltiplicazione passa da `offsetScale`, che conserva
 l'espressione.
 
+### Il flusso e' a STADI, non a pezzi (`plan_stages`)
+Un pezzo per volta risolveva la precisione ma introduceva due problemi suoi: le
+chiamate crescevano col numero di segmenti (una spada finiva in SEI passaggi) e
+**nessuna chiamata vedeva mai l'oggetto intero**, quindi si perdeva il senso
+delle proporzioni fra le parti.
+
+Un modellatore non lavora a pezzi, lavora a OPERAZIONI: blocca tutto con volumi
+grezzi (li' si fissano le proporzioni), poi rifinisce le forme, poi aggiunge i
+dettagli. Ogni stadio vede l'oggetto COMPLETO e ha un mestiere solo.
+
+    dettaglio 0    blocco                          1 stadio  -> 2 chiamate
+    dettaglio 1    blocco + rifinitura             2 stadi   -> 3
+    dettaglio 2/3  blocco + rifinitura + dettagli  3 stadi   -> 4
+    oggetto SEMPLICE (<=5 segmenti, <=3 extras): i dettagli si fondono nella
+    rifinitura -> una spada resta a 2 stadi, cioe' 3 chiamate col piano.
+
+- **Blocco e rifinitura SOSTITUISCONO, i dettagli si sommano** (`replace` nella
+  risposta). La rifinitura deve poter fondere tre cilindri in un tornio, e con
+  una lista additiva resterebbero sia i cilindri sia il tornio, uno dentro
+  l'altro.
+- La rifinitura e i dettagli ricevono il DIGEST dell'oggetto attuale: senza,
+  "rifinisci" non ha un oggetto su cui lavorare.
+- Uno stadio riceve TUTTI i params del piano (vede l'oggetto intero);
+  restringerli come per un pezzo gli impedirebbe di collegare le parti.
+- Uno stadio fallito non butta via i precedenti: un blocco senza rifinitura e'
+  un asset grezzo, ma e' un asset.
+
+### Il settore e l'arco si centrano IN ALTO
+`cyl` con `arc` e' un SETTORE chiuso (coperchio bombato, volta a botte, tunnel,
+grondaia); `torus` con `arc` e' una FASCIA che segue la curva (cerchiature,
+maniglioni, archi rampanti). Prima non esistevano, e per il coperchio di una
+cassa si torturava un `lathe` con l'asse ruotato: finiva **dritto per terra**
+invece che sopra la cassa. Succede anche a chi conosce il motore — l'ho fatto due
+volte modellando la demo — quindi l'arco si CENTRA sul verso in alto dopo
+l'orientamento d'asse. Cosi' `cyl arc:180 axis:"x"` **e'** il coperchio di una
+cassa. `arcAt` resta per le altre giaciture.
+
+### La demo e' il banco di prova del formato (`12b-demo.js`)
+Una cassa del tesoro low-poly modellata a mano con la stessa spec del
+generatore: doghe, cerchiature ad arco, telai di ferro, borchie in array,
+serratura in oro col buco scavato, cerniere, maniglie su percorso, piedini.
+**16 nodi, 20934 triangoli, zero difetti.** Modellandola sono emerse tre lacune
+del motore che nessun test vedeva (settore di cilindro, arco di toro,
+centratura in alto degli archi): se una cassa del tesoro non ci sta in sedici
+nodi, e' il FORMATO da cambiare, non il prompt. Per questo la demo non e' un
+segnaposto e va tenuta aggiornata quando il vocabolario cambia.
+
 - Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
   skinning vero restano fuori.
 
