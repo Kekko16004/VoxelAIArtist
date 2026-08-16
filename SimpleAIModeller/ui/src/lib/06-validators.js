@@ -127,6 +127,15 @@ function validateGround(spec, built) {
 
 function validateSize(spec, built) {
     const d = [];
+    // Senza un `size` DICHIARATO non c'e' nessun bersaglio: il default [1,1,1]
+    // e' un segnaposto, e giudicare contro di esso produce un difetto su ogni
+    // oggetto piu' piccolo di un metro — cioe' su quasi tutti.
+    if (!spec.sizeDeclared && !spec.__sizeFromPlan) {
+        const t = spec.size;
+        const isDefault = !t || (Math.abs(t[0] - 1) < 1e-9 && Math.abs(t[1] - 1) < 1e-9
+                                 && Math.abs(t[2] - 1) < 1e-9);
+        if (isDefault) return validateSizeSanity(spec, built);
+    }
     const target = spec.size || [1, 1, 1];
     const size = built.bounds.size;
     for (let i = 0; i < 3; i++) {
@@ -140,7 +149,25 @@ function validateSize(spec, built) {
                 'Riscalare o correggere i params che comandano l\'asse ' + axis + '.'));
         }
     }
-    if (size[0] < 0.01 && size[1] < 0.01 && size[2] < 0.01) {
+    return d.concat(validateSizeSanity(spec, built));
+}
+
+/** Controllo di plausibilita' assoluta: un oggetto di 40 metri o di 2 mm e'
+ *  sbagliato anche senza un bersaglio dichiarato. */
+function validateSizeSanity(spec, built) {
+    const d = [];
+    const size = built.bounds.size;
+    const maxDim = Math.max(size[0], size[1], size[2]);
+    if (maxDim < 0.01) {
+        d.push(defect('tooSmall', 'high', '',
+            'L\'asset misura ' + (maxDim * 1000).toFixed(1) + ' mm sul lato piu\' lungo.',
+            'Le misure sono in METRI: rivedere i params.'));
+    } else if (maxDim > 60 && spec.cat !== 'struct') {
+        d.push(defect('tooBig', 'high', '',
+            'L\'asset misura ' + maxDim.toFixed(1) + ' m sul lato piu\' lungo.',
+            'Le misure sono in METRI: rivedere i params.'));
+    }
+    if (size[0] < 0.001 && size[1] < 0.001 && size[2] < 0.001) {
         d.push(defect('emptyMesh', 'high', '',
             'La mesh risultante e\' vuota o degenerata.',
             'Verificare che i nodi producano volumi reali.'));
@@ -390,32 +417,40 @@ function validateLogic(spec) {
 }
 
 /**
- * Dettaglio effettivo contro il livello richiesto.
+ * Dettaglio effettivo contro quello richiesto.
  *
- * A `detail: 3` il budget e' 200 nodi e il generatore ne usa dieci: il
- * risultato e' corretto nelle misure e povero da guardare (un manico che e' un
- * cilindro liscio, una guardia che e' una lastra). Chiedere "piu' dettaglio"
- * nel prompt non basta, perche' non c'e' niente che lo verifichi — quindi lo si
- * MISURA, e il difetto entra nel ciclo di correzione come tutti gli altri.
+ * Il bersaglio e' il numero di pezzi che il PIANO prevede (catena + dettagli),
+ * non una frazione del budget: un vaso e' un solido di rivoluzione e sta in due
+ * pezzi, e pretenderne quaranta perche' il budget e' duecento spingerebbe il
+ * ciclo di correzione a imbullonargli addosso trentotto pezzi inutili. Il
+ * budget e' un TETTO, non una quota da riempire.
  *
- * Si contano i nodi VISIBILI: gli utensili delle booleane non sono dettaglio
- * che si vede, e contarli premierebbe chi scava buchi invece di modellare.
+ * Senza piano si usa un minimo prudente, e resta un avviso: senza distinta non
+ * si sa quanti pezzi meriti quell'oggetto.
  */
-function validateDetail(spec, built) {
+function validateDetail(spec, built, opts) {
     const d = [];
     const detail = Math.max(0, Math.min(3, spec.detail | 0));
     if (detail < 2) return d;                 // a bozza/basso la poverta' e' voluta
-    const budget = DETAIL_LEVELS[detail].nodes;
     const visible = (built.parts || []).length;
-    const want = Math.floor(budget * (detail === 3 ? 0.22 : 0.14));
+    const expected = opts && opts.expectedParts;
+    let want, sev;
+    if (expected > 0) {
+        // Si tollera un pezzo in meno del piano: due dettagli fusi in uno non
+        // sono un difetto.
+        want = Math.max(2, expected - 1);
+        sev = detail === 3 ? 'high' : 'medium';
+    } else {
+        want = detail === 3 ? 6 : 4;
+        sev = 'medium';
+    }
     if (visible >= want) return d;
-    d.push(defect('underDetailed', detail === 3 ? 'high' : 'medium', '',
-        'Solo ' + visible + ' pezzi visibili per un dettaglio ' + detail
-        + ': il budget e\' ' + budget + ', ne servono almeno ' + want + '.',
-        'Aggiungere sottodettagli sui pezzi che ci sono: avvolgimento del manico '
-        + 'con arr, collari alle giunzioni, terminali sagomati, scanalature con '
-        + 'sub, rivetti, smussi. NON ingrandire l\'oggetto e non aggiungere '
-        + 'pezzi che il piano non prevede.'));
+    d.push(defect('underDetailed', sev, '',
+        'Solo ' + visible + ' pezzi visibili: per questo dettaglio ne servono '
+        + 'almeno ' + want + (expected > 0 ? ' (il piano ne prevede ' + expected + ')' : '') + '.',
+        'Aggiungere i sottodettagli previsti: avvolgimenti con arr, collari alle '
+        + 'giunzioni, terminali sagomati, scanalature con sub, rivetti. NON '
+        + 'ingrandire l\'oggetto e non aggiungere pezzi fuori dal piano.'));
     return d;
 }
 
@@ -458,7 +493,7 @@ function validateAll(spec, built, opts) {
         .concat(validateCabin(spec, built))
         .concat(validateDegenerates(spec, built))
         .concat(validateLogic(spec))
-        .concat(validateDetail(spec, built))
+        .concat(validateDetail(spec, built, opts))
         .concat(validateShaping(spec, built));
     // Con un PIANO l'ingombro non si giudica qui: l'audit lo confronta pezzo per
     // pezzo con numeri verificati, e un secondo giudizio piu' grezzo sullo stesso

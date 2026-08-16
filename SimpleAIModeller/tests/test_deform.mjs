@@ -19,7 +19,8 @@ const code = files.map(f => fs.readFileSync(path.join(LIB, f), 'utf8')).join('\n
   + '\n;this.__SAM = { meshBounds, meshIsClosed, meshIsEmpty, meshTriCount, meshVolume,'
   + ' meshArea, meshClone, primBox, primRoundBox, primCyl, primSphere, sectionPoints,'
   + ' primLoft2, meshTaper, meshShear, meshTwist, meshBend, meshWarp, meshSquash,'
-  + ' applyDeformers, buildSpec, primBuild, validateAll, partMetrics, measuredFor };';
+  + ' applyDeformers, buildSpec, primBuild, validateAll, partMetrics, measuredFor,'
+  + ' primLathe2, vesselProfile, smoothProfile, VESSEL_PROFILES };';
 const sandbox = { console, Math, JSON, Float32Array, Uint32Array, Uint8Array, Map, Set, Object, Array };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
@@ -182,8 +183,20 @@ console.log('[10] il dettaglio richiesto viene MISURATO, non solo chiesto');
 const dPoor = S.validateAll(spada, built, { hasPlan: true });
 ok(dPoor.some(x => x.code === 'underDetailed'),
    'dettaglio 3 con 5 pezzi -> underDetailed (' + dPoor.map(x => x.code).join(',') + ')');
-ok(dPoor.filter(x => x.code === 'underDetailed')[0].sev === 'high',
-   'a dettaglio 3 conta come grave, quindi entra nel ciclo di correzione');
+// Senza PIANO non si sa quanti pezzi meriti quell'oggetto, quindi resta un
+// avviso: un vaso e' un solido di rivoluzione e sta in due pezzi, e pretenderne
+// quaranta perche' il budget e' duecento farebbe imbullonare pezzi inutili.
+ok(dPoor.filter(x => x.code === 'underDetailed')[0].sev === 'medium',
+   'senza piano e solo un avviso');
+// Col PIANO il bersaglio esiste, e allora e' grave: entra nel ciclo di correzione.
+const dPlanned = S.validateAll(spada, built, { hasPlan: true, expectedParts: 14 });
+const ud = dPlanned.filter(x => x.code === 'underDetailed')[0];
+ok(ud && ud.sev === 'high', 'con un piano da 14 pezzi diventa grave');
+ok(ud && ud.what.indexOf('13') >= 0, 'chiede i pezzi del piano meno uno: ' + (ud ? ud.what : ''));
+// Un piano da 2 pezzi (un vaso) NON pretende dettaglio che non serve.
+const dVase = S.validateAll(spada, built, { hasPlan: true, expectedParts: 2 });
+ok(!dVase.some(x => x.code === 'underDetailed'),
+   'un piano da 2 pezzi e soddisfatto da 5 parti');
 // A dettaglio basso la poverta' e' voluta.
 const lowDetail = JSON.parse(JSON.stringify(spada));
 lowDetail.detail = 1;
@@ -222,6 +235,97 @@ shaped.nodes[3].bevel = 0.01;
 const dShaped = S.validateAll(shaped, S.buildSpec(shaped), { hasPlan: true });
 ok(!dShaped.some(x => x.code === 'unshaped'),
    'con bevel e taper il difetto sparisce');
+
+console.log('[12] tornio: un vaso deve essere un SOLIDO, non un guscio');
+const vaso = S.primLathe2('vase', 32, 360, 'y', 0.006);
+ok(!S.meshIsEmpty(vaso), 'vaso costruito');
+ok(S.meshIsClosed(vaso), 'vaso CHIUSO: fondo, parete e labbro (era aperto)');
+const vb = S.meshBounds(vaso);
+ok(Math.abs(vb.min[1]) < 1e-6, 'parte da y=0');
+ok(Math.abs(vb.max[1] - 1) < 1e-6, 'silhouette normalizzata: alta 1');
+ok(vb.size[0] > 0.5 && vb.size[0] <= 1.001, 'larga entro il diametro');
+// Cavo davvero: il volume del solido con parete e MOLTO minore del pieno.
+const pieno = S.primLathe2('vase', 32, 360, 'y', 0);
+ok(Math.abs(S.meshVolume(vaso)) < Math.abs(S.meshVolume(pieno)) * 0.6,
+   'con wall il volume crolla: e cavo (' + Math.abs(S.meshVolume(vaso)).toFixed(4)
+   + ' vs ' + Math.abs(S.meshVolume(pieno)).toFixed(4) + ')');
+ok(S.meshIsClosed(pieno), 'anche il solido pieno e chiuso');
+
+console.log('[13] profilo interpolato: silhouette liscia, non spezzata');
+const raw4 = [[0.3, 0], [0.5, 0.4], [0.26, 0.75], [0.33, 1]];
+const smooth = S.smoothProfile(raw4, 20);
+ok(smooth.length === 20, 'campionato a 20 punti');
+ok(Math.abs(smooth[0][0] - 0.3) < 1e-9 && Math.abs(smooth[0][1]) < 1e-9,
+   'parte esattamente sul primo punto');
+const last = smooth[smooth.length - 1];
+ok(Math.abs(last[0] - 0.33) < 1e-9 && Math.abs(last[1] - 1) < 1e-9,
+   'finisce esattamente sull ultimo punto');
+ok(smooth.every(p => p[0] >= 0), 'nessun raggio negativo');
+// La curva deve DEVIARE dalla spezzata: se coincidesse, non stiamo lisciando.
+let maxDev = 0;
+for (const p of smooth) {
+    // distanza dal segmento piu vicino della spezzata originale
+    let best = Infinity;
+    for (let i = 0; i < raw4.length - 1; i++) {
+        const a = raw4[i], b = raw4[i + 1];
+        const vx = b[0] - a[0], vy = b[1] - a[1];
+        const t = Math.max(0, Math.min(1, ((p[0]-a[0])*vx + (p[1]-a[1])*vy) / (vx*vx+vy*vy)));
+        const dx = a[0] + vx*t - p[0], dy = a[1] + vy*t - p[1];
+        best = Math.min(best, Math.sqrt(dx*dx + dy*dy));
+    }
+    maxDev = Math.max(maxDev, best);
+}
+ok(maxDev > 0.002, 'la curva si scosta dalla spezzata (' + maxDev.toFixed(4) + ')');
+
+console.log('[14] silhouette note');
+ok(Object.keys(S.VESSEL_PROFILES).length >= 10, 'almeno dieci silhouette');
+ok(S.vesselProfile('vaso') && S.vesselProfile('bottiglia') && S.vesselProfile('calice'),
+   'gli alias italiani risolvono');
+ok(S.vesselProfile('inesistente') === null, 'un nome ignoto da null (non un vaso a caso)');
+for (const name of Object.keys(S.VESSEL_PROFILES)) {
+    const m = S.primLathe2(name, 24, 360, 'y', 0);
+    ok(!S.meshIsEmpty(m) && S.meshIsClosed(m), name + ': solido chiuso');
+}
+
+console.log('[15] tornio dal nodo, con scala su r e len');
+const vasoNodo = S.primBuild({ p: 'lathe', prof: 'vase', r: 0.145, len: 0.42,
+                               wall: 0.006, sides: 32, axis: 'y' }, 32, 2);
+const vnb = S.meshBounds(vasoNodo);
+ok(Math.abs(vnb.max[1] - 0.42) < 1e-4, 'alto 0.42 come chiesto (' + vnb.max[1].toFixed(4) + ')');
+ok(Math.abs(vnb.size[0] - 0.29) < 0.01, 'largo 0.29 = 2*r (' + vnb.size[0].toFixed(4) + ')');
+ok(S.meshIsClosed(vasoNodo), 'chiuso anche passando dal nodo');
+
+console.log('[16] array POLARE: le copie girano attorno all asse');
+const polare = {
+    id: 'flangia', cat: 'prop', style: 'lowpoly', detail: 2, ground: true,
+    size: [0.4, 0.1, 0.4], params: {}, mats: { m: { col: '#888888' } },
+    nodes: [
+        { n: 'bullone', p: 'cyl', r: 0.012, len: 0.03, axis: 'y',
+          at: [0.15, 0.05, 0], mat: 'm',
+          arr: { n: 8, step: [0, 0, 0], rot: [0, 45, 0] } },
+    ],
+};
+const bp = S.buildSpec(polare);
+const bpb = bp.bounds;
+// Otto bulloni a raggio 0.15 riempiono un cerchio di diametro 0.30 su X e Z:
+// se le copie restassero sovrapposte, l'ingombro sarebbe quello di UN bullone.
+ok(bpb.size[0] > 0.28 && bpb.size[0] < 0.33,
+   'ingombro X = cerchio dei bulloni (' + bpb.size[0].toFixed(3) + ')');
+ok(bpb.size[2] > 0.28 && bpb.size[2] < 0.33,
+   'ingombro Z = cerchio dei bulloni (' + bpb.size[2].toFixed(3) + ')');
+ok(Math.abs(bpb.size[0] - bpb.size[2]) < 0.01, 'simmetrico attorno all asse');
+// Contro-prova: senza rot le copie stanno tutte insieme.
+const fermo = JSON.parse(JSON.stringify(polare));
+delete fermo.nodes[0].arr.rot;
+const fb = S.buildSpec(fermo).bounds;
+ok(fb.size[0] < 0.05, 'senza rot le copie restano sovrapposte (' + fb.size[0].toFixed(3) + ')');
+// L'array lineare non e stato rotto dalla correzione.
+const lineare = JSON.parse(JSON.stringify(polare));
+lineare.nodes[0].at = [0, 0.05, 0];
+lineare.nodes[0].arr = { n: 4, step: [0.1, 0, 0] };
+const lbb = S.buildSpec(lineare).bounds;
+ok(lbb.size[0] > 0.29 && lbb.size[0] < 0.35,
+   'array lineare: 4 copie a passo 0.1 (' + lbb.size[0].toFixed(3) + ')');
 
 console.log();
 console.log('PASS ' + pass + '  FAIL ' + fail);

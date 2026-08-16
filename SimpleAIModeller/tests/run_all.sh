@@ -26,6 +26,7 @@ run() {
 }
 
 run "Build UI" node ui/build.mjs
+run "Sintassi dei moduli e del bundle" node tests/test_modules.mjs
 run "Spec Python" python3 tests/test_spec.py
 run "Piano e audit" python3 tests/test_plan.py
 run "Vision probe" python3 tests/test_vision.py

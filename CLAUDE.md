@@ -710,6 +710,58 @@ qualunque valore si metta. Il rumore procedurale modula anche la RUVIDITA'
 a spruzzo. L'envMap e' un CubeTexture a gradiente con una macchia speculare: un
 metallo senza orizzonte da riflettere resta una tinta piatta.
 
+### Solidi di rivoluzione (`primLathe2` in `03b-deform.js`)
+Un vaso chiesto al programma usciva come un guscio senza fondo, con la silhouette
+a spezzata e visibile all'interno — provato in GUI, non dedotto. Tre difetti in
+uno, tutti nel vecchio `lathe`:
+- **nessun fondo e nessuna parete**: si guardava DENTRO l'oggetto. Ora con `wall`
+  si costruiscono parete esterna, parete interna, fondo e LABBRO; senza, un
+  solido pieno. In entrambi i casi chiuso.
+- **profilo a spezzata**: gli spigoli fra i punti su una ceramica si leggono come
+  difetti. Ora il profilo si interpola (Catmull-Rom, `smoothProfile`) con gli
+  estremi duplicati, cosi' la curva parte e finisce ESATTAMENTE sul primo e
+  sull'ultimo punto — su un profilo il fondo e il labbro non si spostano.
+- **nessun modo di chiedere "un vaso"**: 12 silhouette note (`vase`, `amphora`,
+  `bottle`, `goblet`, `bowl`, `pot`, `urn`, `column`, `baluster`, `plate`,
+  `dome`, `barrel`) normalizzate 0..1 e scalate su `r`/`len`, con alias italiani.
+Il vecchio `primLathe` e' stato RIMOSSO invece di lasciato accanto: due
+implementazioni della stessa cosa divergono, ed e' la prima avvertenza di questo
+repo.
+
+### `arr` con `rot` e' un array POLARE
+L'ordine in `transformInstance` e': `rot` del pezzo → `at` → scostamento
+dell'array. Prima la rotazione dell'array veniva applicata mentre il pezzo era
+ancora sull'origine, quindi lo girava su se' stesso e **le dodici copie finivano
+tutte nello stesso punto** — si vedeva una decorazione sola. Ora il pezzo va alla
+sua distanza dall'asse e poi gira: bulloni su una flangia, colonne di una
+rotonda, raggi, greche su un vaso, denti di un ingranaggio.
+
+### `tests/test_modules.mjs` — la guardia che mancava
+I moduli sono frammenti di UNA closure: un errore di sintassi in uno rende la
+pagina **dipinta e completamente morta**, senza messaggi. I test di geometria
+caricano solo i moduli puri (01-06), quindi un backtick di troppo dentro il
+template GLSL di `07-materials.js` e' passato inosservato fino a una prova in
+GUI. La guardia compila (senza eseguire) ogni modulo, il bundle concatenato — che
+e' dove si vedono i `const` duplicati — e il blocco dentro `index.html`, e conta
+i backtick per parita'.
+
+### `amp` del rumore e' un CONTRASTO
+`t = clamp(0.5 + (n - 0.5) * amp * 3)`. La vecchia formula (`n * amp * 2`) su un
+fbm — che sta quasi sempre fra 0.25 e 0.75 — dava una banda strettissima: a
+valori bassi la variazione era invisibile e sembrava che il rumore non
+funzionasse. Verificato con due box affiancati, uno con `stripe` amp 1.0: le
+strisce sono nette, quindi lo shader arriva a destinazione.
+
+### `underDetailed`: il bersaglio e' il PIANO, non il budget
+Prima pretendeva una frazione del budget (44 pezzi a dettaglio 3), e su un vaso —
+che e' un solido di rivoluzione e sta in due pezzi — avrebbe spinto il ratchet a
+imbullonargli addosso trentotto pezzi inutili. Ora il bersaglio e'
+`chain + extras` del piano meno uno, ed e' `high` solo quando un piano esiste;
+senza piano resta un avviso con una soglia prudente. **Il budget e' un tetto, non
+una quota da riempire.** Stessa logica per `validateSize`: senza un `size`
+dichiarato non c'e' bersaglio, e resta solo il controllo di plausibilita'
+assoluta (un oggetto di 2 mm o di 60 m e' sbagliato comunque).
+
 - Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
   skinning vero restano fuori.
 

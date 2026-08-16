@@ -192,7 +192,12 @@ float spotN(vec3 p){ return step(0.65, _samNoise(p)); }
   vec3 p = samObjPos * samScale + samSeed;
   float n = ${noiseFn}(p);
   if (samBands > 0.5) n = floor(n * samBands) / samBands;
-  float t = clamp(n * samAmp * 2.0, 0.0, 1.0);
+  // amp come CONTRASTO centrato: il rumore si allontana da 0.5 in entrambi i
+  // versi. La vecchia formula (n * amp * 2) su un fbm - che sta quasi sempre
+  // fra 0.25 e 0.75 - dava una banda strettissima, e a valori bassi la
+  // variazione era invisibile: la superficie sembrava tinta piatta e si
+  // concludeva che il rumore non funzionasse.
+  float t = clamp(0.5 + (n - 0.5) * samAmp * 3.0, 0.0, 1.0);
   diffuseColor.rgb = mix(diffuseColor.rgb, samCol2, t);
 }
 `);

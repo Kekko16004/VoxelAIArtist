@@ -57,6 +57,15 @@ function readForm() {
     };
 }
 
+/** Quanti pezzi ci si aspetta di vedere: lo dice il PIANO, non il budget. */
+function validateOpts() {
+    const plan = appState.plan;
+    const expected = plan && plan.chain
+        ? plan.chain.length + ((plan.extras && plan.extras.length) || 0)
+        : 0;
+    return { hasPlan: !!plan, expectedParts: expected };
+}
+
 function renderPlan(plan) {
     const box = $('planOut');
     if (!box) return;
@@ -171,7 +180,7 @@ function renderDefects(defects) {
 function rebuildCurrent() {
     if (!appState.spec) return;
     const built = showSpec(appState.spec);
-    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     return { built, defects };
 }
@@ -231,7 +240,7 @@ async function fixRound(defects, humanText) {
     }
     appState.spec = spec;
     appState.built = built;
-    const local = validateAll(spec, built, { hasPlan: !!appState.plan });
+    const local = validateAll(spec, built, validateOpts());
     const audit = await auditAgainstPlan(spec, built);
     const merged = mergeDefects([audit, local]);
     showSpecInUi(spec, built, merged);
@@ -272,7 +281,7 @@ async function doGenerate() {
         appState.spec = spec;
         appState.built = built;
 
-        let local = validateAll(spec, built, { hasPlan: !!appState.plan });
+        let local = validateAll(spec, built, validateOpts());
         let audit = await auditAgainstPlan(spec, built);
         let defects = mergeDefects([audit, local]);
         showSpecInUi(spec, built, defects);
@@ -681,7 +690,7 @@ function wireUi() {
             const built = showSpec(data.spec);
             appState.spec = data.spec;
             appState.built = built;
-            const local = validateAll(data.spec, built, { hasPlan: !!appState.plan });
+            const local = validateAll(data.spec, built, validateOpts());
             const audit = await auditAgainstPlan(data.spec, built);
             showSpecInUi(data.spec, built, mergeDefects([audit, local]));
             setStatus(t('status.normalized', { n: (data.warnings || []).length }), 'ok');

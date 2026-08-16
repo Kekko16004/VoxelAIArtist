@@ -1249,38 +1249,11 @@ function primExtr(prof, len, sides, s, axis, bevel) {
     return m;
 }
 
-function primLathe(prof, sides, arc, axis) {
-    // `prof` e' una lista di [x,y] con x = raggio, y = altezza.
-    let pts;
-    if (Array.isArray(prof)) pts = prof;
-    else pts = _profilePoints(prof, sides, [1, 1]).map(p => [Math.abs(p[0]), p[1]]);
-    if (pts.length < 2) return primCyl(0.5, 1, sides, 1, axis);
-    sides = Math.max(6, sides | 0 || 16);
-    if (arc == null) arc = 360;
-    const arcR = (arc / 360) * Math.PI * 2;
-    const closed = Math.abs(arc - 360) < 0.5;
-    const segs = closed ? sides : Math.max(3, Math.ceil(sides * arc / 360));
-    const pos = [];
-    const idx = [];
-    for (let i = 0; i <= segs; i++) {
-        const a = (i / segs) * arcR;
-        const c = Math.cos(a), s = Math.sin(a);
-        for (let j = 0; j < pts.length; j++) {
-            pos.push(pts[j][0] * c, pts[j][1], pts[j][0] * s);
-        }
-    }
-    const stride = pts.length;
-    for (let i = 0; i < segs; i++) {
-        for (let j = 0; j < pts.length - 1; j++) {
-            const a = i * stride + j, b = a + stride;
-            idx.push(a, b, a + 1, a + 1, b, b + 1);
-        }
-    }
-    let m = meshCreate(pos, idx);
-    if (axis === 'x') meshRotate(m, 0, 0, -90);
-    else if (axis === 'z') meshRotate(m, 90, 0, 0);
-    return m;
-}
+// `primLathe` (rivoluzione a spezzata, senza fondo ne' parete) e' stato
+// RIMOSSO: lo sostituisce `primLathe2` in 03b-deform.js, che interpola il
+// profilo e chiude il solido. Tenerne due avrebbe significato due
+// implementazioni della stessa cosa destinate a divergere — ed e' la prima
+// avvertenza di questo repo.
 
 function primLoft(secs, seg, axis) {
     // secs: [{at, s:[sx,sy,sz]}] ordinati. Si interpolano sezioni circolari/rettangolari.
@@ -1532,7 +1505,19 @@ function primBuild(node, seg, bevelSeg) {
                                        node.len != null ? node.len : s[1],
                                        node.sides || seg,
                                        s, axis, node.bevel);
-        case 'lathe':  return primLathe(node.prof, node.sides || seg, node.arc, axis);
+        case 'lathe': {
+            // Con un nome noto (`vase`, `bottle`, `goblet`, ...) la silhouette
+            // e' normalizzata 0..1 e va scalata su `s`/`r`/`len`; con punti
+            // espliciti sono coordinate assolute e si rispettano.
+            let prof = node.prof;
+            if (typeof prof === 'string' && vesselProfile(prof)) {
+                const rr = node.r != null ? node.r : (s[0] * 0.5);
+                const hh = node.len != null ? node.len : s[1];
+                prof = vesselProfile(prof).map(p => [p[0] * 2 * rr, p[1] * hh]);
+            }
+            return primLathe2(prof, node.sides || seg, node.arc, axis,
+                              node.wall, node.smooth);
+        }
         case 'loft':   return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
                                         node.closed !== false);
         case 'helix':  return primHelix(node.r || 0.4, node.r2, node.len || 1,
@@ -1925,6 +1910,215 @@ function _taperPair(v, fallback) {
     return fallback || null;
 }
 
+// =======================================================================
+//  SOLIDI DI RIVOLUZIONE (vasi, bottiglie, calici, colonne, ruote, piatti)
+//
+//  Un vaso non e' una pila di cilindri: e' una SILHOUETTE fatta girare. Il
+//  vecchio `lathe` girava i punti cosi' com'erano e non chiudeva niente, con
+//  tre conseguenze tutte visibili in un render:
+//    - nessun fondo e nessuno spessore: si guardava DENTRO l'oggetto;
+//    - profilo a spezzata, quindi spigoli netti dove i punti si uniscono,
+//      che su una ceramica si leggono come un difetto;
+//    - nessun modo di chiedere "un vaso" senza scrivere a mano dieci punti.
+//
+//  Qui il profilo si INTERPOLA (Catmull-Rom), il solido si CHIUDE, e con
+//  `wall` diventa un recipiente vero: parete esterna, parete interna, fondo
+//  e labbro.
+// =======================================================================
+
+/** Silhouette note: `[r, y]` normalizzati (r in 0..0.5, y in 0..1). */
+const VESSEL_PROFILES = {
+    vase:    [[0.30, 0.00], [0.33, 0.04], [0.45, 0.28], [0.50, 0.42],
+              [0.44, 0.58], [0.28, 0.74], [0.26, 0.86], [0.33, 1.00]],
+    amphora: [[0.12, 0.00], [0.22, 0.05], [0.42, 0.22], [0.50, 0.40],
+              [0.42, 0.60], [0.24, 0.76], [0.20, 0.88], [0.30, 1.00]],
+    bottle:  [[0.34, 0.00], [0.36, 0.06], [0.36, 0.42], [0.30, 0.56],
+              [0.15, 0.68], [0.13, 0.92], [0.17, 1.00]],
+    goblet:  [[0.40, 0.00], [0.40, 0.03], [0.16, 0.10], [0.07, 0.20],
+              [0.07, 0.44], [0.22, 0.54], [0.40, 0.72], [0.44, 1.00]],
+    bowl:    [[0.18, 0.00], [0.28, 0.06], [0.44, 0.30], [0.50, 0.70],
+              [0.50, 1.00]],
+    pot:     [[0.30, 0.00], [0.33, 0.05], [0.42, 0.45], [0.46, 0.85],
+              [0.50, 1.00]],
+    urn:     [[0.22, 0.00], [0.34, 0.08], [0.50, 0.35], [0.46, 0.66],
+              [0.30, 0.88], [0.34, 1.00]],
+    column:  [[0.44, 0.00], [0.50, 0.04], [0.46, 0.10], [0.44, 0.50],
+              [0.40, 0.90], [0.48, 0.96], [0.50, 1.00]],
+    baluster:[[0.36, 0.00], [0.40, 0.06], [0.22, 0.16], [0.38, 0.34],
+              [0.44, 0.48], [0.30, 0.66], [0.16, 0.80], [0.34, 0.94],
+              [0.38, 1.00]],
+    plate:   [[0.00, 0.00], [0.30, 0.02], [0.44, 0.10], [0.50, 0.24],
+              [0.50, 0.30]],
+    dome:    [[0.50, 0.00], [0.49, 0.20], [0.44, 0.50], [0.30, 0.80],
+              [0.00, 1.00]],
+    barrel:  [[0.40, 0.00], [0.44, 0.10], [0.50, 0.50], [0.44, 0.90],
+              [0.40, 1.00]],
+};
+
+const VESSEL_ALIASES = {
+    vaso: 'vase', anfora: 'amphora', bottiglia: 'bottle', calice: 'goblet',
+    chalice: 'goblet', cup: 'goblet', bicchiere: 'goblet', ciotola: 'bowl',
+    scodella: 'bowl', pentola: 'pot', vasetto: 'pot', giara: 'urn',
+    urna: 'urn', colonna: 'column', pilastro: 'column', balaustra: 'baluster',
+    piatto: 'plate', dish: 'plate', cupola: 'dome', botte: 'barrel',
+    keg: 'barrel', jar: 'urn',
+};
+
+function vesselProfile(name) {
+    const s = String(name || '').trim().toLowerCase();
+    const key = VESSEL_ALIASES[s] || s;
+    const p = VESSEL_PROFILES[key];
+    return p ? p.map(q => [q[0], q[1]]) : null;
+}
+
+/**
+ * Interpolazione Catmull-Rom del profilo: pochi punti, silhouette liscia.
+ * Senza questo il contorno e' una spezzata, e su un vaso gli spigoli fra i
+ * segmenti si vedono come difetti di modellazione.
+ */
+function smoothProfile(pts, samples) {
+    if (!pts || pts.length < 2) return pts || [];
+    if (pts.length === 2 || samples <= pts.length) return pts.map(p => [p[0], p[1]]);
+    const n = pts.length;
+    const out = [];
+    const total = Math.max(pts.length, samples | 0);
+    for (let i = 0; i < total; i++) {
+        const t = (i / (total - 1)) * (n - 1);
+        const k = Math.min(n - 2, Math.floor(t));
+        const f = t - k;
+        // Punti di controllo con estremi duplicati: la curva parte e finisce
+        // esattamente sul primo e sull'ultimo punto, che su un profilo e'
+        // obbligatorio (il fondo e il labbro non si spostano).
+        const p0 = pts[Math.max(0, k - 1)];
+        const p1 = pts[k];
+        const p2 = pts[Math.min(n - 1, k + 1)];
+        const p3 = pts[Math.min(n - 1, k + 2)];
+        const f2 = f * f, f3 = f2 * f;
+        const cr = (a, b, c, d) =>
+            0.5 * ((2 * b) + (-a + c) * f + (2 * a - 5 * b + 4 * c - d) * f2
+                   + (-a + 3 * b - 3 * c + d) * f3);
+        out.push([Math.max(0, cr(p0[0], p1[0], p2[0], p3[0])),
+                  cr(p0[1], p1[1], p2[1], p3[1])]);
+    }
+    return out;
+}
+
+/**
+ * Rivoluzione di un profilo, con o senza parete.
+ *
+ * `prof`  : lista `[r, y]` dal BASSO verso l'ALTO, oppure un nome noto.
+ * `wall`  : spessore della parete. > 0 => recipiente CAVO (parete interna,
+ *           fondo e labbro). 0 => solido pieno.
+ * `arc`   : gradi di rivoluzione (360 = intero).
+ */
+function primLathe2(prof, sides, arc, axis, wall, smooth) {
+    let pts = Array.isArray(prof) ? prof.map(p => [Math.abs(p[0]), p[1]]) : vesselProfile(prof);
+    if (!pts || pts.length < 2) return primCyl(0.5, 1, sides, 1, axis);
+    pts.sort((a, b) => a[1] - b[1]);
+
+    sides = Math.max(6, sides | 0 || 16);
+    const samples = smooth === false ? pts.length
+        : Math.max(pts.length, Math.min(64, pts.length * 5));
+    pts = smoothProfile(pts, samples);
+
+    if (arc == null) arc = 360;
+    const arcR = (arc / 360) * Math.PI * 2;
+    const closedRing = Math.abs(arc - 360) < 0.5;
+    const segs = closedRing ? sides : Math.max(3, Math.ceil(sides * arc / 360));
+
+    const yBottom = pts[0][1];
+    const yTop = pts[pts.length - 1][1];
+    const w = Math.max(0, wall || 0);
+
+    const pos = [];
+    const idx = [];
+
+    function ringOf(profile) {
+        const base = (pos.length / 3) | 0;
+        for (let i = 0; i <= segs; i++) {
+            const a = (i / segs) * arcR;
+            const c = Math.cos(a), s = Math.sin(a);
+            for (let j = 0; j < profile.length; j++) {
+                pos.push(profile[j][0] * c, profile[j][1], profile[j][0] * s);
+            }
+        }
+        return { base: base, stride: profile.length, count: profile.length };
+    }
+
+    function quads(ring, flip) {
+        for (let i = 0; i < segs; i++) {
+            for (let j = 0; j < ring.count - 1; j++) {
+                const a = ring.base + i * ring.stride + j;
+                const b = a + ring.stride;
+                if (flip) idx.push(a, a + 1, b, a + 1, b + 1, b);
+                else idx.push(a, b, a + 1, a + 1, b, b + 1);
+            }
+        }
+    }
+
+    const outer = ringOf(pts);
+    quads(outer, false);
+
+    if (w > 1e-6) {
+        // Parete interna: stesso profilo rientrato di `wall`, dal fondo+wall
+        // in su. Il raggio si tiene positivo: su un collo strettissimo la
+        // parete si assottiglia invece di rivoltarsi.
+        const inner = [];
+        for (let j = 0; j < pts.length; j++) {
+            const y = pts[j][1];
+            if (y < yBottom + w) continue;
+            inner.push([Math.max(0.0004, pts[j][0] - w), y]);
+        }
+        if (inner.length >= 2) {
+            inner[0] = [inner[0][0], yBottom + w];
+            const inRing = ringOf(inner);
+            quads(inRing, true);          // normali verso l'interno
+            // Labbro: anello che unisce il bordo esterno a quello interno.
+            for (let i = 0; i < segs; i++) {
+                const o0 = outer.base + i * outer.stride + (outer.count - 1);
+                const o1 = o0 + outer.stride;
+                const i0 = inRing.base + i * inRing.stride + (inRing.count - 1);
+                const i1 = i0 + inRing.stride;
+                idx.push(o0, i0, o1, i0, i1, o1);
+            }
+            // Fondo interno: disco alla quota yBottom+w.
+            const cIn = (pos.length / 3) | 0;
+            pos.push(0, yBottom + w, 0);
+            for (let i = 0; i < segs; i++) {
+                const a = inRing.base + i * inRing.stride;
+                const b = inRing.base + ((i + 1) % (segs + 1)) * inRing.stride;
+                idx.push(cIn, a, b);
+            }
+        }
+    } else if (pts[pts.length - 1][0] > 1e-5) {
+        // Solido: coperchio in cima (se il profilo non finisce a punta).
+        const cTop = (pos.length / 3) | 0;
+        pos.push(0, yTop, 0);
+        for (let i = 0; i < segs; i++) {
+            const a = outer.base + i * outer.stride + (outer.count - 1);
+            const b = outer.base + ((i + 1) % (segs + 1)) * outer.stride + (outer.count - 1);
+            idx.push(cTop, a, b);
+        }
+    }
+
+    // Fondo esterno: sempre, anche sul solido. Senza, si guarda dentro
+    // l'oggetto da sotto — ed e' esattamente cio' che faceva il vaso.
+    if (pts[0][0] > 1e-5) {
+        const cBot = (pos.length / 3) | 0;
+        pos.push(0, yBottom, 0);
+        for (let i = 0; i < segs; i++) {
+            const a = outer.base + i * outer.stride;
+            const b = outer.base + ((i + 1) % (segs + 1)) * outer.stride;
+            idx.push(cBot, b, a);
+        }
+    }
+
+    let m = meshCreate(pos, idx);
+    if (axis === 'x') meshRotate(m, 0, 0, -90);
+    else if (axis === 'z') meshRotate(m, 90, 0, 0);
+    return m;
+}
+
 /**
  * Applica tutti i deformatori dichiarati su un nodo GIA' risolto.
  * L'ordine e' fisso e non e' arbitrario: rastremare dopo aver piegato
@@ -2263,6 +2457,7 @@ function resolveNode(node, params) {
     if (node.axis) n.axis = node.axis;
     if (node.shape) n.shape = node.shape;
     if (node.bendTo) n.bendTo = node.bendTo;
+    if (node.smooth != null) n.smooth = node.smooth;
 
     // Deformatori: i loro campi sono oggetti, e ognuno puo' contenere
     // espressioni. Si risolvono qui, non nel deformatore, cosi' quel modulo
@@ -2337,16 +2532,33 @@ function resolveNode(node, params) {
     return n;
 }
 
+/**
+ * Una istanza dell'array.
+ *
+ * L'ordine e' la parte che conta. Prima l'orientamento proprio del pezzo
+ * (`rot`), poi la sua posizione (`at`), e SOLO ALLA FINE lo scostamento
+ * dell'array. Cosi' `arr.rot` diventa un array POLARE: il pezzo viene portato
+ * alla sua distanza dall'asse e poi fatto girare attorno all'origine — bulloni
+ * su una flangia, colonne di una rotonda, raggi di una ruota, greche su un vaso,
+ * denti di un ingranaggio.
+ *
+ * Prima la rotazione dell'array veniva applicata mentre il pezzo era ancora
+ * sull'origine: lo girava su se' stesso e le dodici copie finivano tutte nello
+ * STESSO punto. Si vedeva una decorazione sola invece di dodici.
+ */
 function transformInstance(mesh, at, rot, i, arr) {
     let m = meshClone(mesh);
-    if (arr && i > 0) {
-        meshTranslate(m, arr.step[0] * i, arr.step[1] * i, arr.step[2] * i);
-        if (arr.rot) {
-            meshRotate(m, (arr.rot[0] || 0) * i, (arr.rot[1] || 0) * i, (arr.rot[2] || 0) * i);
-        }
-    }
     if (rot) meshRotate(m, rot[0] || 0, rot[1] || 0, rot[2] || 0);
     if (at) meshTranslate(m, at[0] || 0, at[1] || 0, at[2] || 0);
+    if (arr && i > 0) {
+        if (arr.step) {
+            meshTranslate(m, arr.step[0] * i, arr.step[1] * i, arr.step[2] * i);
+        }
+        if (arr.rot) {
+            meshRotate(m, (arr.rot[0] || 0) * i, (arr.rot[1] || 0) * i,
+                       (arr.rot[2] || 0) * i);
+        }
+    }
     return m;
 }
 
@@ -2599,6 +2811,15 @@ function validateGround(spec, built) {
 
 function validateSize(spec, built) {
     const d = [];
+    // Senza un `size` DICHIARATO non c'e' nessun bersaglio: il default [1,1,1]
+    // e' un segnaposto, e giudicare contro di esso produce un difetto su ogni
+    // oggetto piu' piccolo di un metro — cioe' su quasi tutti.
+    if (!spec.sizeDeclared && !spec.__sizeFromPlan) {
+        const t = spec.size;
+        const isDefault = !t || (Math.abs(t[0] - 1) < 1e-9 && Math.abs(t[1] - 1) < 1e-9
+                                 && Math.abs(t[2] - 1) < 1e-9);
+        if (isDefault) return validateSizeSanity(spec, built);
+    }
     const target = spec.size || [1, 1, 1];
     const size = built.bounds.size;
     for (let i = 0; i < 3; i++) {
@@ -2612,7 +2833,25 @@ function validateSize(spec, built) {
                 'Riscalare o correggere i params che comandano l\'asse ' + axis + '.'));
         }
     }
-    if (size[0] < 0.01 && size[1] < 0.01 && size[2] < 0.01) {
+    return d.concat(validateSizeSanity(spec, built));
+}
+
+/** Controllo di plausibilita' assoluta: un oggetto di 40 metri o di 2 mm e'
+ *  sbagliato anche senza un bersaglio dichiarato. */
+function validateSizeSanity(spec, built) {
+    const d = [];
+    const size = built.bounds.size;
+    const maxDim = Math.max(size[0], size[1], size[2]);
+    if (maxDim < 0.01) {
+        d.push(defect('tooSmall', 'high', '',
+            'L\'asset misura ' + (maxDim * 1000).toFixed(1) + ' mm sul lato piu\' lungo.',
+            'Le misure sono in METRI: rivedere i params.'));
+    } else if (maxDim > 60 && spec.cat !== 'struct') {
+        d.push(defect('tooBig', 'high', '',
+            'L\'asset misura ' + maxDim.toFixed(1) + ' m sul lato piu\' lungo.',
+            'Le misure sono in METRI: rivedere i params.'));
+    }
+    if (size[0] < 0.001 && size[1] < 0.001 && size[2] < 0.001) {
         d.push(defect('emptyMesh', 'high', '',
             'La mesh risultante e\' vuota o degenerata.',
             'Verificare che i nodi producano volumi reali.'));
@@ -2862,32 +3101,40 @@ function validateLogic(spec) {
 }
 
 /**
- * Dettaglio effettivo contro il livello richiesto.
+ * Dettaglio effettivo contro quello richiesto.
  *
- * A `detail: 3` il budget e' 200 nodi e il generatore ne usa dieci: il
- * risultato e' corretto nelle misure e povero da guardare (un manico che e' un
- * cilindro liscio, una guardia che e' una lastra). Chiedere "piu' dettaglio"
- * nel prompt non basta, perche' non c'e' niente che lo verifichi — quindi lo si
- * MISURA, e il difetto entra nel ciclo di correzione come tutti gli altri.
+ * Il bersaglio e' il numero di pezzi che il PIANO prevede (catena + dettagli),
+ * non una frazione del budget: un vaso e' un solido di rivoluzione e sta in due
+ * pezzi, e pretenderne quaranta perche' il budget e' duecento spingerebbe il
+ * ciclo di correzione a imbullonargli addosso trentotto pezzi inutili. Il
+ * budget e' un TETTO, non una quota da riempire.
  *
- * Si contano i nodi VISIBILI: gli utensili delle booleane non sono dettaglio
- * che si vede, e contarli premierebbe chi scava buchi invece di modellare.
+ * Senza piano si usa un minimo prudente, e resta un avviso: senza distinta non
+ * si sa quanti pezzi meriti quell'oggetto.
  */
-function validateDetail(spec, built) {
+function validateDetail(spec, built, opts) {
     const d = [];
     const detail = Math.max(0, Math.min(3, spec.detail | 0));
     if (detail < 2) return d;                 // a bozza/basso la poverta' e' voluta
-    const budget = DETAIL_LEVELS[detail].nodes;
     const visible = (built.parts || []).length;
-    const want = Math.floor(budget * (detail === 3 ? 0.22 : 0.14));
+    const expected = opts && opts.expectedParts;
+    let want, sev;
+    if (expected > 0) {
+        // Si tollera un pezzo in meno del piano: due dettagli fusi in uno non
+        // sono un difetto.
+        want = Math.max(2, expected - 1);
+        sev = detail === 3 ? 'high' : 'medium';
+    } else {
+        want = detail === 3 ? 6 : 4;
+        sev = 'medium';
+    }
     if (visible >= want) return d;
-    d.push(defect('underDetailed', detail === 3 ? 'high' : 'medium', '',
-        'Solo ' + visible + ' pezzi visibili per un dettaglio ' + detail
-        + ': il budget e\' ' + budget + ', ne servono almeno ' + want + '.',
-        'Aggiungere sottodettagli sui pezzi che ci sono: avvolgimento del manico '
-        + 'con arr, collari alle giunzioni, terminali sagomati, scanalature con '
-        + 'sub, rivetti, smussi. NON ingrandire l\'oggetto e non aggiungere '
-        + 'pezzi che il piano non prevede.'));
+    d.push(defect('underDetailed', sev, '',
+        'Solo ' + visible + ' pezzi visibili: per questo dettaglio ne servono '
+        + 'almeno ' + want + (expected > 0 ? ' (il piano ne prevede ' + expected + ')' : '') + '.',
+        'Aggiungere i sottodettagli previsti: avvolgimenti con arr, collari alle '
+        + 'giunzioni, terminali sagomati, scanalature con sub, rivetti. NON '
+        + 'ingrandire l\'oggetto e non aggiungere pezzi fuori dal piano.'));
     return d;
 }
 
@@ -2930,7 +3177,7 @@ function validateAll(spec, built, opts) {
         .concat(validateCabin(spec, built))
         .concat(validateDegenerates(spec, built))
         .concat(validateLogic(spec))
-        .concat(validateDetail(spec, built))
+        .concat(validateDetail(spec, built, opts))
         .concat(validateShaping(spec, built));
     // Con un PIANO l'ingombro non si giudica qui: l'audit lo confronta pezzo per
     // pezzo con numeri verificati, e un secondo giudizio piu' grezzo sullo stesso
@@ -3196,7 +3443,12 @@ float spotN(vec3 p){ return step(0.65, _samNoise(p)); }
   vec3 p = samObjPos * samScale + samSeed;
   float n = ${noiseFn}(p);
   if (samBands > 0.5) n = floor(n * samBands) / samBands;
-  float t = clamp(n * samAmp * 2.0, 0.0, 1.0);
+  // amp come CONTRASTO centrato: il rumore si allontana da 0.5 in entrambi i
+  // versi. La vecchia formula (n * amp * 2) su un fbm - che sta quasi sempre
+  // fra 0.25 e 0.75 - dava una banda strettissima, e a valori bassi la
+  // variazione era invisibile: la superficie sembrava tinta piatta e si
+  // concludeva che il rumore non funzionasse.
+  float t = clamp(0.5 + (n - 0.5) * samAmp * 3.0, 0.0, 1.0);
   diffuseColor.rgb = mix(diffuseColor.rgb, samCol2, t);
 }
 `);
@@ -4163,7 +4415,7 @@ function restoreHistory(delta) {
     renderPlan(appState.plan);
     const built = showSpec(appState.spec);
     appState.built = built;
-    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     selectNode(selectedName, true);
     return true;
@@ -4354,7 +4606,7 @@ function _mulOrExpr(cur, factor) {
 function rebuildAfterEdit() {
     const built = showSpec(appState.spec);
     appState.built = built;
-    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     selectNode(selectedName, true);
 }
@@ -4663,6 +4915,15 @@ function readForm() {
     };
 }
 
+/** Quanti pezzi ci si aspetta di vedere: lo dice il PIANO, non il budget. */
+function validateOpts() {
+    const plan = appState.plan;
+    const expected = plan && plan.chain
+        ? plan.chain.length + ((plan.extras && plan.extras.length) || 0)
+        : 0;
+    return { hasPlan: !!plan, expectedParts: expected };
+}
+
 function renderPlan(plan) {
     const box = $('planOut');
     if (!box) return;
@@ -4777,7 +5038,7 @@ function renderDefects(defects) {
 function rebuildCurrent() {
     if (!appState.spec) return;
     const built = showSpec(appState.spec);
-    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     return { built, defects };
 }
@@ -4837,7 +5098,7 @@ async function fixRound(defects, humanText) {
     }
     appState.spec = spec;
     appState.built = built;
-    const local = validateAll(spec, built, { hasPlan: !!appState.plan });
+    const local = validateAll(spec, built, validateOpts());
     const audit = await auditAgainstPlan(spec, built);
     const merged = mergeDefects([audit, local]);
     showSpecInUi(spec, built, merged);
@@ -4878,7 +5139,7 @@ async function doGenerate() {
         appState.spec = spec;
         appState.built = built;
 
-        let local = validateAll(spec, built, { hasPlan: !!appState.plan });
+        let local = validateAll(spec, built, validateOpts());
         let audit = await auditAgainstPlan(spec, built);
         let defects = mergeDefects([audit, local]);
         showSpecInUi(spec, built, defects);
@@ -5287,7 +5548,7 @@ function wireUi() {
             const built = showSpec(data.spec);
             appState.spec = data.spec;
             appState.built = built;
-            const local = validateAll(data.spec, built, { hasPlan: !!appState.plan });
+            const local = validateAll(data.spec, built, validateOpts());
             const audit = await auditAgainstPlan(data.spec, built);
             showSpecInUi(data.spec, built, mergeDefects([audit, local]));
             setStatus(t('status.normalized', { n: (data.warnings || []).length }), 'ok');

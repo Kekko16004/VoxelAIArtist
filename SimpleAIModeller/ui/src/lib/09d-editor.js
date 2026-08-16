@@ -46,7 +46,7 @@ function restoreHistory(delta) {
     renderPlan(appState.plan);
     const built = showSpec(appState.spec);
     appState.built = built;
-    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     selectNode(selectedName, true);
     return true;
@@ -237,7 +237,7 @@ function _mulOrExpr(cur, factor) {
 function rebuildAfterEdit() {
     const built = showSpec(appState.spec);
     appState.built = built;
-    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     selectNode(selectedName, true);
 }

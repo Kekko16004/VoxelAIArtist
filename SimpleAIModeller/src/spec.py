@@ -80,7 +80,7 @@ PRIMITIVES = {
     "pyr":    ("s", "axis"),
     "tube":   ("r", "len", "axis", "path", "wall"),
     "extr":   ("prof", "len", "axis", "s", "bevel", "sides", "inner"),
-    "lathe":  ("prof", "axis", "arc", "sides"),
+    "lathe":  ("prof", "axis", "arc", "sides", "wall", "r", "len", "s", "smooth"),
     "loft":   ("secs", "axis", "closed", "shape"),
     "helix":  ("r", "r2", "len", "axis", "turns"),
     "field":  ("s", "seed", "amp", "freq", "axis"),
@@ -395,10 +395,33 @@ def _material(raw, warns, at):
 
 # --- Nodi -------------------------------------------------------------------
 
+# Silhouette note per i solidi di rivoluzione (`lathe`). Sono NORMALIZZATE nel
+# motore (r 0..0.5, y 0..1) e si scalano su `r`/`len`/`s`: chiedere "un vaso"
+# costa una parola invece di dieci punti scritti a mano, ed e' la differenza fra
+# un vaso e una pila di cilindri.
+VESSEL_PROFILES = (
+    "vase", "amphora", "bottle", "goblet", "bowl", "pot", "urn", "column",
+    "baluster", "plate", "dome", "barrel",
+)
+
+VESSEL_ALIASES = {
+    "vaso": "vase", "anfora": "amphora", "bottiglia": "bottle",
+    "calice": "goblet", "chalice": "goblet", "cup": "goblet",
+    "bicchiere": "goblet", "ciotola": "bowl", "scodella": "bowl",
+    "pentola": "pot", "vasetto": "pot", "giara": "urn", "urna": "urn",
+    "jar": "urn", "colonna": "column", "pilastro": "column",
+    "balaustra": "baluster", "piatto": "plate", "dish": "plate",
+    "cupola": "dome", "botte": "barrel", "keg": "barrel",
+}
+
+
 def _profile(raw, warns, at, params):
     """Profilo 2D per `extr` / `lathe`: nome noto o lista di punti."""
     if isinstance(raw, str):
         s = raw.strip().lower()
+        s = VESSEL_ALIASES.get(s, s)
+        if s in VESSEL_PROFILES:
+            return s
         known = ("rect", "rrect", "ngon", "star", "l", "t", "cross", "arc",
                  "tri", "trapz", "teardrop")
         if s not in known:
@@ -499,6 +522,8 @@ def _node(raw, warns, params, index):
         node["cap"] = bool(_first(raw, "cap", "capped"))
     if _first(raw, "closed") is not None:
         node["closed"] = bool(_first(raw, "closed"))
+    if _first(raw, "smooth", "smoothProfile") is not None:
+        node["smooth"] = bool(_first(raw, "smooth", "smoothProfile"))
 
     prof = _first(raw, "prof", "profile", "section", "shape2d", "points", "pts")
     if prof is not None:

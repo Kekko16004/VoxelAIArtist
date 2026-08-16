@@ -24,6 +24,7 @@ function resolveNode(node, params) {
     if (node.axis) n.axis = node.axis;
     if (node.shape) n.shape = node.shape;
     if (node.bendTo) n.bendTo = node.bendTo;
+    if (node.smooth != null) n.smooth = node.smooth;
 
     // Deformatori: i loro campi sono oggetti, e ognuno puo' contenere
     // espressioni. Si risolvono qui, non nel deformatore, cosi' quel modulo
@@ -98,16 +99,33 @@ function resolveNode(node, params) {
     return n;
 }
 
+/**
+ * Una istanza dell'array.
+ *
+ * L'ordine e' la parte che conta. Prima l'orientamento proprio del pezzo
+ * (`rot`), poi la sua posizione (`at`), e SOLO ALLA FINE lo scostamento
+ * dell'array. Cosi' `arr.rot` diventa un array POLARE: il pezzo viene portato
+ * alla sua distanza dall'asse e poi fatto girare attorno all'origine — bulloni
+ * su una flangia, colonne di una rotonda, raggi di una ruota, greche su un vaso,
+ * denti di un ingranaggio.
+ *
+ * Prima la rotazione dell'array veniva applicata mentre il pezzo era ancora
+ * sull'origine: lo girava su se' stesso e le dodici copie finivano tutte nello
+ * STESSO punto. Si vedeva una decorazione sola invece di dodici.
+ */
 function transformInstance(mesh, at, rot, i, arr) {
     let m = meshClone(mesh);
-    if (arr && i > 0) {
-        meshTranslate(m, arr.step[0] * i, arr.step[1] * i, arr.step[2] * i);
-        if (arr.rot) {
-            meshRotate(m, (arr.rot[0] || 0) * i, (arr.rot[1] || 0) * i, (arr.rot[2] || 0) * i);
-        }
-    }
     if (rot) meshRotate(m, rot[0] || 0, rot[1] || 0, rot[2] || 0);
     if (at) meshTranslate(m, at[0] || 0, at[1] || 0, at[2] || 0);
+    if (arr && i > 0) {
+        if (arr.step) {
+            meshTranslate(m, arr.step[0] * i, arr.step[1] * i, arr.step[2] * i);
+        }
+        if (arr.rot) {
+            meshRotate(m, (arr.rot[0] || 0) * i, (arr.rot[1] || 0) * i,
+                       (arr.rot[2] || 0) * i);
+        }
+    }
     return m;
 }
 

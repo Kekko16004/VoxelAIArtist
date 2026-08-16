@@ -378,6 +378,215 @@ function _taperPair(v, fallback) {
     return fallback || null;
 }
 
+// =======================================================================
+//  SOLIDI DI RIVOLUZIONE (vasi, bottiglie, calici, colonne, ruote, piatti)
+//
+//  Un vaso non e' una pila di cilindri: e' una SILHOUETTE fatta girare. Il
+//  vecchio `lathe` girava i punti cosi' com'erano e non chiudeva niente, con
+//  tre conseguenze tutte visibili in un render:
+//    - nessun fondo e nessuno spessore: si guardava DENTRO l'oggetto;
+//    - profilo a spezzata, quindi spigoli netti dove i punti si uniscono,
+//      che su una ceramica si leggono come un difetto;
+//    - nessun modo di chiedere "un vaso" senza scrivere a mano dieci punti.
+//
+//  Qui il profilo si INTERPOLA (Catmull-Rom), il solido si CHIUDE, e con
+//  `wall` diventa un recipiente vero: parete esterna, parete interna, fondo
+//  e labbro.
+// =======================================================================
+
+/** Silhouette note: `[r, y]` normalizzati (r in 0..0.5, y in 0..1). */
+const VESSEL_PROFILES = {
+    vase:    [[0.30, 0.00], [0.33, 0.04], [0.45, 0.28], [0.50, 0.42],
+              [0.44, 0.58], [0.28, 0.74], [0.26, 0.86], [0.33, 1.00]],
+    amphora: [[0.12, 0.00], [0.22, 0.05], [0.42, 0.22], [0.50, 0.40],
+              [0.42, 0.60], [0.24, 0.76], [0.20, 0.88], [0.30, 1.00]],
+    bottle:  [[0.34, 0.00], [0.36, 0.06], [0.36, 0.42], [0.30, 0.56],
+              [0.15, 0.68], [0.13, 0.92], [0.17, 1.00]],
+    goblet:  [[0.40, 0.00], [0.40, 0.03], [0.16, 0.10], [0.07, 0.20],
+              [0.07, 0.44], [0.22, 0.54], [0.40, 0.72], [0.44, 1.00]],
+    bowl:    [[0.18, 0.00], [0.28, 0.06], [0.44, 0.30], [0.50, 0.70],
+              [0.50, 1.00]],
+    pot:     [[0.30, 0.00], [0.33, 0.05], [0.42, 0.45], [0.46, 0.85],
+              [0.50, 1.00]],
+    urn:     [[0.22, 0.00], [0.34, 0.08], [0.50, 0.35], [0.46, 0.66],
+              [0.30, 0.88], [0.34, 1.00]],
+    column:  [[0.44, 0.00], [0.50, 0.04], [0.46, 0.10], [0.44, 0.50],
+              [0.40, 0.90], [0.48, 0.96], [0.50, 1.00]],
+    baluster:[[0.36, 0.00], [0.40, 0.06], [0.22, 0.16], [0.38, 0.34],
+              [0.44, 0.48], [0.30, 0.66], [0.16, 0.80], [0.34, 0.94],
+              [0.38, 1.00]],
+    plate:   [[0.00, 0.00], [0.30, 0.02], [0.44, 0.10], [0.50, 0.24],
+              [0.50, 0.30]],
+    dome:    [[0.50, 0.00], [0.49, 0.20], [0.44, 0.50], [0.30, 0.80],
+              [0.00, 1.00]],
+    barrel:  [[0.40, 0.00], [0.44, 0.10], [0.50, 0.50], [0.44, 0.90],
+              [0.40, 1.00]],
+};
+
+const VESSEL_ALIASES = {
+    vaso: 'vase', anfora: 'amphora', bottiglia: 'bottle', calice: 'goblet',
+    chalice: 'goblet', cup: 'goblet', bicchiere: 'goblet', ciotola: 'bowl',
+    scodella: 'bowl', pentola: 'pot', vasetto: 'pot', giara: 'urn',
+    urna: 'urn', colonna: 'column', pilastro: 'column', balaustra: 'baluster',
+    piatto: 'plate', dish: 'plate', cupola: 'dome', botte: 'barrel',
+    keg: 'barrel', jar: 'urn',
+};
+
+function vesselProfile(name) {
+    const s = String(name || '').trim().toLowerCase();
+    const key = VESSEL_ALIASES[s] || s;
+    const p = VESSEL_PROFILES[key];
+    return p ? p.map(q => [q[0], q[1]]) : null;
+}
+
+/**
+ * Interpolazione Catmull-Rom del profilo: pochi punti, silhouette liscia.
+ * Senza questo il contorno e' una spezzata, e su un vaso gli spigoli fra i
+ * segmenti si vedono come difetti di modellazione.
+ */
+function smoothProfile(pts, samples) {
+    if (!pts || pts.length < 2) return pts || [];
+    if (pts.length === 2 || samples <= pts.length) return pts.map(p => [p[0], p[1]]);
+    const n = pts.length;
+    const out = [];
+    const total = Math.max(pts.length, samples | 0);
+    for (let i = 0; i < total; i++) {
+        const t = (i / (total - 1)) * (n - 1);
+        const k = Math.min(n - 2, Math.floor(t));
+        const f = t - k;
+        // Punti di controllo con estremi duplicati: la curva parte e finisce
+        // esattamente sul primo e sull'ultimo punto, che su un profilo e'
+        // obbligatorio (il fondo e il labbro non si spostano).
+        const p0 = pts[Math.max(0, k - 1)];
+        const p1 = pts[k];
+        const p2 = pts[Math.min(n - 1, k + 1)];
+        const p3 = pts[Math.min(n - 1, k + 2)];
+        const f2 = f * f, f3 = f2 * f;
+        const cr = (a, b, c, d) =>
+            0.5 * ((2 * b) + (-a + c) * f + (2 * a - 5 * b + 4 * c - d) * f2
+                   + (-a + 3 * b - 3 * c + d) * f3);
+        out.push([Math.max(0, cr(p0[0], p1[0], p2[0], p3[0])),
+                  cr(p0[1], p1[1], p2[1], p3[1])]);
+    }
+    return out;
+}
+
+/**
+ * Rivoluzione di un profilo, con o senza parete.
+ *
+ * `prof`  : lista `[r, y]` dal BASSO verso l'ALTO, oppure un nome noto.
+ * `wall`  : spessore della parete. > 0 => recipiente CAVO (parete interna,
+ *           fondo e labbro). 0 => solido pieno.
+ * `arc`   : gradi di rivoluzione (360 = intero).
+ */
+function primLathe2(prof, sides, arc, axis, wall, smooth) {
+    let pts = Array.isArray(prof) ? prof.map(p => [Math.abs(p[0]), p[1]]) : vesselProfile(prof);
+    if (!pts || pts.length < 2) return primCyl(0.5, 1, sides, 1, axis);
+    pts.sort((a, b) => a[1] - b[1]);
+
+    sides = Math.max(6, sides | 0 || 16);
+    const samples = smooth === false ? pts.length
+        : Math.max(pts.length, Math.min(64, pts.length * 5));
+    pts = smoothProfile(pts, samples);
+
+    if (arc == null) arc = 360;
+    const arcR = (arc / 360) * Math.PI * 2;
+    const closedRing = Math.abs(arc - 360) < 0.5;
+    const segs = closedRing ? sides : Math.max(3, Math.ceil(sides * arc / 360));
+
+    const yBottom = pts[0][1];
+    const yTop = pts[pts.length - 1][1];
+    const w = Math.max(0, wall || 0);
+
+    const pos = [];
+    const idx = [];
+
+    function ringOf(profile) {
+        const base = (pos.length / 3) | 0;
+        for (let i = 0; i <= segs; i++) {
+            const a = (i / segs) * arcR;
+            const c = Math.cos(a), s = Math.sin(a);
+            for (let j = 0; j < profile.length; j++) {
+                pos.push(profile[j][0] * c, profile[j][1], profile[j][0] * s);
+            }
+        }
+        return { base: base, stride: profile.length, count: profile.length };
+    }
+
+    function quads(ring, flip) {
+        for (let i = 0; i < segs; i++) {
+            for (let j = 0; j < ring.count - 1; j++) {
+                const a = ring.base + i * ring.stride + j;
+                const b = a + ring.stride;
+                if (flip) idx.push(a, a + 1, b, a + 1, b + 1, b);
+                else idx.push(a, b, a + 1, a + 1, b, b + 1);
+            }
+        }
+    }
+
+    const outer = ringOf(pts);
+    quads(outer, false);
+
+    if (w > 1e-6) {
+        // Parete interna: stesso profilo rientrato di `wall`, dal fondo+wall
+        // in su. Il raggio si tiene positivo: su un collo strettissimo la
+        // parete si assottiglia invece di rivoltarsi.
+        const inner = [];
+        for (let j = 0; j < pts.length; j++) {
+            const y = pts[j][1];
+            if (y < yBottom + w) continue;
+            inner.push([Math.max(0.0004, pts[j][0] - w), y]);
+        }
+        if (inner.length >= 2) {
+            inner[0] = [inner[0][0], yBottom + w];
+            const inRing = ringOf(inner);
+            quads(inRing, true);          // normali verso l'interno
+            // Labbro: anello che unisce il bordo esterno a quello interno.
+            for (let i = 0; i < segs; i++) {
+                const o0 = outer.base + i * outer.stride + (outer.count - 1);
+                const o1 = o0 + outer.stride;
+                const i0 = inRing.base + i * inRing.stride + (inRing.count - 1);
+                const i1 = i0 + inRing.stride;
+                idx.push(o0, i0, o1, i0, i1, o1);
+            }
+            // Fondo interno: disco alla quota yBottom+w.
+            const cIn = (pos.length / 3) | 0;
+            pos.push(0, yBottom + w, 0);
+            for (let i = 0; i < segs; i++) {
+                const a = inRing.base + i * inRing.stride;
+                const b = inRing.base + ((i + 1) % (segs + 1)) * inRing.stride;
+                idx.push(cIn, a, b);
+            }
+        }
+    } else if (pts[pts.length - 1][0] > 1e-5) {
+        // Solido: coperchio in cima (se il profilo non finisce a punta).
+        const cTop = (pos.length / 3) | 0;
+        pos.push(0, yTop, 0);
+        for (let i = 0; i < segs; i++) {
+            const a = outer.base + i * outer.stride + (outer.count - 1);
+            const b = outer.base + ((i + 1) % (segs + 1)) * outer.stride + (outer.count - 1);
+            idx.push(cTop, a, b);
+        }
+    }
+
+    // Fondo esterno: sempre, anche sul solido. Senza, si guarda dentro
+    // l'oggetto da sotto — ed e' esattamente cio' che faceva il vaso.
+    if (pts[0][0] > 1e-5) {
+        const cBot = (pos.length / 3) | 0;
+        pos.push(0, yBottom, 0);
+        for (let i = 0; i < segs; i++) {
+            const a = outer.base + i * outer.stride;
+            const b = outer.base + ((i + 1) % (segs + 1)) * outer.stride;
+            idx.push(cBot, b, a);
+        }
+    }
+
+    let m = meshCreate(pos, idx);
+    if (axis === 'x') meshRotate(m, 0, 0, -90);
+    else if (axis === 'z') meshRotate(m, 90, 0, 0);
+    return m;
+}
+
 /**
  * Applica tutti i deformatori dichiarati su un nodo GIA' risolto.
  * L'ordine e' fisso e non e' arbitrario: rastremare dopo aver piegato

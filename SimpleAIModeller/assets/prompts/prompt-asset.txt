@@ -186,7 +186,9 @@ Tutte parametriche. `s` e' [x,y,z] (dimensione PIENA, non il raggio).
 - `extr`    `prof`, `len`, `axis`, `bevel`, `sides`, `inner` — estrusione di un
             profilo 2D. `prof` = `rect` `rrect` `ngon` `star` `l` `t` `cross`
             `tri` `trapz` `arc` `teardrop`, oppure una lista di punti [[x,y],...]
-- `lathe`   `prof`, `axis`, `arc` — rivoluzione: bottiglie, colonne, ruote, cupole
+- `lathe`   `prof`, `r`, `len`, `wall`, `axis`, `arc`, `sides` — TORNIO: vasi,
+            bottiglie, calici, colonne, ruote, cupole. Vedi la sezione dedicata:
+            e' la primitiva piu' importante per ogni oggetto tondo.
 - `loft`    `secs`, `axis` — sezioni interpolate: e' la primitiva delle
             CARROZZERIE, dei tronchi e dei fusti. Esempio:
             `"secs":[{"at":0,"s":[1,0.5,1]},{"at":0.5,"s":[1.2,0.7,1]},
@@ -204,9 +206,44 @@ Tutte parametriche. `s` e' [x,y,z] (dimensione PIENA, non il raggio).
 - `"arr":{"n":4,"step":[0,0,0.5]}` — ripete il nodo 4 volte spostandolo ogni
   volta. Usalo SEMPRE al posto di quattro nodi copiati a mano (ruote di un
   carrello, doghe, finestre di una facciata, gradini, chiodi).
+- `"arr":{"n":12,"rot":[0,30,0]}` — array POLARE: il pezzo viene portato alla
+  sua posizione (`at`, quindi alla sua distanza dall'asse) e poi ripetuto
+  girando attorno all'origine. E' cosi' che si fanno bulloni su una flangia,
+  colonne di una rotonda, raggi di una ruota, greche attorno a un vaso, denti di
+  un ingranaggio. `n * angolo` deve fare 360 per chiudere il giro.
 - `"mir":"x"` — specchia il nodo sull'asse indicato. Per una coppia
   braccio/gamba/ruota scrivi UN nodo con `"mir":"x"` invece di due.
 - `"rot":[gx,gy,gz]` — rotazione in GRADI.
+
+### SOLIDI DI RIVOLUZIONE — usa il TORNIO, non una pila di cilindri
+Tutto cio' che e' simmetrico attorno a un asse si fa con `lathe`, MAI accostando
+cilindri di raggio diverso: vasi, bottiglie, calici, ciotole, piatti, pentole,
+colonne, balaustre, cupole, botti, ruote, pomoli, elmi, campane, funghi.
+Una pila di cilindri ha gradini visibili; un tornio ha una silhouette continua.
+
+Due modi, entrambi validi:
+1. SILHOUETTE NOTA — la piu' rapida. `"prof"` prende un nome e `r`/`len` la
+   scalano:
+   `vase` `amphora` `bottle` `goblet` `bowl` `pot` `urn` `column` `baluster`
+   `plate` `dome` `barrel`
+   ```json
+   { "n":"corpo", "p":"lathe", "axis":"y", "prof":"vase",
+     "r":"rMax", "len":"h", "wall":"sp", "sides":48, "mat":"ceramica" }
+   ```
+2. PROFILO PROPRIO — quando la forma e' particolare. `prof` e' una lista di
+   `[raggio, altezza]` dal BASSO verso l'ALTO, in coordinate ASSOLUTE. Bastano
+   5-8 punti: il motore interpola una curva liscia fra loro.
+   ```json
+   "prof": [[0.075,0.0],[0.11,0.06],[0.145,0.16],[0.12,0.26],[0.062,0.33],[0.095,0.42]]
+   ```
+
+- **`wall` e' quello che rende un recipiente un recipiente**: con `wall` il
+  motore costruisce parete esterna, parete interna, fondo e LABBRO. Senza, il
+  pezzo e' pieno. Un vaso, una tazza, una pentola, un secchio hanno `wall`
+  (3-8 mm per la ceramica, 1-3 mm per il metallo). Un pomolo o una colonna no.
+- `sides` alto (32-64) sui pezzi tondi grandi e in primo piano: e' la differenza
+  fra una curva e un poligono.
+- `arc` sotto 360 da' mezzo tornio (una nicchia, una conca, una tegola).
 
 ### DEFORMATORI (obbligatori per non fare oggetti di mattoni)
 Un volume non deformato si vede: e' un parallelepipedo. Ogni pezzo che nella
@@ -285,9 +322,22 @@ SOTTODETTAGLI CHE CI SI ASPETTA (usa quelli pertinenti, non tutti):
 `noise` aggiunge variazione procedurale (NON serve nessuna texture):
 `t` = `fbm` (venature, marmo, nuvole) `cell` (pietra, crepe) `scratch` (metallo
 graffiato) `stripe` (doghe, mattoni, pannelli) `spot` (ruggine, macchie)
-`grain` (grana fine); `scale` = frequenza (piu' alto = piu' fitto), `amp` = quanta
-variazione (0.1 discreta, 0.3 marcata), `col2` = la seconda tinta, `bands` per
-quantizzare in fasce piatte.
+`grain` (grana fine); `scale` = frequenza, `col2` = la seconda tinta,
+`bands` per quantizzare in fasce piatte.
+
+`amp` e' il CONTRASTO fra le due tinte: sotto 0.15 non si vede, 0.3-0.5 e' una
+variazione leggibile, oltre 0.7 e' marcata. Se un materiale deve sembrare
+lavorato, `amp` sta almeno a 0.3 e `col2` e' DAVVERO diverso da `col` (non la
+stessa tinta un po' piu' scura).
+
+Valori che funzionano, da adattare:
+- legno:    `rough` 0.8  `fbm`/`stripe` scale 20-40, amp 0.35, col2 molto piu' scuro
+- metallo:  `rough` 0.3  `metal` 0.85  `scratch` scale 60-120, amp 0.25
+- ceramica: `rough` 0.25 `fbm` scale 15-25, amp 0.3
+- pietra:   `rough` 0.9  `cell` scale 10-25, amp 0.5
+- cuoio:    `rough` 0.9  `grain` scale 60-120, amp 0.3
+- ruggine:  `rough` 0.95 `spot` scale 25-50, amp 0.6
+- vetro:    `rough` 0.05 `opacity` 0.3, nessun noise
 Servono ALMENO 2-3 materiali distinti: un asset di un solo colore sembra un
 blocco di plastica. Ma tienili sotto 8: una palette ristretta e coerente e' cio'
 che fa sembrare gli asset parte dello stesso gioco.

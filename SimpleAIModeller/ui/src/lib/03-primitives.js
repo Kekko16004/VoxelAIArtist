@@ -384,38 +384,11 @@ function primExtr(prof, len, sides, s, axis, bevel) {
     return m;
 }
 
-function primLathe(prof, sides, arc, axis) {
-    // `prof` e' una lista di [x,y] con x = raggio, y = altezza.
-    let pts;
-    if (Array.isArray(prof)) pts = prof;
-    else pts = _profilePoints(prof, sides, [1, 1]).map(p => [Math.abs(p[0]), p[1]]);
-    if (pts.length < 2) return primCyl(0.5, 1, sides, 1, axis);
-    sides = Math.max(6, sides | 0 || 16);
-    if (arc == null) arc = 360;
-    const arcR = (arc / 360) * Math.PI * 2;
-    const closed = Math.abs(arc - 360) < 0.5;
-    const segs = closed ? sides : Math.max(3, Math.ceil(sides * arc / 360));
-    const pos = [];
-    const idx = [];
-    for (let i = 0; i <= segs; i++) {
-        const a = (i / segs) * arcR;
-        const c = Math.cos(a), s = Math.sin(a);
-        for (let j = 0; j < pts.length; j++) {
-            pos.push(pts[j][0] * c, pts[j][1], pts[j][0] * s);
-        }
-    }
-    const stride = pts.length;
-    for (let i = 0; i < segs; i++) {
-        for (let j = 0; j < pts.length - 1; j++) {
-            const a = i * stride + j, b = a + stride;
-            idx.push(a, b, a + 1, a + 1, b, b + 1);
-        }
-    }
-    let m = meshCreate(pos, idx);
-    if (axis === 'x') meshRotate(m, 0, 0, -90);
-    else if (axis === 'z') meshRotate(m, 90, 0, 0);
-    return m;
-}
+// `primLathe` (rivoluzione a spezzata, senza fondo ne' parete) e' stato
+// RIMOSSO: lo sostituisce `primLathe2` in 03b-deform.js, che interpola il
+// profilo e chiude il solido. Tenerne due avrebbe significato due
+// implementazioni della stessa cosa destinate a divergere — ed e' la prima
+// avvertenza di questo repo.
 
 function primLoft(secs, seg, axis) {
     // secs: [{at, s:[sx,sy,sz]}] ordinati. Si interpolano sezioni circolari/rettangolari.
@@ -667,7 +640,19 @@ function primBuild(node, seg, bevelSeg) {
                                        node.len != null ? node.len : s[1],
                                        node.sides || seg,
                                        s, axis, node.bevel);
-        case 'lathe':  return primLathe(node.prof, node.sides || seg, node.arc, axis);
+        case 'lathe': {
+            // Con un nome noto (`vase`, `bottle`, `goblet`, ...) la silhouette
+            // e' normalizzata 0..1 e va scalata su `s`/`r`/`len`; con punti
+            // espliciti sono coordinate assolute e si rispettano.
+            let prof = node.prof;
+            if (typeof prof === 'string' && vesselProfile(prof)) {
+                const rr = node.r != null ? node.r : (s[0] * 0.5);
+                const hh = node.len != null ? node.len : s[1];
+                prof = vesselProfile(prof).map(p => [p[0] * 2 * rr, p[1] * hh]);
+            }
+            return primLathe2(prof, node.sides || seg, node.arc, axis,
+                              node.wall, node.smooth);
+        }
         case 'loft':   return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
                                         node.closed !== false);
         case 'helix':  return primHelix(node.r || 0.4, node.r2, node.len || 1,
