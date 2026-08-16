@@ -752,3 +752,94 @@ function primTubePath(pathPts, r, seg, wall, taperTo) {
     }
     return meshCreate(pos, idx);
 }
+
+// =======================================================================
+//  AUTO SMOOTH (le normali, non la geometria)
+//
+//  E' lo "Shade Auto Smooth" di Blender: gli spigoli piu' APERTI di una
+//  soglia restano vivi, tutti gli altri vengono smussati. Su un low-poly e'
+//  cio' che lo fa sembrare tondeggiante senza aggiungere un solo triangolo —
+//  un cilindro a 12 lati sembra un cilindro, e non un prisma.
+//
+//  Non tocca i vertici: ingombri, misure e audit restano identici. Cambia
+//  solo come la luce li legge, ed e' per questo che si puo' accendere e
+//  spegnere senza ricostruire niente.
+//
+//  Perche' si SALDA prima: le primitive di questo motore hanno vertici
+//  duplicati sui bordi di faccia (una scatola ne ha 24, non 8) per tenere le
+//  normali piatte. Mediare senza saldare non troverebbe nessun vicino e lo
+//  smoothing non farebbe niente — sarebbe il classico "il pulsante non fa
+//  nulla".
+// =======================================================================
+
+function meshSmoothNormals(mesh, angleDeg) {
+    const p = mesh.pos, idx = mesh.idx;
+    const nTri = (idx.length / 3) | 0;
+    if (!nTri) return { pos: mesh.pos, idx: mesh.idx, normals: meshNormals(mesh) };
+    const cosLimit = Math.cos(Math.max(1, Math.min(180, angleDeg || 40))
+                              * Math.PI / 180);
+
+    // 1. saldatura per posizione (0.1 mm)
+    const q = 1e4;
+    const weld = new Map();
+    const wid = new Int32Array((p.length / 3) | 0);
+    for (let v = 0; v < wid.length; v++) {
+        const o = v * 3;
+        const key = Math.round(p[o] * q) + ',' + Math.round(p[o + 1] * q)
+                  + ',' + Math.round(p[o + 2] * q);
+        let id = weld.get(key);
+        if (id === undefined) { id = weld.size; weld.set(key, id); }
+        wid[v] = id;
+    }
+
+    // 2. normali di faccia + incidenze per vertice saldato
+    const fn = new Float32Array(nTri * 3);
+    const incident = new Array(weld.size);
+    for (let t = 0; t < nTri; t++) {
+        const ia = idx[t * 3] * 3, ib = idx[t * 3 + 1] * 3, ic = idx[t * 3 + 2] * 3;
+        const abx = p[ib] - p[ia], aby = p[ib + 1] - p[ia + 1], abz = p[ib + 2] - p[ia + 2];
+        const acx = p[ic] - p[ia], acy = p[ic + 1] - p[ia + 1], acz = p[ic + 2] - p[ia + 2];
+        let nx = aby * acz - abz * acy;
+        let ny = abz * acx - abx * acz;
+        let nz = abx * acy - aby * acx;
+        const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        nx /= l; ny /= l; nz /= l;
+        fn[t * 3] = nx; fn[t * 3 + 1] = ny; fn[t * 3 + 2] = nz;
+        for (let k = 0; k < 3; k++) {
+            const w = wid[idx[t * 3 + k]];
+            if (!incident[w]) incident[w] = [];
+            incident[w].push(t);
+        }
+    }
+
+    // 3. mesh ESPANSA con una normale per angolo: e' l'unico modo di avere
+    //    spigoli vivi e superfici lisce nello stesso oggetto.
+    const outPos = new Float32Array(nTri * 9);
+    const outIdx = new Uint32Array(nTri * 3);
+    const outNrm = new Float32Array(nTri * 9);
+    for (let t = 0; t < nTri; t++) {
+        const fx = fn[t * 3], fy = fn[t * 3 + 1], fz = fn[t * 3 + 2];
+        for (let k = 0; k < 3; k++) {
+            const vi = idx[t * 3 + k];
+            const o = vi * 3;
+            const d = (t * 3 + k) * 3;
+            outPos[d] = p[o]; outPos[d + 1] = p[o + 1]; outPos[d + 2] = p[o + 2];
+            let ax = 0, ay = 0, az = 0;
+            const inc = incident[wid[vi]] || [];
+            for (let j = 0; j < inc.length; j++) {
+                const tj = inc[j] * 3;
+                // Si media solo con le facce entro la soglia: e' la soglia che
+                // tiene vivo lo spigolo di un cubo e liscia il fianco di un
+                // cilindro.
+                const c = fx * fn[tj] + fy * fn[tj + 1] + fz * fn[tj + 2];
+                if (c >= cosLimit) { ax += fn[tj]; ay += fn[tj + 1]; az += fn[tj + 2]; }
+            }
+            const l = Math.sqrt(ax * ax + ay * ay + az * az);
+            if (l < 1e-9) { ax = fx; ay = fy; az = fz; }
+            else { ax /= l; ay /= l; az /= l; }
+            outNrm[d] = ax; outNrm[d + 1] = ay; outNrm[d + 2] = az;
+            outIdx[t * 3 + k] = t * 3 + k;
+        }
+    }
+    return { pos: outPos, idx: outIdx, normals: outNrm };
+}

@@ -91,10 +91,10 @@ function getEnvMap() {
     return _envMap;
 }
 
-function buildMaterial(def, style) {
+function buildMaterial(def, style, smooth) {
     def = def || { col: '#CCCCCC' };
     style = style || 'lowpoly';
-    const key = JSON.stringify(def) + '|' + style;
+    const key = JSON.stringify(def) + '|' + style + '|' + (smooth ? 's' : 'f');
     if (_matCache.has(key)) return _matCache.get(key);
 
     const rgb = hexToRgb(def.col || '#CCCCCC');
@@ -134,7 +134,9 @@ function buildMaterial(def, style) {
             color: new THREE.Color(rgb.r, rgb.g, rgb.b),
             roughness: rough,
             metalness: metal,
-            flatShading: true,
+            // Con l'auto smooth le normali sono gia' quelle giuste: lasciare
+            // `flatShading` le butterebbe via e il pulsante non farebbe nulla.
+            flatShading: !smooth,
             transparent: opacity < 1,
             opacity: opacity,
             envMap: getEnvMap(),
@@ -231,17 +233,22 @@ function clearMaterialCache() {
     _matCache.clear();
 }
 
-function meshToThree(mesh, mats, style) {
+function meshToThree(mesh, mats, style, smooth) {
     if (meshIsEmpty(mesh)) return null;
     const geo = new THREE.BufferGeometry();
+    // Auto smooth: le normali si mediano entro una soglia d'angolo, cosi' un
+    // cilindro a 12 lati si legge come un cilindro e gli spigoli di una scatola
+    // restano vivi. La geometria NON cambia: solo come la luce la legge.
+    const src = (smooth && smooth.on)
+        ? meshSmoothNormals(mesh, smooth.angle || 40)
+        : { pos: mesh.pos, idx: mesh.idx, normals: meshNormals(mesh) };
     geo.setAttribute('position', new THREE.BufferAttribute(
-        mesh.pos instanceof Float32Array ? mesh.pos : new Float32Array(mesh.pos), 3));
+        src.pos instanceof Float32Array ? src.pos : new Float32Array(src.pos), 3));
     geo.setIndex(new THREE.BufferAttribute(
-        mesh.idx instanceof Uint32Array ? mesh.idx : new Uint32Array(mesh.idx), 1));
-    const normals = meshNormals(mesh);
-    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+        src.idx instanceof Uint32Array ? src.idx : new Uint32Array(src.idx), 1));
+    geo.setAttribute('normal', new THREE.BufferAttribute(src.normals, 3));
     const def = (mats && mesh.mat && mats[mesh.mat]) || { col: '#CCCCCC' };
-    const mat = buildMaterial(def, style);
+    const mat = buildMaterial(def, style, smooth && smooth.on);
     const obj = new THREE.Mesh(geo, mat);
     obj.name = mesh.name || '';
     obj.userData.samMat = mesh.mat || '';

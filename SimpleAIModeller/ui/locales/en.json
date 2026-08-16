@@ -136,5 +136,11 @@
   "status.buildingPart": "Part {i}/{n}: {name}…",
   "status.partsFailed": "Failed parts: {names}. The asset is incomplete ({defects} defects).",
   "err.noTasks": "The plan yields no tasks: empty chain.",
-  "err.allPartsFailed": "No part succeeded."
+  "err.allPartsFailed": "No part succeeded.",
+  "panel.profile": "2D profile (half section)",
+  "btn.smooth": "Auto smooth",
+  "status.smoothOn": "Auto smooth on (angle {angle}°). Shift+click to change it.",
+  "status.smoothOff": "Auto smooth off: faceted.",
+  "smooth.titleOn": "Auto smooth on, angle {angle}° · A to turn off, Shift+click for the angle",
+  "smooth.titleOff": "Auto smooth: rounds the normals without adding polygons (A)"
 }

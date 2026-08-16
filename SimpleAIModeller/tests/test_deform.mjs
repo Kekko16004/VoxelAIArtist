@@ -21,7 +21,8 @@ const code = files.map(f => fs.readFileSync(path.join(LIB, f), 'utf8')).join('\n
   + ' primLoft2, meshTaper, meshShear, meshTwist, meshBend, meshWarp, meshSquash,'
   + ' applyDeformers, buildSpec, primBuild, validateAll, partMetrics, measuredFor,'
   + ' primLathe2, vesselProfile, smoothProfile, VESSEL_PROFILES,'
-  + ' componentReport, autoRepair, offsetField, primTubePath };';
+  + ' componentReport, autoRepair, offsetField, primTubePath,'
+  + ' meshSmoothNormals, specProfiles, validateProfiles, repairAgainstPlan };';
 const sandbox = { console, Math, JSON, Float32Array, Uint32Array, Uint8Array, Map, Set, Object, Array };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
@@ -410,6 +411,100 @@ ok(finiteA, 'nessun NaN nel trasporto delle terne');
 const vert = S.primTubePath([[0, 0, 0], [0, 0.1, 0], [0, 0.2, 0]], 0.01, 12);
 ok(S.meshIsClosed(vert) && !S.meshIsEmpty(vert),
    'percorso verticale senza capovolgimenti');
+
+console.log('[21] auto smooth: normali, non geometria');
+const cil = S.primCyl(0.1, 0.3, 12, 1, 'y');
+const flat = S.meshSmoothNormals(cil, 1);      // soglia minima = tutto vivo
+const soft = S.meshSmoothNormals(cil, 60);     // soglia alta = fianco liscio
+ok(soft.pos.length === flat.pos.length, 'stesso numero di vertici espansi');
+// Il volume NON deve cambiare: e un'operazione sulle normali.
+const vFlat = S.meshVolume({ pos: flat.pos, idx: flat.idx });
+const vSoft = S.meshVolume({ pos: soft.pos, idx: soft.idx });
+ok(Math.abs(vFlat - vSoft) < 1e-9, 'volume identico (la geometria non si tocca)');
+// Entrambi in valore assoluto: `meshVolume` e' FIRMATO e il confronto fra un
+// valore firmato e uno assoluto fallirebbe per il segno, non per il volume.
+ok(Math.abs(Math.abs(vFlat) - Math.abs(S.meshVolume(cil))) < 1e-6,
+   'e identico all originale');
+// Le normali del fianco devono DIVERGERE fra flat e smooth: e la prova che la
+// soglia lavora. Con soglia 1 grado ogni faccia tiene la sua normale.
+let diff = 0;
+for (let i = 0; i < soft.normals.length; i += 3) {
+    const d = Math.abs(soft.normals[i] - flat.normals[i])
+            + Math.abs(soft.normals[i + 1] - flat.normals[i + 1])
+            + Math.abs(soft.normals[i + 2] - flat.normals[i + 2]);
+    if (d > 0.01) diff++;
+}
+ok(diff > 20, diff + ' normali cambiate con la soglia alta');
+// Normali unitarie in entrambi i casi: una normale non normalizzata scurisce.
+let unit = true;
+for (let i = 0; i < soft.normals.length; i += 3) {
+    const l = Math.hypot(soft.normals[i], soft.normals[i+1], soft.normals[i+2]);
+    if (Math.abs(l - 1) > 1e-3) unit = false;
+}
+ok(unit, 'tutte le normali sono unitarie');
+// Su un CUBO la soglia 40 deve tenere gli spigoli vivi: le facce a 90 gradi
+// non si mediano, o il cubo sembrerebbe una palla.
+const cubo = S.primBox(1, 1, 1);
+const cs = S.meshSmoothNormals(cubo, 40);
+let axisAligned = 0;
+for (let i = 0; i < cs.normals.length; i += 3) {
+    const m = Math.max(Math.abs(cs.normals[i]), Math.abs(cs.normals[i+1]),
+                       Math.abs(cs.normals[i+2]));
+    if (m > 0.999) axisAligned++;
+}
+ok(axisAligned === cs.normals.length / 3,
+   'il cubo resta a spigoli vivi (' + axisAligned + ' normali sugli assi)');
+
+console.log('[22] validatori del profilo 2D');
+const buonProfilo = { nodes: [{ n: 'v', p: 'lathe',
+    prof: [[0.05,0],[0.06,0.01],[0.11,0.13],[0.12,0.19],[0.08,0.31],[0.09,0.41]] }] };
+ok(S.validateProfiles(buonProfilo).length === 0,
+   'un profilo pulito non da difetti');
+const tornaIndietro = { nodes: [{ n: 'v', p: 'lathe',
+    prof: [[0.05,0],[0.11,0.20],[0.09,0.10],[0.08,0.30]] }] };
+ok(S.validateProfiles(tornaIndietro).some(x => x.code === 'profileNotMonotone'),
+   'quota che torna indietro -> profileNotMonotone');
+const gradino = { nodes: [{ n: 'v', p: 'lathe',
+    prof: [[0.05,0],[0.05,0.10],[0.12,0.101],[0.12,0.30]] }] };
+ok(S.validateProfiles(gradino).some(x => x.code === 'profileStep'),
+   'salto di raggio a quota ferma -> profileStep (la pila di dischi)');
+const negativo = { nodes: [{ n: 'v', p: 'lathe', prof: [[0.05,0],[-0.02,0.1],[0.05,0.2]] }] };
+ok(S.validateProfiles(negativo).some(x => x.code === 'profileNegativeRadius'),
+   'raggio negativo rilevato');
+ok(S.specProfiles(buonProfilo).length === 1, 'specProfiles trova il profilo');
+ok(S.specProfiles({ nodes: [{ n: 'x', p: 'box' }] }).length === 0,
+   'e ignora i nodi senza profilo');
+
+console.log('[23] riscalatura contro il piano (il plinto da 1 metro)');
+const planV = { axis: 'y', axisLength: 0.65,
+    chain: [{ n: 'plinto', from: 0, to: 0.045, w: 0.21, d: 0.21 },
+            { n: 'corpo', from: 0.045, to: 0.65, w: 0.30, d: 0.30 }],
+    extras: [] };
+const sbagliata = {
+    id: 'v', cat: 'prop', style: 'lowpoly', detail: 2, ground: true,
+    params: {}, mats: {},
+    nodes: [
+        { n: 'plinto', p: 'box', s: [1.0, 0.045, 1.0], at: [0, 0.0225, 0] },
+        { n: 'corpo', p: 'cyl', r: 0.15, len: 0.605, at: [0, 0.3475, 0] },
+    ],
+};
+const bWrong = S.buildSpec(sbagliata);
+ok(bWrong.bounds.size[0] > 0.9, 'il plinto sbagliato porta l ingombro a 1 m');
+const rp = S.repairAgainstPlan(sbagliata, bWrong, planV);
+ok(rp.repairs.some(r => r.indexOf('rescale:plinto') === 0),
+   'riscalato: ' + rp.repairs.join(','));
+const bFixed = S.buildSpec(rp.spec);
+ok(bFixed.bounds.size[0] < 0.35,
+   'ingombro rientrato a ' + bFixed.bounds.size[0].toFixed(3) + ' m');
+// Un nodo GIA' giusto non si tocca: la riparazione non deve rimaneggiare il
+// lavoro buono.
+ok(!rp.repairs.some(r => r.indexOf('rescale:corpo') === 0),
+   'il corpo, che era corretto, resta intatto');
+// Un nodo bloccato a mano non si tocca mai.
+const bloccata = JSON.parse(JSON.stringify(sbagliata));
+bloccata.nodes[0].locked = true;
+const rp2 = S.repairAgainstPlan(bloccata, S.buildSpec(bloccata), planV);
+ok(!rp2.repairs.length, 'un nodo locked non viene riscalato');
 
 console.log();
 console.log('PASS ' + pass + '  FAIL ' + fail);

@@ -49,6 +49,7 @@ function restoreHistory(delta) {
     const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     selectNode(selectedName, true);
+    if (typeof refreshSmoothButton === 'function') refreshSmoothButton();
     return true;
 }
 
@@ -323,6 +324,7 @@ function wireShortcuts() {
         else if (k === 'r') { setGizmoMode('rotate'); e.preventDefault(); }
         else if (k === 's') { setGizmoMode('scale'); e.preventDefault(); }
         else if (k === 'w') { toggleWireframe(); e.preventDefault(); }
+        else if (k === 'a') { toggleAutoSmooth(); e.preventDefault(); }
         else if (k === 'f') { frameSelection(); e.preventDefault(); }
         else if (k === 'delete' || k === 'backspace') { deleteSelected(); e.preventDefault(); }
         else if (k === 'escape') { selectNode(''); }
@@ -352,4 +354,67 @@ function initEditor() {
     if (re) re.addEventListener('click', redo);
     const wf = $('wireBtn');
     if (wf) wf.addEventListener('click', toggleWireframe);
+    const sm = $('smoothBtn');
+    if (sm) {
+        sm.addEventListener('click', (e) => {
+            // Shift+clic scorre la soglia d'angolo invece di spegnere: e' la
+            // regolazione che serve piu' spesso dopo averlo acceso.
+            if (e.shiftKey) cycleSmoothAngle(); else toggleAutoSmooth();
+        });
+    }
+    refreshSmoothButton();
+}
+
+/**
+ * Auto smooth: accende/spegne le normali smussate (come Shade Auto Smooth).
+ *
+ * E' una proprieta' della SPEC, non della vista: cosi' sopravvive alla
+ * ricostruzione, finisce nell'export, si salva col progetto ed e' ANNULLABILE
+ * con Ctrl+Z come ogni altra modifica. Un interruttore di sola vista sarebbe
+ * sparito al primo rebuild e l'export non l'avrebbe rispettato.
+ */
+const SMOOTH_ANGLE_DEFAULT = 40;
+
+function toggleAutoSmooth(angle) {
+    if (!appState.spec) return;
+    pushHistory();
+    const cur = appState.spec.smooth;
+    if (cur && cur.on) {
+        appState.spec.smooth = { on: false, angle: cur.angle || SMOOTH_ANGLE_DEFAULT };
+    } else {
+        appState.spec.smooth = {
+            on: true,
+            angle: angle || (cur && cur.angle) || SMOOTH_ANGLE_DEFAULT,
+        };
+    }
+    rebuildAfterEdit();
+    refreshSmoothButton();
+    setStatus(appState.spec.smooth.on
+        ? t('status.smoothOn', { angle: appState.spec.smooth.angle })
+        : t('status.smoothOff'), 'ok');
+}
+
+/** Cambia la soglia d'angolo senza spegnere: piu' alta = piu' tondo. */
+function cycleSmoothAngle() {
+    if (!appState.spec) return;
+    const steps = [20, 30, 40, 60, 80];
+    const cur = (appState.spec.smooth && appState.spec.smooth.angle)
+        || SMOOTH_ANGLE_DEFAULT;
+    const next = steps[(steps.indexOf(cur) + 1 + steps.length) % steps.length]
+        || SMOOTH_ANGLE_DEFAULT;
+    pushHistory();
+    appState.spec.smooth = { on: true, angle: next };
+    rebuildAfterEdit();
+    refreshSmoothButton();
+    setStatus(t('status.smoothOn', { angle: next }), 'ok');
+}
+
+function refreshSmoothButton() {
+    const btn = $('smoothBtn');
+    if (!btn) return;
+    const on = !!(appState.spec && appState.spec.smooth && appState.spec.smooth.on);
+    btn.classList.toggle('active', on);
+    const angle = (appState.spec && appState.spec.smooth && appState.spec.smooth.angle)
+        || SMOOTH_ANGLE_DEFAULT;
+    btn.title = on ? t('smooth.titleOn', { angle: angle }) : t('smooth.titleOff');
 }

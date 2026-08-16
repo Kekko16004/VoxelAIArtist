@@ -136,5 +136,11 @@
   "status.buildingPart": "Pezzo {i}/{n}: {name}…",
   "status.partsFailed": "Pezzi non riusciti: {names}. L'asset è incompleto ({defects} difetti).",
   "err.noTasks": "Il piano non produce compiti: catena vuota.",
-  "err.allPartsFailed": "Nessun pezzo è riuscito."
+  "err.allPartsFailed": "Nessun pezzo è riuscito.",
+  "panel.profile": "Profilo 2D (mezza sezione)",
+  "btn.smooth": "Auto smooth",
+  "status.smoothOn": "Auto smooth attivo (soglia {angle}°). Shift+clic per cambiarla.",
+  "status.smoothOff": "Auto smooth spento: sfaccettato.",
+  "smooth.titleOn": "Auto smooth attivo, soglia {angle}° · A per spegnere, Shift+clic per la soglia",
+  "smooth.titleOff": "Auto smooth: arrotonda le normali senza aggiungere poligoni (A)"
 }

@@ -86,18 +86,24 @@ function exportGLB(spec, built, opts) {
     for (const part of built.parts) {
         const q = quantizeColor(mats[part.mat], style);
         const geo = new THREE.BufferGeometry();
+        // L'auto smooth e' una proprieta' della spec, quindi vale anche in
+        // export: un modello che nel visore e' tondo e nel GLB e' sfaccettato
+        // sarebbe un export che non corrisponde a cio' che si e' approvato.
+        const gsrc = (spec && spec.smooth && spec.smooth.on)
+            ? meshSmoothNormals(part, spec.smooth.angle || 40)
+            : { pos: part.pos, idx: part.idx, normals: meshNormals(part) };
         geo.setAttribute('position', new THREE.BufferAttribute(
-            part.pos instanceof Float32Array ? part.pos : new Float32Array(part.pos), 3));
+            gsrc.pos instanceof Float32Array ? gsrc.pos : new Float32Array(gsrc.pos), 3));
         geo.setIndex(new THREE.BufferAttribute(
-            part.idx instanceof Uint32Array ? part.idx : new Uint32Array(part.idx), 1));
-        geo.setAttribute('normal', new THREE.BufferAttribute(meshNormals(part), 3));
+            gsrc.idx instanceof Uint32Array ? gsrc.idx : new Uint32Array(gsrc.idx), 1));
+        geo.setAttribute('normal', new THREE.BufferAttribute(gsrc.normals, 3));
         // NIENTE color attribute.
         const rgb = hexToRgb(q.col);
         const mat = new THREE.MeshStandardMaterial({
             color: new THREE.Color(rgb.r, rgb.g, rgb.b),
             roughness: q.rough,
             metalness: q.metal,
-            flatShading: style === 'lowpoly',
+            flatShading: (style === 'lowpoly') && !(spec && spec.smooth && spec.smooth.on),
             transparent: q.opacity < 1,
             opacity: q.opacity,
             side: THREE.FrontSide,

@@ -871,6 +871,52 @@ svasato — con un profilo di riferimento a 12 punti.
 credibili (un vaso e' alto 1.5-2.5 volte il diametro massimo) e **al massimo 4
 materiali**: piu' di quattro fanno sembrare l'asset un collage.
 
+### Auto smooth: normali, non geometria
+E' lo "Shade Auto Smooth" di Blender — gli spigoli piu' APERTI di una soglia
+restano vivi, gli altri si smussano. Su un low-poly e' cio' che lo fa sembrare
+tondeggiante **senza aggiungere un triangolo**: misurato, un vaso a 12 lati passa
+da sfaccettato a tondo restando a 2280 triangoli.
+
+- `meshSmoothNormals` SALDA per posizione prima di mediare. Le primitive di
+  questo motore hanno vertici duplicati sui bordi di faccia (una scatola ne ha
+  24, non 8) per tenere le normali piatte: mediare senza saldare non troverebbe
+  nessun vicino e il pulsante non farebbe nulla.
+- Ritorna una mesh ESPANSA (una normale per angolo): e' l'unico modo di avere
+  spigoli vivi e superfici lisce nello stesso oggetto. Verificato che il cubo
+  resta a spigoli vivi a soglia 40 gradi e il volume non cambia di un epsilon.
+- **`spec.smooth = {on, angle}` sta nella SPEC, non nella vista**: sopravvive al
+  rebuild, finisce nell'export GLB, si salva col progetto ed e' annullabile con
+  Ctrl+Z. Un interruttore di sola vista sarebbe sparito al primo rebuild e
+  l'export non l'avrebbe rispettato.
+- `flatShading` del materiale si spegne quando lo smooth e' acceso, altrimenti
+  Three butta via le normali calcolate e il pulsante sembra inerte.
+- **`normalize_spec` deve PORTARLO ATTRAVERSO**: dimenticarlo la' e' esattamente
+  cio' che rendeva il pulsante apparentemente inerte quando si riapriva una spec
+  (il campo veniva scartato in silenzio). Provato con due screenshot identici
+  prima della correzione.
+
+### Il profilo 2D si vede (pannello + validatori)
+In un solido di rivoluzione TUTTA la forma sta nel profilo: la mezza sezione
+tagliata verticalmente, `[raggio, quota]`. E' lo stesso disegno che si fa prima di
+uno spin, e **giudicarlo in 2D e' molto piu' facile che giudicare il render** — un
+gradino nel profilo si vede subito nel disegno e si confonde con un'ombra nel
+rendering. Il pannello lo disegna con la meta' specchiata (la silhouette vera) e
+i punti visibili.
+`validateProfiles` prende deterministicamente: raggi negativi, quote che tornano
+indietro (il profilo si autointerseca e la rivoluzione si ripiega),
+**`profileStep`** — raggio che salta a quota ferma, che e' la firma della "pila di
+dischi" — e profili troppo grossolani.
+
+### `repairAgainstPlan`: il plinto da un metro
+Un plinto che il piano dava largo 0.21 m veniva costruito largo 1.00 m: e' un
+errore di UNITA' (misure scritte come "relative" invece che in metri), e
+correggerlo e' una divisione, non un giudizio. Si riscala il nodo contro il piano
+senza chiamare l'AI, solo quando lo scarto e' grossolano (oltre il 60%): entro
+quella soglia la differenza puo' essere una scelta di modellazione, e
+sovrascriverla sarebbe cancellare il lavoro di chi ha costruito. I nodi `locked`
+non si toccano, e la moltiplicazione passa da `offsetScale`, che conserva
+l'espressione.
+
 - Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
   skinning vero restano fuori.
 

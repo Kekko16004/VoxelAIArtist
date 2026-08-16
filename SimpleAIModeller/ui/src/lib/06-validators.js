@@ -609,7 +609,8 @@ function validateAll(spec, built, opts) {
         .concat(validateDegenerates(spec, built))
         .concat(validateLogic(spec))
         .concat(validateDetail(spec, built, opts))
-        .concat(validateShaping(spec, built));
+        .concat(validateShaping(spec, built))
+        .concat(validateProfiles(spec));
     // Con un PIANO l'ingombro non si giudica qui: l'audit lo confronta pezzo per
     // pezzo con numeri verificati, e un secondo giudizio piu' grezzo sullo stesso
     // fatto produrrebbe due difetti per una causa sola.
@@ -732,4 +733,148 @@ function autoRepair(spec, built) {
     }
 
     return { spec: out, repairs: repairs };
+}
+
+// =======================================================================
+//  PROFILI 2D: il disegno prima della rivoluzione
+//
+//  In un solido di rivoluzione TUTTA la forma sta nel profilo: la mezza
+//  sezione tagliata verticalmente, `[raggio, quota]` dal basso in alto. E'
+//  lo stesso disegno che si fa a mano prima di uno spin, e giudicarlo in 2D
+//  e' molto piu' facile che giudicare il render — un gradino nel profilo si
+//  vede subito nel disegno e si confonde con un'ombra nel rendering.
+//
+//  Questi controlli sono geometrici e deterministici: prendono i difetti che
+//  producono la "pila di dischi" PRIMA che diventi geometria.
+// =======================================================================
+
+/** Estrae i profili espliciti dei nodi (lathe/loft con `prof` a punti). */
+function specProfiles(spec) {
+    const out = [];
+    for (const n of (spec.nodes || [])) {
+        if (!Array.isArray(n.prof) || n.prof.length < 2) continue;
+        const pts = n.prof
+            .map(p => [Number(p[0]) || 0, Number(p[1]) || 0])
+            .filter(p => isFinite(p[0]) && isFinite(p[1]));
+        if (pts.length >= 2) out.push({ node: n.n, prim: n.p, pts: pts });
+    }
+    return out;
+}
+
+function validateProfiles(spec) {
+    const d = [];
+    for (const prof of specProfiles(spec)) {
+        const pts = prof.pts;
+        const name = prof.node;
+
+        if (pts.some(p => p[0] < -1e-9)) {
+            d.push(defect('profileNegativeRadius', 'high', name,
+                'Il profilo di "' + name + '" ha un raggio negativo.',
+                'I raggi sono distanze dall\'asse: sempre >= 0.'));
+        }
+
+        // La quota deve SALIRE. Un profilo che torna indietro si autointerseca
+        // e la rivoluzione produce una superficie ripiegata su se stessa.
+        let backwards = 0;
+        for (let i = 1; i < pts.length; i++) {
+            if (pts[i][1] < pts[i - 1][1] - 1e-6) backwards++;
+        }
+        if (backwards) {
+            d.push(defect('profileNotMonotone', 'high', name,
+                'Il profilo di "' + name + '" torna indietro ' + backwards
+                + ' volte: le quote devono salire dal basso verso l\'alto.',
+                'Riordinare i punti per quota crescente; per un rientro si '
+                + 'riduce il RAGGIO, non la quota.'));
+        }
+
+        // Gradini: raggio che salta molto a quota quasi ferma. E' esattamente
+        // la firma della "pila di dischi".
+        const maxR = Math.max(...pts.map(p => p[0]), 1e-6);
+        const totalH = Math.max(1e-6,
+            pts[pts.length - 1][1] - pts[0][1]);
+        let steps = 0;
+        for (let i = 1; i < pts.length; i++) {
+            const dr = Math.abs(pts[i][0] - pts[i - 1][0]) / maxR;
+            const dy = Math.abs(pts[i][1] - pts[i - 1][1]) / totalH;
+            if (dr > 0.35 && dy < 0.02) steps++;
+        }
+        if (steps) {
+            d.push(defect('profileStep', 'medium', name,
+                'Il profilo di "' + name + '" ha ' + steps + ' gradini (il raggio '
+                + 'salta a quota ferma): la superficie uscira\' a scalini.',
+                'Distanziare le quote di quei punti, o ridurre il salto di raggio. '
+                + 'Un rilievo anulare si fa con due punti a 2-4 mm di distanza.'));
+        }
+
+        if (pts.length < 4 && prof.prim === 'lathe') {
+            d.push(defect('profileTooCoarse', 'low', name,
+                'Il profilo di "' + name + '" ha solo ' + pts.length + ' punti.',
+                'Con 8-14 punti la silhouette diventa una curva; con tre e\' un cono.'));
+        }
+    }
+    return d;
+}
+
+/**
+ * Ripara le misure di un nodo contro il PIANO, senza chiamare l'AI.
+ *
+ * Il caso che l'ha resa necessaria: un plinto che il piano dava largo 0.21 m
+ * costruito largo 1.00 m. E' un errore di unita' — il modello ha scritto la
+ * misura in "unita' relative" invece che in metri — e correggerlo e' una
+ * divisione, non un giudizio. Chiederlo a un modello costa una chiamata e
+ * spesso ne rompe un'altra.
+ *
+ * Si interviene SOLO quando lo scarto e' grossolano (oltre il 60%): entro quella
+ * soglia la differenza puo' essere una scelta di modellazione, e riscalarla
+ * sarebbe sovrascrivere il lavoro di chi ha costruito.
+ */
+function repairAgainstPlan(spec, built, plan) {
+    const repairs = [];
+    if (!plan || !plan.chain) return { spec: spec, repairs: repairs };
+    const out = JSON.parse(JSON.stringify(spec));
+    const ai = { x: 0, y: 1, z: 2 }[plan.axis] != null
+        ? { x: 0, y: 1, z: 2 }[plan.axis] : 1;
+    const cross = [0, 1, 2].filter(i => i !== ai);
+
+    const planned = {};
+    for (const s of plan.chain.concat(plan.extras || [])) planned[s.n] = s;
+    const byName = {};
+    for (const n of out.nodes || []) byName[n.n] = n;
+    const parts = {};
+    for (const p of (built.parts || [])) if (p.name) parts[p.name] = meshBounds(p);
+
+    for (const [name, seg] of Object.entries(planned)) {
+        // Il nodo puo' chiamarsi come il segmento, o `<segmento>_qualcosa`:
+        // nella costruzione a pezzi i nomi sono prefissati.
+        const candidates = Object.keys(parts).filter(
+            k => k === name || k.indexOf(name + '_') === 0);
+        for (const key of candidates) {
+            const node = byName[key];
+            if (!node || node.locked) continue;
+            const b = parts[key];
+            // Si guarda il trasversale MAGGIORE: e' quello che tradisce
+            // l'errore di unita'.
+            const gotMax = Math.max(b.size[cross[0]], b.size[cross[1]]);
+            const wantMax = Math.max(seg.w, seg.d);
+            if (wantMax < 1e-6 || gotMax < 1e-9) continue;
+            const ratio = wantMax / gotMax;
+            if (ratio > 0.62 && ratio < 1.6) continue;      // scarto tollerabile
+            if (Array.isArray(node.s)) {
+                node.s = node.s.map((v, i) => (i === ai ? v : offsetScale(v, ratio)));
+            } else if (node.r != null) {
+                node.r = offsetScale(node.r, ratio);
+            } else {
+                continue;
+            }
+            repairs.push('rescale:' + key + ':x' + ratio.toFixed(3));
+        }
+    }
+    return { spec: out, repairs: repairs };
+}
+
+/** Moltiplica un campo che puo' essere numero o espressione. */
+function offsetScale(cur, factor) {
+    if (Math.abs(factor - 1) < 1e-9) return cur;
+    if (typeof cur === 'number') return Math.round(cur * factor * 100000) / 100000;
+    return '(' + String(cur) + ')*' + (Math.round(factor * 100000) / 100000);
 }

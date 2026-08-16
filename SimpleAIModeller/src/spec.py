@@ -1229,6 +1229,20 @@ def normalize_spec(raw, request=None):
                 flags.append(f)
     spec["flags"] = sorted(set(flags))
 
+    # Auto smooth: e' una proprieta' della spec (sopravvive al rebuild, finisce
+    # nell'export, si annulla con Ctrl+Z). Va portata attraverso la
+    # normalizzazione, o riaprire una spec la perderebbe in silenzio — ed e'
+    # esattamente cio' che rendeva il pulsante apparentemente inerte.
+    smooth = _first(raw, "smooth", "autoSmooth", "auto_smooth", "shadeSmooth")
+    if smooth is not None:
+        if isinstance(smooth, dict):
+            on = _first(smooth, "on", "enabled", "active", default=True)
+            angle = _num(_first(smooth, "angle", "deg", "threshold", default=40), 40)
+        else:
+            on, angle = bool(smooth), 40.0
+        spec["smooth"] = {"on": bool(on),
+                          "angle": _clamp(angle, 1.0, 180.0)}
+
     notes = _first(raw, "notes", "note", "intent", "description", "desc")
     if notes:
         spec["notes"] = str(notes)[:400]

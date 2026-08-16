@@ -134,6 +134,8 @@ function showSpecInUi(spec, built, defects) {
             list.appendChild(li);
         }
     }
+    // Profilo 2D (la mezza sezione che genera i solidi torniti)
+    try { renderProfilePreview(spec); } catch (e) { /* canvas assente */ }
     // Defects
     renderDefects(appState.defects);
     // Params
@@ -879,4 +881,97 @@ function wireUi() {
             doGenerate();
         }
     });
+}
+
+/**
+ * Anteprima 2D dei profili di rivoluzione.
+ *
+ * In un solido tornito TUTTA la forma sta nel profilo, cioe' nella mezza
+ * sezione tagliata verticalmente. Vederla piatta e' molto piu' facile che
+ * giudicarla in un render: un gradino nel profilo si nota subito nel disegno e
+ * si confonde con un'ombra nel rendering. Si disegna anche la meta' specchiata,
+ * perche' e' la silhouette dell'oggetto finito ed e' quella che si giudica.
+ */
+function renderProfilePreview(spec) {
+    const wrap = $('profileBox');
+    const canvas = $('profileCanvas');
+    if (!wrap || !canvas) return;
+    const profs = (typeof specProfiles === 'function') ? specProfiles(spec || {}) : [];
+    if (!profs.length) {
+        wrap.hidden = true;
+        return;
+    }
+    wrap.hidden = false;
+    const W = canvas.width = wrap.clientWidth || 260;
+    const H = canvas.height = 190;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    // Scala comune a tutti i profili: confrontarli e' il punto.
+    let maxR = 1e-6, minY = Infinity, maxY = -Infinity;
+    for (const p of profs) {
+        for (const q of p.pts) {
+            maxR = Math.max(maxR, Math.abs(q[0]));
+            minY = Math.min(minY, q[1]);
+            maxY = Math.max(maxY, q[1]);
+        }
+    }
+    const spanY = Math.max(1e-6, maxY - minY);
+    const pad = 14;
+    const scale = Math.min((W / 2 - pad) / maxR, (H - pad * 2) / spanY);
+    const cx = W / 2;
+    const toX = (r) => cx + r * scale;
+    const toY = (y) => H - pad - (y - minY) * scale;
+
+    // Asse di rivoluzione: senza, non si capisce dove sta il centro.
+    ctx.strokeStyle = 'rgba(124,106,247,0.55)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx, pad * 0.4);
+    ctx.lineTo(cx, H - pad * 0.4);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Terreno.
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath();
+    ctx.moveTo(6, toY(minY));
+    ctx.lineTo(W - 6, toY(minY));
+    ctx.stroke();
+
+    const colors = ['#3ecf8e', '#4f8cff', '#e6b84d', '#e85d6a', '#b58cff'];
+    profs.forEach((p, i) => {
+        const col = colors[i % colors.length];
+        // Meta' specchiata, tenue: e' la silhouette dell'oggetto finito.
+        ctx.strokeStyle = col + '66';
+        ctx.beginPath();
+        p.pts.forEach((q, k) => {
+            const x = cx - q[0] * scale, y = toY(q[1]);
+            if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        // Il profilo vero.
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        p.pts.forEach((q, k) => {
+            const x = toX(q[0]), y = toY(q[1]);
+            if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        // I punti: si vede dove il modello ha messo le stazioni.
+        ctx.fillStyle = col;
+        for (const q of p.pts) {
+            ctx.beginPath();
+            ctx.arc(toX(q[0]), toY(q[1]), 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    const legend = $('profileLegend');
+    if (legend) {
+        legend.textContent = profs.map((p, i) =>
+            p.node + ' (' + p.pts.length + ')').join(' · ');
+    }
 }

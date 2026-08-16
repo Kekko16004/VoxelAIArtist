@@ -165,7 +165,7 @@ function showSpec(spec) {
 
     // Outline toon: guscio invertito leggero.
     for (const part of built.parts) {
-        const mesh = meshToThree(part, mats, style);
+        const mesh = meshToThree(part, mats, style, spec.smooth);
         if (!mesh) continue;
         assetRoot.add(mesh);
         if (style === 'toon') {

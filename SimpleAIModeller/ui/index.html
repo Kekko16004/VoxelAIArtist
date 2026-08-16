@@ -118,6 +118,10 @@ body.dragging::after {
 .param-row label { margin: 0; font-family: ui-monospace, monospace; }
 #jsonOut { width: 100%; min-height: 160px; font-family: ui-monospace, monospace; font-size: 11px; resize: vertical; }
 #statsOut { font-size: 12px; color: var(--muted); }
+.profile-canvas {
+  width: 100%; height: 190px; display: block; background: var(--input);
+  border: 1px solid var(--panel-border); border-radius: 8px;
+}
 .plan-box {
   font-family: ui-monospace, monospace; font-size: 10.5px; line-height: 1.45;
   white-space: pre; overflow-x: auto; margin: 0; color: var(--text);
@@ -288,6 +292,7 @@ body.dragging::after {
       <button id="dupNodeBtn" title="Ctrl+D" data-i18n="btn.duplicate">Duplica</button>
       <button id="deleteNodeBtn" title="Del" data-i18n="btn.delete">Elimina</button>
       <button id="wireBtn" title="W" data-i18n="btn.wire">Wireframe</button>
+      <button id="smoothBtn" title="A" data-i18n="btn.smooth">Auto smooth</button>
     </div>
     <div class="sel-info" id="selInfo"></div>
     <div class="status" id="statusBar"></div>
@@ -301,6 +306,11 @@ body.dragging::after {
     <div class="section">
       <h2 data-i18n="panel.plan">Piano delle misure</h2>
       <pre id="planOut" class="plan-box">—</pre>
+    </div>
+    <div class="section" id="profileBox" hidden>
+      <h2 data-i18n="panel.profile">Profilo 2D (mezza sezione)</h2>
+      <canvas id="profileCanvas" class="profile-canvas"></canvas>
+      <div class="muted" id="profileLegend"></div>
     </div>
     <div class="section">
       <h2 data-i18n="panel.nodes">Nodi</h2>
@@ -2297,6 +2307,97 @@ function primTubePath(pathPts, r, seg, wall, taperTo) {
 }
 
 // =======================================================================
+//  AUTO SMOOTH (le normali, non la geometria)
+//
+//  E' lo "Shade Auto Smooth" di Blender: gli spigoli piu' APERTI di una
+//  soglia restano vivi, tutti gli altri vengono smussati. Su un low-poly e'
+//  cio' che lo fa sembrare tondeggiante senza aggiungere un solo triangolo —
+//  un cilindro a 12 lati sembra un cilindro, e non un prisma.
+//
+//  Non tocca i vertici: ingombri, misure e audit restano identici. Cambia
+//  solo come la luce li legge, ed e' per questo che si puo' accendere e
+//  spegnere senza ricostruire niente.
+//
+//  Perche' si SALDA prima: le primitive di questo motore hanno vertici
+//  duplicati sui bordi di faccia (una scatola ne ha 24, non 8) per tenere le
+//  normali piatte. Mediare senza saldare non troverebbe nessun vicino e lo
+//  smoothing non farebbe niente — sarebbe il classico "il pulsante non fa
+//  nulla".
+// =======================================================================
+
+function meshSmoothNormals(mesh, angleDeg) {
+    const p = mesh.pos, idx = mesh.idx;
+    const nTri = (idx.length / 3) | 0;
+    if (!nTri) return { pos: mesh.pos, idx: mesh.idx, normals: meshNormals(mesh) };
+    const cosLimit = Math.cos(Math.max(1, Math.min(180, angleDeg || 40))
+                              * Math.PI / 180);
+
+    // 1. saldatura per posizione (0.1 mm)
+    const q = 1e4;
+    const weld = new Map();
+    const wid = new Int32Array((p.length / 3) | 0);
+    for (let v = 0; v < wid.length; v++) {
+        const o = v * 3;
+        const key = Math.round(p[o] * q) + ',' + Math.round(p[o + 1] * q)
+                  + ',' + Math.round(p[o + 2] * q);
+        let id = weld.get(key);
+        if (id === undefined) { id = weld.size; weld.set(key, id); }
+        wid[v] = id;
+    }
+
+    // 2. normali di faccia + incidenze per vertice saldato
+    const fn = new Float32Array(nTri * 3);
+    const incident = new Array(weld.size);
+    for (let t = 0; t < nTri; t++) {
+        const ia = idx[t * 3] * 3, ib = idx[t * 3 + 1] * 3, ic = idx[t * 3 + 2] * 3;
+        const abx = p[ib] - p[ia], aby = p[ib + 1] - p[ia + 1], abz = p[ib + 2] - p[ia + 2];
+        const acx = p[ic] - p[ia], acy = p[ic + 1] - p[ia + 1], acz = p[ic + 2] - p[ia + 2];
+        let nx = aby * acz - abz * acy;
+        let ny = abz * acx - abx * acz;
+        let nz = abx * acy - aby * acx;
+        const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        nx /= l; ny /= l; nz /= l;
+        fn[t * 3] = nx; fn[t * 3 + 1] = ny; fn[t * 3 + 2] = nz;
+        for (let k = 0; k < 3; k++) {
+            const w = wid[idx[t * 3 + k]];
+            if (!incident[w]) incident[w] = [];
+            incident[w].push(t);
+        }
+    }
+
+    // 3. mesh ESPANSA con una normale per angolo: e' l'unico modo di avere
+    //    spigoli vivi e superfici lisce nello stesso oggetto.
+    const outPos = new Float32Array(nTri * 9);
+    const outIdx = new Uint32Array(nTri * 3);
+    const outNrm = new Float32Array(nTri * 9);
+    for (let t = 0; t < nTri; t++) {
+        const fx = fn[t * 3], fy = fn[t * 3 + 1], fz = fn[t * 3 + 2];
+        for (let k = 0; k < 3; k++) {
+            const vi = idx[t * 3 + k];
+            const o = vi * 3;
+            const d = (t * 3 + k) * 3;
+            outPos[d] = p[o]; outPos[d + 1] = p[o + 1]; outPos[d + 2] = p[o + 2];
+            let ax = 0, ay = 0, az = 0;
+            const inc = incident[wid[vi]] || [];
+            for (let j = 0; j < inc.length; j++) {
+                const tj = inc[j] * 3;
+                // Si media solo con le facce entro la soglia: e' la soglia che
+                // tiene vivo lo spigolo di un cubo e liscia il fianco di un
+                // cilindro.
+                const c = fx * fn[tj] + fy * fn[tj + 1] + fz * fn[tj + 2];
+                if (c >= cosLimit) { ax += fn[tj]; ay += fn[tj + 1]; az += fn[tj + 2]; }
+            }
+            const l = Math.sqrt(ax * ax + ay * ay + az * az);
+            if (l < 1e-9) { ax = fx; ay = fy; az = fz; }
+            else { ax /= l; ay /= l; az /= l; }
+            outNrm[d] = ax; outNrm[d + 1] = ay; outNrm[d + 2] = az;
+            outIdx[t * 3 + k] = t * 3 + k;
+        }
+    }
+    return { pos: outPos, idx: outIdx, normals: outNrm };
+}
+
+// =======================================================================
 //  04 - CSG su array piatti (BSP alla csg.js)
 //
 //  Unione / sottrazione / intersezione senza dipendenze. Dopo ogni op si
@@ -3437,7 +3538,8 @@ function validateAll(spec, built, opts) {
         .concat(validateDegenerates(spec, built))
         .concat(validateLogic(spec))
         .concat(validateDetail(spec, built, opts))
-        .concat(validateShaping(spec, built));
+        .concat(validateShaping(spec, built))
+        .concat(validateProfiles(spec));
     // Con un PIANO l'ingombro non si giudica qui: l'audit lo confronta pezzo per
     // pezzo con numeri verificati, e un secondo giudizio piu' grezzo sullo stesso
     // fatto produrrebbe due difetti per una causa sola.
@@ -3563,6 +3665,150 @@ function autoRepair(spec, built) {
 }
 
 // =======================================================================
+//  PROFILI 2D: il disegno prima della rivoluzione
+//
+//  In un solido di rivoluzione TUTTA la forma sta nel profilo: la mezza
+//  sezione tagliata verticalmente, `[raggio, quota]` dal basso in alto. E'
+//  lo stesso disegno che si fa a mano prima di uno spin, e giudicarlo in 2D
+//  e' molto piu' facile che giudicare il render — un gradino nel profilo si
+//  vede subito nel disegno e si confonde con un'ombra nel rendering.
+//
+//  Questi controlli sono geometrici e deterministici: prendono i difetti che
+//  producono la "pila di dischi" PRIMA che diventi geometria.
+// =======================================================================
+
+/** Estrae i profili espliciti dei nodi (lathe/loft con `prof` a punti). */
+function specProfiles(spec) {
+    const out = [];
+    for (const n of (spec.nodes || [])) {
+        if (!Array.isArray(n.prof) || n.prof.length < 2) continue;
+        const pts = n.prof
+            .map(p => [Number(p[0]) || 0, Number(p[1]) || 0])
+            .filter(p => isFinite(p[0]) && isFinite(p[1]));
+        if (pts.length >= 2) out.push({ node: n.n, prim: n.p, pts: pts });
+    }
+    return out;
+}
+
+function validateProfiles(spec) {
+    const d = [];
+    for (const prof of specProfiles(spec)) {
+        const pts = prof.pts;
+        const name = prof.node;
+
+        if (pts.some(p => p[0] < -1e-9)) {
+            d.push(defect('profileNegativeRadius', 'high', name,
+                'Il profilo di "' + name + '" ha un raggio negativo.',
+                'I raggi sono distanze dall\'asse: sempre >= 0.'));
+        }
+
+        // La quota deve SALIRE. Un profilo che torna indietro si autointerseca
+        // e la rivoluzione produce una superficie ripiegata su se stessa.
+        let backwards = 0;
+        for (let i = 1; i < pts.length; i++) {
+            if (pts[i][1] < pts[i - 1][1] - 1e-6) backwards++;
+        }
+        if (backwards) {
+            d.push(defect('profileNotMonotone', 'high', name,
+                'Il profilo di "' + name + '" torna indietro ' + backwards
+                + ' volte: le quote devono salire dal basso verso l\'alto.',
+                'Riordinare i punti per quota crescente; per un rientro si '
+                + 'riduce il RAGGIO, non la quota.'));
+        }
+
+        // Gradini: raggio che salta molto a quota quasi ferma. E' esattamente
+        // la firma della "pila di dischi".
+        const maxR = Math.max(...pts.map(p => p[0]), 1e-6);
+        const totalH = Math.max(1e-6,
+            pts[pts.length - 1][1] - pts[0][1]);
+        let steps = 0;
+        for (let i = 1; i < pts.length; i++) {
+            const dr = Math.abs(pts[i][0] - pts[i - 1][0]) / maxR;
+            const dy = Math.abs(pts[i][1] - pts[i - 1][1]) / totalH;
+            if (dr > 0.35 && dy < 0.02) steps++;
+        }
+        if (steps) {
+            d.push(defect('profileStep', 'medium', name,
+                'Il profilo di "' + name + '" ha ' + steps + ' gradini (il raggio '
+                + 'salta a quota ferma): la superficie uscira\' a scalini.',
+                'Distanziare le quote di quei punti, o ridurre il salto di raggio. '
+                + 'Un rilievo anulare si fa con due punti a 2-4 mm di distanza.'));
+        }
+
+        if (pts.length < 4 && prof.prim === 'lathe') {
+            d.push(defect('profileTooCoarse', 'low', name,
+                'Il profilo di "' + name + '" ha solo ' + pts.length + ' punti.',
+                'Con 8-14 punti la silhouette diventa una curva; con tre e\' un cono.'));
+        }
+    }
+    return d;
+}
+
+/**
+ * Ripara le misure di un nodo contro il PIANO, senza chiamare l'AI.
+ *
+ * Il caso che l'ha resa necessaria: un plinto che il piano dava largo 0.21 m
+ * costruito largo 1.00 m. E' un errore di unita' — il modello ha scritto la
+ * misura in "unita' relative" invece che in metri — e correggerlo e' una
+ * divisione, non un giudizio. Chiederlo a un modello costa una chiamata e
+ * spesso ne rompe un'altra.
+ *
+ * Si interviene SOLO quando lo scarto e' grossolano (oltre il 60%): entro quella
+ * soglia la differenza puo' essere una scelta di modellazione, e riscalarla
+ * sarebbe sovrascrivere il lavoro di chi ha costruito.
+ */
+function repairAgainstPlan(spec, built, plan) {
+    const repairs = [];
+    if (!plan || !plan.chain) return { spec: spec, repairs: repairs };
+    const out = JSON.parse(JSON.stringify(spec));
+    const ai = { x: 0, y: 1, z: 2 }[plan.axis] != null
+        ? { x: 0, y: 1, z: 2 }[plan.axis] : 1;
+    const cross = [0, 1, 2].filter(i => i !== ai);
+
+    const planned = {};
+    for (const s of plan.chain.concat(plan.extras || [])) planned[s.n] = s;
+    const byName = {};
+    for (const n of out.nodes || []) byName[n.n] = n;
+    const parts = {};
+    for (const p of (built.parts || [])) if (p.name) parts[p.name] = meshBounds(p);
+
+    for (const [name, seg] of Object.entries(planned)) {
+        // Il nodo puo' chiamarsi come il segmento, o `<segmento>_qualcosa`:
+        // nella costruzione a pezzi i nomi sono prefissati.
+        const candidates = Object.keys(parts).filter(
+            k => k === name || k.indexOf(name + '_') === 0);
+        for (const key of candidates) {
+            const node = byName[key];
+            if (!node || node.locked) continue;
+            const b = parts[key];
+            // Si guarda il trasversale MAGGIORE: e' quello che tradisce
+            // l'errore di unita'.
+            const gotMax = Math.max(b.size[cross[0]], b.size[cross[1]]);
+            const wantMax = Math.max(seg.w, seg.d);
+            if (wantMax < 1e-6 || gotMax < 1e-9) continue;
+            const ratio = wantMax / gotMax;
+            if (ratio > 0.62 && ratio < 1.6) continue;      // scarto tollerabile
+            if (Array.isArray(node.s)) {
+                node.s = node.s.map((v, i) => (i === ai ? v : offsetScale(v, ratio)));
+            } else if (node.r != null) {
+                node.r = offsetScale(node.r, ratio);
+            } else {
+                continue;
+            }
+            repairs.push('rescale:' + key + ':x' + ratio.toFixed(3));
+        }
+    }
+    return { spec: out, repairs: repairs };
+}
+
+/** Moltiplica un campo che puo' essere numero o espressione. */
+function offsetScale(cur, factor) {
+    if (Math.abs(factor - 1) < 1e-9) return cur;
+    if (typeof cur === 'number') return Math.round(cur * factor * 100000) / 100000;
+    return '(' + String(cur) + ')*' + (Math.round(factor * 100000) / 100000);
+}
+
+// =======================================================================
 //  07 - Materiali procedurale (rumore in object space, niente UV)
 // =======================================================================
 
@@ -3655,10 +3901,10 @@ function getEnvMap() {
     return _envMap;
 }
 
-function buildMaterial(def, style) {
+function buildMaterial(def, style, smooth) {
     def = def || { col: '#CCCCCC' };
     style = style || 'lowpoly';
-    const key = JSON.stringify(def) + '|' + style;
+    const key = JSON.stringify(def) + '|' + style + '|' + (smooth ? 's' : 'f');
     if (_matCache.has(key)) return _matCache.get(key);
 
     const rgb = hexToRgb(def.col || '#CCCCCC');
@@ -3698,7 +3944,9 @@ function buildMaterial(def, style) {
             color: new THREE.Color(rgb.r, rgb.g, rgb.b),
             roughness: rough,
             metalness: metal,
-            flatShading: true,
+            // Con l'auto smooth le normali sono gia' quelle giuste: lasciare
+            // `flatShading` le butterebbe via e il pulsante non farebbe nulla.
+            flatShading: !smooth,
             transparent: opacity < 1,
             opacity: opacity,
             envMap: getEnvMap(),
@@ -3795,17 +4043,22 @@ function clearMaterialCache() {
     _matCache.clear();
 }
 
-function meshToThree(mesh, mats, style) {
+function meshToThree(mesh, mats, style, smooth) {
     if (meshIsEmpty(mesh)) return null;
     const geo = new THREE.BufferGeometry();
+    // Auto smooth: le normali si mediano entro una soglia d'angolo, cosi' un
+    // cilindro a 12 lati si legge come un cilindro e gli spigoli di una scatola
+    // restano vivi. La geometria NON cambia: solo come la luce la legge.
+    const src = (smooth && smooth.on)
+        ? meshSmoothNormals(mesh, smooth.angle || 40)
+        : { pos: mesh.pos, idx: mesh.idx, normals: meshNormals(mesh) };
     geo.setAttribute('position', new THREE.BufferAttribute(
-        mesh.pos instanceof Float32Array ? mesh.pos : new Float32Array(mesh.pos), 3));
+        src.pos instanceof Float32Array ? src.pos : new Float32Array(src.pos), 3));
     geo.setIndex(new THREE.BufferAttribute(
-        mesh.idx instanceof Uint32Array ? mesh.idx : new Uint32Array(mesh.idx), 1));
-    const normals = meshNormals(mesh);
-    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+        src.idx instanceof Uint32Array ? src.idx : new Uint32Array(src.idx), 1));
+    geo.setAttribute('normal', new THREE.BufferAttribute(src.normals, 3));
     const def = (mats && mesh.mat && mats[mesh.mat]) || { col: '#CCCCCC' };
-    const mat = buildMaterial(def, style);
+    const mat = buildMaterial(def, style, smooth && smooth.on);
     const obj = new THREE.Mesh(geo, mat);
     obj.name = mesh.name || '';
     obj.userData.samMat = mesh.mat || '';
@@ -3982,7 +4235,7 @@ function showSpec(spec) {
 
     // Outline toon: guscio invertito leggero.
     for (const part of built.parts) {
-        const mesh = meshToThree(part, mats, style);
+        const mesh = meshToThree(part, mats, style, spec.smooth);
         if (!mesh) continue;
         assetRoot.add(mesh);
         if (style === 'toon') {
@@ -4206,18 +4459,24 @@ function exportGLB(spec, built, opts) {
     for (const part of built.parts) {
         const q = quantizeColor(mats[part.mat], style);
         const geo = new THREE.BufferGeometry();
+        // L'auto smooth e' una proprieta' della spec, quindi vale anche in
+        // export: un modello che nel visore e' tondo e nel GLB e' sfaccettato
+        // sarebbe un export che non corrisponde a cio' che si e' approvato.
+        const gsrc = (spec && spec.smooth && spec.smooth.on)
+            ? meshSmoothNormals(part, spec.smooth.angle || 40)
+            : { pos: part.pos, idx: part.idx, normals: meshNormals(part) };
         geo.setAttribute('position', new THREE.BufferAttribute(
-            part.pos instanceof Float32Array ? part.pos : new Float32Array(part.pos), 3));
+            gsrc.pos instanceof Float32Array ? gsrc.pos : new Float32Array(gsrc.pos), 3));
         geo.setIndex(new THREE.BufferAttribute(
-            part.idx instanceof Uint32Array ? part.idx : new Uint32Array(part.idx), 1));
-        geo.setAttribute('normal', new THREE.BufferAttribute(meshNormals(part), 3));
+            gsrc.idx instanceof Uint32Array ? gsrc.idx : new Uint32Array(gsrc.idx), 1));
+        geo.setAttribute('normal', new THREE.BufferAttribute(gsrc.normals, 3));
         // NIENTE color attribute.
         const rgb = hexToRgb(q.col);
         const mat = new THREE.MeshStandardMaterial({
             color: new THREE.Color(rgb.r, rgb.g, rgb.b),
             roughness: q.rough,
             metalness: q.metal,
-            flatShading: style === 'lowpoly',
+            flatShading: (style === 'lowpoly') && !(spec && spec.smooth && spec.smooth.on),
             transparent: q.opacity < 1,
             opacity: q.opacity,
             side: THREE.FrontSide,
@@ -4731,6 +4990,7 @@ function restoreHistory(delta) {
     const defects = validateAll(appState.spec, built, validateOpts());
     showSpecInUi(appState.spec, built, defects);
     selectNode(selectedName, true);
+    if (typeof refreshSmoothButton === 'function') refreshSmoothButton();
     return true;
 }
 
@@ -5005,6 +5265,7 @@ function wireShortcuts() {
         else if (k === 'r') { setGizmoMode('rotate'); e.preventDefault(); }
         else if (k === 's') { setGizmoMode('scale'); e.preventDefault(); }
         else if (k === 'w') { toggleWireframe(); e.preventDefault(); }
+        else if (k === 'a') { toggleAutoSmooth(); e.preventDefault(); }
         else if (k === 'f') { frameSelection(); e.preventDefault(); }
         else if (k === 'delete' || k === 'backspace') { deleteSelected(); e.preventDefault(); }
         else if (k === 'escape') { selectNode(''); }
@@ -5034,6 +5295,69 @@ function initEditor() {
     if (re) re.addEventListener('click', redo);
     const wf = $('wireBtn');
     if (wf) wf.addEventListener('click', toggleWireframe);
+    const sm = $('smoothBtn');
+    if (sm) {
+        sm.addEventListener('click', (e) => {
+            // Shift+clic scorre la soglia d'angolo invece di spegnere: e' la
+            // regolazione che serve piu' spesso dopo averlo acceso.
+            if (e.shiftKey) cycleSmoothAngle(); else toggleAutoSmooth();
+        });
+    }
+    refreshSmoothButton();
+}
+
+/**
+ * Auto smooth: accende/spegne le normali smussate (come Shade Auto Smooth).
+ *
+ * E' una proprieta' della SPEC, non della vista: cosi' sopravvive alla
+ * ricostruzione, finisce nell'export, si salva col progetto ed e' ANNULLABILE
+ * con Ctrl+Z come ogni altra modifica. Un interruttore di sola vista sarebbe
+ * sparito al primo rebuild e l'export non l'avrebbe rispettato.
+ */
+const SMOOTH_ANGLE_DEFAULT = 40;
+
+function toggleAutoSmooth(angle) {
+    if (!appState.spec) return;
+    pushHistory();
+    const cur = appState.spec.smooth;
+    if (cur && cur.on) {
+        appState.spec.smooth = { on: false, angle: cur.angle || SMOOTH_ANGLE_DEFAULT };
+    } else {
+        appState.spec.smooth = {
+            on: true,
+            angle: angle || (cur && cur.angle) || SMOOTH_ANGLE_DEFAULT,
+        };
+    }
+    rebuildAfterEdit();
+    refreshSmoothButton();
+    setStatus(appState.spec.smooth.on
+        ? t('status.smoothOn', { angle: appState.spec.smooth.angle })
+        : t('status.smoothOff'), 'ok');
+}
+
+/** Cambia la soglia d'angolo senza spegnere: piu' alta = piu' tondo. */
+function cycleSmoothAngle() {
+    if (!appState.spec) return;
+    const steps = [20, 30, 40, 60, 80];
+    const cur = (appState.spec.smooth && appState.spec.smooth.angle)
+        || SMOOTH_ANGLE_DEFAULT;
+    const next = steps[(steps.indexOf(cur) + 1 + steps.length) % steps.length]
+        || SMOOTH_ANGLE_DEFAULT;
+    pushHistory();
+    appState.spec.smooth = { on: true, angle: next };
+    rebuildAfterEdit();
+    refreshSmoothButton();
+    setStatus(t('status.smoothOn', { angle: next }), 'ok');
+}
+
+function refreshSmoothButton() {
+    const btn = $('smoothBtn');
+    if (!btn) return;
+    const on = !!(appState.spec && appState.spec.smooth && appState.spec.smooth.on);
+    btn.classList.toggle('active', on);
+    const angle = (appState.spec && appState.spec.smooth && appState.spec.smooth.angle)
+        || SMOOTH_ANGLE_DEFAULT;
+    btn.title = on ? t('smooth.titleOn', { angle: angle }) : t('smooth.titleOff');
 }
 
 // =======================================================================
@@ -5305,6 +5629,8 @@ function showSpecInUi(spec, built, defects) {
             list.appendChild(li);
         }
     }
+    // Profilo 2D (la mezza sezione che genera i solidi torniti)
+    try { renderProfilePreview(spec); } catch (e) { /* canvas assente */ }
     // Defects
     renderDefects(appState.defects);
     // Params
@@ -6050,6 +6376,99 @@ function wireUi() {
             doGenerate();
         }
     });
+}
+
+/**
+ * Anteprima 2D dei profili di rivoluzione.
+ *
+ * In un solido tornito TUTTA la forma sta nel profilo, cioe' nella mezza
+ * sezione tagliata verticalmente. Vederla piatta e' molto piu' facile che
+ * giudicarla in un render: un gradino nel profilo si nota subito nel disegno e
+ * si confonde con un'ombra nel rendering. Si disegna anche la meta' specchiata,
+ * perche' e' la silhouette dell'oggetto finito ed e' quella che si giudica.
+ */
+function renderProfilePreview(spec) {
+    const wrap = $('profileBox');
+    const canvas = $('profileCanvas');
+    if (!wrap || !canvas) return;
+    const profs = (typeof specProfiles === 'function') ? specProfiles(spec || {}) : [];
+    if (!profs.length) {
+        wrap.hidden = true;
+        return;
+    }
+    wrap.hidden = false;
+    const W = canvas.width = wrap.clientWidth || 260;
+    const H = canvas.height = 190;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    // Scala comune a tutti i profili: confrontarli e' il punto.
+    let maxR = 1e-6, minY = Infinity, maxY = -Infinity;
+    for (const p of profs) {
+        for (const q of p.pts) {
+            maxR = Math.max(maxR, Math.abs(q[0]));
+            minY = Math.min(minY, q[1]);
+            maxY = Math.max(maxY, q[1]);
+        }
+    }
+    const spanY = Math.max(1e-6, maxY - minY);
+    const pad = 14;
+    const scale = Math.min((W / 2 - pad) / maxR, (H - pad * 2) / spanY);
+    const cx = W / 2;
+    const toX = (r) => cx + r * scale;
+    const toY = (y) => H - pad - (y - minY) * scale;
+
+    // Asse di rivoluzione: senza, non si capisce dove sta il centro.
+    ctx.strokeStyle = 'rgba(124,106,247,0.55)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx, pad * 0.4);
+    ctx.lineTo(cx, H - pad * 0.4);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Terreno.
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.beginPath();
+    ctx.moveTo(6, toY(minY));
+    ctx.lineTo(W - 6, toY(minY));
+    ctx.stroke();
+
+    const colors = ['#3ecf8e', '#4f8cff', '#e6b84d', '#e85d6a', '#b58cff'];
+    profs.forEach((p, i) => {
+        const col = colors[i % colors.length];
+        // Meta' specchiata, tenue: e' la silhouette dell'oggetto finito.
+        ctx.strokeStyle = col + '66';
+        ctx.beginPath();
+        p.pts.forEach((q, k) => {
+            const x = cx - q[0] * scale, y = toY(q[1]);
+            if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        // Il profilo vero.
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        p.pts.forEach((q, k) => {
+            const x = toX(q[0]), y = toY(q[1]);
+            if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        // I punti: si vede dove il modello ha messo le stazioni.
+        ctx.fillStyle = col;
+        for (const q of p.pts) {
+            ctx.beginPath();
+            ctx.arc(toX(q[0]), toY(q[1]), 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    const legend = $('profileLegend');
+    if (legend) {
+        legend.textContent = profs.map((p, i) =>
+            p.node + ' (' + p.pts.length + ')').join(' · ');
+    }
 }
 
 // =======================================================================
