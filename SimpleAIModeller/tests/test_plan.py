@@ -147,6 +147,47 @@ def main():
     p4, _ = P.normalize_plan(shuffled)
     ok(p4["chain"][0]["n"] == "pomolo", "riordinati per from")
 
+    print("[11] decomposizione in compiti")
+    tasks = P.plan_tasks(p)
+    ok(len(tasks) == len(p["chain"]), "un compito per segmento (%d)" % len(tasks))
+    ok([t["name"] for t in tasks] == [s["n"] for s in p["chain"]],
+       "nell'ordine della catena")
+    lama = [t for t in tasks if t["name"] == "lama"][0]
+    ok(any(e["n"] == "sguscio" for e in lama["extras"]),
+       "l'extra va al suo ospite: %s" % [e["n"] for e in lama["extras"]])
+    ok(lama["prev"]["n"] == "guardia" and lama["next"]["n"] == "punta",
+       "conosce i vicini")
+    ok(abs(lama["prev"]["at"] - 0.268) < 1e-9, "e la quota di confine")
+    ok(lama["budget"] > tasks[0]["budget"],
+       "il corpo principale ha un budget maggiore di un collarino (%d vs %d)"
+       % (lama["budget"], tasks[0]["budget"]))
+    ok("acciaio" in lama["suggestedMats"], "sa quale materiale e' il suo")
+
+    print("[12] un extra senza ospite valido non si perde")
+    orfano = {k: v for k, v in SPADA.items()}
+    orfano["extras"] = [{"n": "vagante", "of": "inesistente", "from": 0.30,
+                         "to": 0.40, "w": 0.01, "d": 0.01}]
+    po, _ = P.normalize_plan(orfano)
+    ts2 = P.plan_tasks(po)
+    assegnati = [t["name"] for t in ts2 if any(e["n"] == "vagante" for e in t["extras"])]
+    ok(len(assegnati) == 1, "assegnato per quota a un segmento: %s" % assegnati)
+    ok(assegnati[0] == "lama", "al segmento che lo contiene (0.30-0.40 sta in lama)")
+
+    print("[13] il testo del compito contiene le interfacce")
+    txt = P.task_text(p, lama)
+    ok("PEZZO DA COSTRUIRE: lama" in txt, "intestazione")
+    ok("0.2680" in txt and "0.9000" in txt, "le sue quote")
+    ok("SOTTO" in txt and "guardia" in txt, "il vicino sotto")
+    ok("SOPRA" in txt and "punta" in txt, "il vicino sopra")
+    ok("sguscio" in txt, "i suoi dettagli")
+
+    print("[14] i params del compito sono STRETTI")
+    tp = P.task_params(p, lama)
+    ok("lama_a" in tp and "lama_w" in tp, "i suoi")
+    ok("guardia_a" in tp and "punta_a" in tp, "e quelli dei vicini")
+    ok("pomolo_a" not in tp, "non quelli dei pezzi lontani")
+    ok("sguscio_a" in tp, "e quelli dei suoi dettagli")
+
     print()
     print("PASS %d  FAIL %d" % (pass_n, fail_n))
     return 0 if fail_n == 0 else 1

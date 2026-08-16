@@ -323,6 +323,60 @@ def build_critic_prompt(digest, metrics, request=""):
     return text
 
 
+PART_PROMPT_FALLBACK = (
+    "Costruisci UN SOLO pezzo dell'oggetto. Rispondi SOLO con un JSON "
+    "{\"nodes\":[...]}.\n\nPIANO:\n[INSERISCI QUI IL PIANO]\n\n"
+    "COMPITO:\n[INSERISCI QUI IL COMPITO]\n\n"
+    "MATERIALI:\n[INSERISCI QUI I MATERIALI]\n\n"
+    "PARAMS:\n[INSERISCI QUI I PARAMS]\n\n"
+    "RICHIESTA:\n[INSERISCI QUI LA RICHIESTA]\n"
+)
+
+
+def build_part_prompt(request, plan_obj, task, detail=2, style="lowpoly",
+                      notes=""):
+    """Prompt per UN pezzo. La richiesta resta l'ULTIMA riga."""
+    template = _read_prompt_file("prompt-part.txt", PART_PROMPT_FALLBACK)
+    text = template.replace("[INSERISCI QUI IL PIANO]",
+                            sam_plan.plan_text(plan_obj))
+    text = text.replace("[INSERISCI QUI IL COMPITO]",
+                        sam_plan.task_text(plan_obj, task))
+
+    mats = plan_obj.get("materials") or []
+    if mats:
+        lines = []
+        for m in mats:
+            mark = "  <- per il tuo pezzo" if m["n"] in (task.get("suggestedMats") or []) else ""
+            lines.append("  %-14s %-8s  su: %s%s"
+                         % (m["n"], m["col"], ", ".join(m.get("on") or []), mark))
+        mats_txt = "\n".join(lines)
+    else:
+        mats_txt = ("  (il piano non ne dichiara: inventane 2-3 coerenti e usa "
+                    "gli stessi nomi in tutti i pezzi)")
+    text = text.replace("[INSERISCI QUI I MATERIALI]", mats_txt)
+    text = text.replace("[INSERISCI QUI I PARAMS]",
+                        json.dumps(sam_plan.task_params(plan_obj, task),
+                                   separators=(",", ": "), ensure_ascii=False))
+
+    detail = max(0, min(3, int(detail if detail is not None else 2)))
+    req = [
+        "Oggetto: %s" % (plan_obj.get("asset") or request),
+        "Richiesta originale dell'utente: %s" % str(request).strip(),
+        "Stile: %s (%s)" % (style, STYLE_LABELS.get(style, style)),
+        "Livello di dettaglio: %d (%s) — %s"
+        % (detail, DETAIL_LABELS[detail],
+           "solo il volume, nessun fronzolo" if detail == 0 else
+           "volume e i dettagli principali" if detail == 1 else
+           "volume, dettagli e giunzioni curate" if detail == 2 else
+           "massima cura: giunzioni, collari, smussi, rilievi, tutto cio' che "
+           "il pezzo ha nella realta'"),
+    ]
+    if notes:
+        req.append("Note dell'utente: %s" % str(notes)[:300])
+    text = text.replace("[INSERISCI QUI LA RICHIESTA]", "\n".join(req))
+    return text
+
+
 # --- HTTP handler ------------------------------------------------------------
 
 class SAMRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -852,6 +906,144 @@ class SAMRequestHandler(http.server.SimpleHTTPRequestHandler):
             "raw": (answer or "")[:400],
         })
 
+    def _handle_tasks(self):
+        """POST /api/asset/tasks — il piano diventa una lista di compiti.
+
+        Nessuna chiamata AI: la decomposizione e' contenuta nel piano (un
+        compito per segmento, con i suoi dettagli). Chiederla a un modello
+        sarebbe pagare per un'informazione che abbiamo gia'.
+        """
+        try:
+            payload = self._read_json_body()
+        except Exception as e:                                  # noqa: BLE001
+            self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+            return
+        plan_obj = payload.get("plan") if isinstance(payload, dict) else None
+        if not isinstance(plan_obj, dict) or not plan_obj.get("chain"):
+            self._send_json(400, {"error": "Piano mancante o senza catena."})
+            return
+        try:
+            tasks = sam_plan.plan_tasks(plan_obj)
+        except Exception as e:                                  # noqa: BLE001
+            self._send_json(400, {"error": "Decomposizione fallita: %s" % e})
+            return
+        self._send_json(200, {
+            "tasks": tasks,
+            "count": len(tasks),
+            "texts": [sam_plan.task_text(plan_obj, t) for t in tasks],
+        })
+
+    def _handle_part(self):
+        """POST /api/asset/part — costruisce i nodi di UN pezzo.
+
+        Il pezzo arriva con le sue quote e le sue interfacce: chi lo costruisce
+        vede un compito piccolo e ben definito invece di un oggetto intero, ed e'
+        questa la differenza fra sessanta nodi approssimativi e sei gruppi curati.
+        """
+        try:
+            payload = self._read_json_body()
+        except Exception as e:                                  # noqa: BLE001
+            self._send_json(400, {"error": "Richiesta non valida: %s" % e})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "Atteso un oggetto JSON."})
+            return
+        plan_obj = payload.get("plan")
+        if not isinstance(plan_obj, dict) or not plan_obj.get("chain"):
+            self._send_json(400, {"error": "Piano mancante o senza catena."})
+            return
+        task = payload.get("task")
+        if not isinstance(task, dict) or not task.get("seg"):
+            # Con il solo indice si ricalcola: il client non deve rimandarci
+            # una struttura che sappiamo derivare.
+            try:
+                idx = int(payload.get("index", -1))
+            except (TypeError, ValueError):
+                idx = -1
+            tasks = sam_plan.plan_tasks(plan_obj)
+            if idx < 0 or idx >= len(tasks):
+                self._send_json(400, {"error": "Compito mancante o indice fuori range."})
+                return
+            task = tasks[idx]
+
+        request = str(payload.get("prompt") or payload.get("request") or "").strip()
+        detail = payload.get("detail")
+        style = str(payload.get("style") or "lowpoly").strip().lower()
+        style = sam_spec.STYLE_ALIASES.get(style, style)
+        if style not in sam_spec.STYLES:
+            style = "lowpoly"
+
+        answer = None
+        try:
+            prompt = build_part_prompt(request, plan_obj, task,
+                                       detail=detail, style=style,
+                                       notes=str(payload.get("notes") or ""))
+            answer = ai_answer_text_retrying(prompt, payload.get("model"))
+        except (AIAuthError, AITransientError, AIFormatError) as e:
+            self._send_ai_error(e, "ASSET PART %s" % task.get("name"))
+            return
+        except Exception as e:                                  # noqa: BLE001
+            self._send_ai_error(_classify_ai_error(e), "ASSET PART")
+            return
+
+        try:
+            raw = extract_and_parse_json(answer)
+        except Exception as e:                                  # noqa: BLE001
+            self._log_ai_answer("ASSET PART %s" % task.get("name"), answer, e)
+            self._send_json(400, {
+                "error": "Il pezzo \"%s\" non e' tornato in JSON. Dettaglio: %s"
+                         % (task.get("name"), e),
+                "rawPreview": (answer or "")[:400],
+            })
+            return
+
+        # Si valida come mini-spec: si riusa `normalize_spec`, che sa gia'
+        # ricondurre alias, primitive ignote e riferimenti rotti. Costruire un
+        # secondo validatore per i pezzi vorrebbe dire due validatori che
+        # divergono.
+        if isinstance(raw, list):
+            raw = {"nodes": raw}
+        if not isinstance(raw, dict):
+            self._send_json(400, {"error": "Risposta non utilizzabile per il pezzo."})
+            return
+        mini = {
+            "id": task.get("name") or "parte",
+            "cat": "prop",
+            "style": style,
+            "detail": detail if detail is not None else 2,
+            "nodes": raw.get("nodes") or raw.get("parts") or [],
+            "params": dict(sam_plan.task_params(plan_obj, task)),
+            "mats": {m["n"]: {"col": m["col"]}
+                     for m in (plan_obj.get("materials") or [])},
+        }
+        extra_params = raw.get("params")
+        if isinstance(extra_params, dict):
+            for k, v in extra_params.items():
+                # I params del piano VINCONO: un pezzo che ridefinisce una quota
+                # della catena la sposterebbe per tutti.
+                if k not in mini["params"]:
+                    mini["params"][k] = v
+        try:
+            normalized, warns = sam_spec.normalize_spec(mini, request={
+                "cat": "prop", "style": style, "hasPlan": True,
+            })
+        except ValueError as e:
+            self._log_ai_answer("ASSET PART %s" % task.get("name"), answer, e)
+            self._send_json(400, {
+                "error": "Il pezzo \"%s\" non contiene nodi utilizzabili: %s"
+                         % (task.get("name"), e),
+                "rawPreview": (answer or "")[:400],
+            })
+            return
+
+        self._send_json(200, {
+            "name": task.get("name"),
+            "index": task.get("i"),
+            "nodes": normalized.get("nodes") or [],
+            "params": {k: v for k, v in (normalized.get("params") or {}).items()},
+            "warnings": warns,
+        })
+
     def _handle_vision_probe(self):
         """POST /api/vision/probe — misura se il provider vede le immagini."""
         try:
@@ -895,6 +1087,12 @@ class SAMRequestHandler(http.server.SimpleHTTPRequestHandler):
             return
         if route in ("/api/asset/plan", "/api/plan"):
             self._handle_plan()
+            return
+        if route in ("/api/asset/tasks", "/api/tasks"):
+            self._handle_tasks()
+            return
+        if route in ("/api/asset/part", "/api/part"):
+            self._handle_part()
             return
         if route in ("/api/asset/audit", "/api/audit"):
             self._handle_audit()

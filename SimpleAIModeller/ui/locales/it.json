@@ -131,5 +131,10 @@
   "status.refCleared": "Riferimento rimosso.",
   "err.unsupportedFile": "Formato non gestito: {name}. Usa .json, .glb, .gltf o .obj.",
   "status.fixWorse": "Correzione scartata: peggiorava (punteggio {score} contro {best}). Tenuto il risultato migliore.",
-  "status.patchWorse": "Patch applicata ({applied} op) ma i difetti sono aumentati ({defects}). Ctrl+Z per annullare."
+  "status.patchWorse": "Patch applicata ({applied} op) ma i difetti sono aumentati ({defects}). Ctrl+Z per annullare.",
+  "form.staged": "Costruzione a pezzi (più lenta, più precisa)",
+  "status.buildingPart": "Pezzo {i}/{n}: {name}…",
+  "status.partsFailed": "Pezzi non riusciti: {names}. L'asset è incompleto ({defects} difetti).",
+  "err.noTasks": "Il piano non produce compiti: catena vuota.",
+  "err.allPartsFailed": "Nessun pezzo è riuscito."
 }

@@ -52,6 +52,7 @@ function readForm() {
         planFirst: !($('planCheck') && !$('planCheck').checked),
         vision: !!( $('visionCheck') && $('visionCheck').checked ),
         autofix: !($('autofixCheck') && !$('autofixCheck').checked),
+        staged: !($('stagedCheck') && !$('stagedCheck').checked),
         model: ($('modelSelect') && $('modelSelect').value) || '',
         notes: ($('notesInput') && $('notesInput').value) || '',
     };
@@ -270,6 +271,89 @@ function adoptState(st) {
     showSpecInUi(st.spec, appState.built, st.defects);
 }
 
+/**
+ * Costruzione A PEZZI: un compito per volta, ognuno con davanti il suo pezzo.
+ *
+ * Un modello che deve emettere sessanta nodi in una risposta sbaglia una misura
+ * qui e dimentica un dettaglio la'. Sei chiamate da cinque nodi ognuna, con le
+ * quote del pezzo e i confini dei vicini davanti, non hanno quel problema — ed e'
+ * l'unico modo di chiedere davvero "il massimo dettaglio su questo pezzo".
+ *
+ * La coerenza fra pezzi costruiti in conversazioni diverse e' tenuta da tre
+ * cose, tutte gia' nel piano: i params condivisi (le quote), la palette dei
+ * materiali (nessuno inventa colori), e le interfacce (ogni pezzo sa dove
+ * finisce quello sotto).
+ *
+ * L'asset si mostra DOPO OGNI PEZZO: si vede crescere, e se un pezzo esce male
+ * si vede subito quale.
+ */
+async function buildStaged(form, plan) {
+    const tasksData = await apiPost('/api/asset/tasks', { plan: plan });
+    const tasks = tasksData.tasks || [];
+    if (!tasks.length) throw new Error(t('err.noTasks'));
+
+    // Spec accumulata: params e materiali vengono dal PIANO, non dai pezzi.
+    const spec = {
+        v: 1,
+        id: (plan.asset || form.prompt || 'asset').toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'asset',
+        cat: form.cat,
+        style: form.style,
+        detail: form.detail,
+        size: plan.total.slice(),
+        ground: form.ground,
+        params: {},
+        mats: {},
+        nodes: [],
+        rig: [], clips: {}, logic: [], col: [], flags: [],
+    };
+    for (const m of (plan.materials || [])) {
+        spec.mats[m.n] = { col: m.col, rough: 0.6 };
+    }
+
+    const failed = [];
+    for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i];
+        setBusy(true, t('status.buildingPart', {
+            i: i + 1, n: tasks.length, name: task.name,
+        }));
+        let part;
+        try {
+            part = await apiPost('/api/asset/part', {
+                plan: plan, task: task, index: i,
+                prompt: form.prompt, detail: form.detail,
+                style: form.style, notes: form.notes, model: form.model,
+            });
+        } catch (e) {
+            // Un pezzo che non esce NON ferma gli altri: si segnala e si tira
+            // avanti. Fermarsi butterebbe via anche i pezzi gia' riusciti.
+            console.warn('[part]', task.name, e);
+            failed.push(task.name);
+            continue;
+        }
+        for (const [k, v] of Object.entries(part.params || {})) {
+            if (!(k in spec.params)) spec.params[k] = v;
+        }
+        const existing = new Set(spec.nodes.map(n => n.n));
+        for (const node of (part.nodes || [])) {
+            // Collisione di nomi fra pezzi: si prefissa col nome del compito
+            // invece di sovrascrivere. Un nodo perso e' un dettaglio perso.
+            if (existing.has(node.n)) node.n = task.name + '_' + node.n;
+            existing.add(node.n);
+            spec.nodes.push(node);
+        }
+        // Si mostra la crescita: vedere il pezzo comparire e' anche il modo piu'
+        // rapido di capire quale sbaglia.
+        if (spec.nodes.length) {
+            appState.spec = spec;
+            appState.built = showSpec(spec);
+            showSpecInUi(spec, appState.built, appState.defects);
+        }
+    }
+    if (!spec.nodes.length) throw new Error(t('err.allPartsFailed'));
+    return { spec: spec, failed: failed, tasks: tasks.length };
+}
+
 async function doGenerate() {
     const form = readForm();
     if (!form.prompt) {
@@ -279,22 +363,42 @@ async function doGenerate() {
     setBusy(true, form.planFirst ? t('status.planning') : t('status.generating'));
     appState.rounds = 0;
     try {
-        const data = await apiPost('/api/asset/generate', {
-            prompt: form.prompt,
-            cat: form.cat,
-            style: form.style,
-            detail: form.detail,
-            size: (form.size[0] > 0 || form.size[1] > 0 || form.size[2] > 0)
-                ? form.size : null,
-            ground: form.ground,
-            planFirst: form.planFirst,
-            notes: form.notes,
-            model: form.model,
-        });
-        appState.plan = data.plan || null;
-        renderPlan(appState.plan);
+        let spec, plan = null, failed = [];
 
-        let spec = data.spec;
+        if (form.staged && form.planFirst) {
+            // 1. il piano (una chiamata) -> 2. un pezzo per volta -> 3. misure
+            const planData = await apiPost('/api/asset/plan', {
+                prompt: form.prompt, cat: form.cat, style: form.style,
+                detail: form.detail, notes: form.notes, model: form.model,
+                size: (form.size[0] > 0 || form.size[1] > 0 || form.size[2] > 0)
+                    ? form.size : null,
+                ground: form.ground,
+            });
+            plan = planData.plan || null;
+            appState.plan = plan;
+            renderPlan(plan);
+            const staged = await buildStaged(form, plan);
+            spec = staged.spec;
+            failed = staged.failed;
+        } else {
+            const data = await apiPost('/api/asset/generate', {
+                prompt: form.prompt,
+                cat: form.cat,
+                style: form.style,
+                detail: form.detail,
+                size: (form.size[0] > 0 || form.size[1] > 0 || form.size[2] > 0)
+                    ? form.size : null,
+                ground: form.ground,
+                planFirst: form.planFirst,
+                notes: form.notes,
+                model: form.model,
+            });
+            plan = data.plan || null;
+            appState.plan = plan;
+            renderPlan(plan);
+            spec = data.spec;
+        }
+
         let built = showSpec(spec);
         const ar = autoRepair(spec, built);
         if (ar.repairs.length) {
@@ -336,18 +440,19 @@ async function doGenerate() {
                 defects = res.defects;
                 if (countHigh(defects) === 0) break;
             } else {
-                // Il giro ha peggiorato (o non ha cambiato niente): si SCARTA e
-                // si smette. Insistere da una base peggiore allontana.
                 setStatus(t('status.fixWorse', { score: score, best: best.score }), 'warn');
                 break;
             }
         }
         adoptState(best);
         defects = best.defects;
+        pushHistory();
 
-        // Critica visiva opzionale, DOPO che i numeri tornano: giudicare
-        // l'estetica di un modello con le misure sbagliate e' tempo perso.
-        if (form.vision && appState.visionOk !== false && countHigh(defects) === 0) {
+        if (failed.length) {
+            setStatus(t('status.partsFailed', {
+                names: failed.join(', '), defects: defects.length,
+            }), 'warn');
+        } else if (form.vision && appState.visionOk !== false && countHigh(defects) === 0) {
             await doCritique(false);
         } else {
             setStatus(t('status.ready', {

@@ -498,3 +498,156 @@ def plan_stats(plan):
         "materials": len(plan.get("materials") or []),
         "repairs": plan.get("repairs") or [],
     }
+
+
+# --- Decomposizione in TASK ---------------------------------------------------
+
+def plan_tasks(plan):
+    """Il piano diventa una lista di compiti, uno per segmento.
+
+    Perche' a pezzi
+    ---------------
+    Un modello che deve emettere sessanta nodi in una sola risposta perde
+    precisione su tutti: sbaglia una misura qui, dimentica un dettaglio la',
+    inventa un materiale nuovo a meta' strada. Sei chiamate da cinque nodi
+    ognuna, ognuna con davanti UN pezzo e le sue misure, non hanno quel problema
+    — ed e' anche l'unico modo di chiedere davvero "il massimo dettaglio su
+    questo pezzo".
+
+    La decomposizione NON costa una chiamata AI: il piano la contiene gia'. Ogni
+    segmento della catena e' un compito, e gli `extras` che lo indicano come
+    ospite (`of`) vanno con lui. Chiederla a un modello sarebbe pagare per
+    un'informazione che abbiamo.
+
+    Ogni task porta le sue INTERFACCE: il pezzo sotto e quello sopra, con la
+    quota di confine e la loro sezione. E' cio' che tiene coerente un oggetto
+    costruito in sei conversazioni diverse: chi fa la guardia sa che sotto di lei
+    l'impugnatura finisce a 0.230 con sezione 0.034, quindi la sua base combacia
+    invece di galleggiare.
+    """
+    chain = plan.get("chain") or []
+    extras = plan.get("extras") or []
+    mats = plan.get("materials") or []
+
+    by_host = {}
+    orphans = []
+    names = {s["n"] for s in chain}
+    for e in extras:
+        host = e.get("of")
+        if host in names:
+            by_host.setdefault(host, []).append(e)
+        else:
+            orphans.append(e)
+
+    # Un extra senza ospite valido si assegna al segmento che lo CONTIENE per
+    # quota: e' un'informazione che il piano ha comunque, e scartarlo
+    # perderebbe un dettaglio che l'architetto ha voluto.
+    for e in orphans:
+        mid = (e["from"] + e["to"]) / 2
+        best, bestd = None, None
+        for s in chain:
+            if s["from"] - TOL_ABS <= mid <= s["to"] + TOL_ABS:
+                best = s["n"]
+                break
+            d = min(abs(mid - s["from"]), abs(mid - s["to"]))
+            if bestd is None or d < bestd:
+                bestd, best = d, s["n"]
+        if best:
+            by_host.setdefault(best, []).append(e)
+
+    tasks = []
+    for i, seg in enumerate(chain):
+        prev_seg = chain[i - 1] if i > 0 else None
+        next_seg = chain[i + 1] if i + 1 < len(chain) else None
+        own_extras = by_host.get(seg["n"], [])
+        # Materiali pertinenti: quelli che nominano questo pezzo o i suoi
+        # dettagli. Si passa comunque TUTTA la palette (serve a non inventarne
+        # di nuovi), ma si segnala quali sono i suoi.
+        own_names = {seg["n"]} | {e["n"] for e in own_extras}
+        suggested = [m["n"] for m in mats
+                     if own_names & set(m.get("on") or [])]
+        tasks.append({
+            "i": i,
+            "n": len(chain),
+            "name": seg["n"],
+            "seg": seg,
+            "extras": own_extras,
+            "prev": ({"n": prev_seg["n"], "at": prev_seg["to"],
+                      "w": prev_seg["w"], "d": prev_seg["d"]} if prev_seg else None),
+            "next": ({"n": next_seg["n"], "at": next_seg["from"],
+                      "w": next_seg["w"], "d": next_seg["d"]} if next_seg else None),
+            "role": seg.get("role") or "",
+            "suggestedMats": suggested,
+            # Quanti nodi ha senso chiedere per QUESTO pezzo: il corpo
+            # principale ne merita piu' di un collarino.
+            "budget": max(2, min(12, 2 + len(own_extras) * 2
+                                 + (2 if seg["to"] - seg["from"]
+                                    > plan["axisLength"] * 0.25 else 0))),
+        })
+    return tasks
+
+
+def task_text(plan, task):
+    """Il compito come testo, con le interfacce. Va nel prompt del pezzo."""
+    ax = plan["axis"].upper()
+    seg = task["seg"]
+    L = []
+    L.append("PEZZO DA COSTRUIRE: %s   (%d di %d)"
+             % (task["name"], task["i"] + 1, task["n"]))
+    L.append("  sull'asse %s va da %.4f a %.4f  (lunghezza %.4f)"
+             % (ax, seg["from"], seg["to"], seg["to"] - seg["from"]))
+    L.append("  sezione trasversale: larghezza %.4f, profondita' %.4f"
+             % (seg["w"], seg["d"]))
+    L.append("  centro sull'asse %s = %.4f" % (ax, (seg["from"] + seg["to"]) / 2))
+    if task["role"]:
+        L.append("  funzione: %s" % task["role"])
+    L.append("")
+    if task["prev"]:
+        p = task["prev"]
+        L.append("  SOTTO di lui c'e' \"%s\", che finisce a %s=%.4f con sezione "
+                 "%.4f x %.4f: la tua base deve combaciare la' (o sovrapporsi di "
+                 "1-2 mm), non galleggiare."
+                 % (p["n"], ax, p["at"], p["w"], p["d"]))
+    else:
+        L.append("  E' il pezzo piu' in basso: la sua base sta a %s=%.4f."
+                 % (ax, seg["from"]))
+    if task["next"]:
+        nx = task["next"]
+        L.append("  SOPRA di lui comincia \"%s\" a %s=%.4f con sezione %.4f x %.4f: "
+                 "non invadere quello spazio."
+                 % (nx["n"], ax, nx["at"], nx["w"], nx["d"]))
+    else:
+        L.append("  E' il pezzo piu' in alto: finisce a %s=%.4f." % (ax, seg["to"]))
+    if task["extras"]:
+        L.append("")
+        L.append("  DETTAGLI che devono stare su questo pezzo:")
+        for e in task["extras"]:
+            L.append("    - %-16s da %.4f a %.4f, sezione %.4f x %.4f"
+                     % (e["n"], e["from"], e["to"], e["w"], e["d"]))
+    L.append("")
+    L.append("  Nodi attesi per questo pezzo: da %d a %d."
+             % (max(1, task["budget"] - 1), task["budget"] + 2))
+    return "\n".join(L)
+
+
+def task_params(plan, task):
+    """Solo i params che servono a QUESTO pezzo, piu' quelli dei vicini.
+
+    Passare tutti i parametri di tutti i segmenti invita a usarli, e un pezzo
+    che cita le misure di un altro e' il modo in cui un oggetto costruito a pezzi
+    torna incoerente.
+    """
+    keep = {task["name"]}
+    keep.update(e["n"] for e in task["extras"])
+    if task["prev"]:
+        keep.add(task["prev"]["n"])
+    if task["next"]:
+        keep.add(task["next"]["n"])
+    allp = plan_params(plan)
+    out = {}
+    for k, v in allp.items():
+        base = k.rsplit("_", 1)[0]
+        if base in keep:
+            out[k] = v
+    return out
+

@@ -795,6 +795,41 @@ nodo `locked` non si tocca mai. Lo spostamento passa da `offsetField`, che somma
 il delta all'espressione invece di sostituirla, cosi' il nodo resta legato alla
 catena del piano.
 
+### Costruzione A PEZZI (`plan_tasks` + `/api/asset/part`)
+Un modello che deve emettere sessanta nodi in una sola risposta sbaglia una
+misura qui e dimentica un dettaglio la': e' il limite che si vedeva sui vasi e
+sulle spade a dettaglio alto. Sei chiamate da cinque nodi ognuna, con davanti UN
+pezzo e le sue quote, non hanno quel problema — ed e' l'unico modo di chiedere
+davvero "il massimo dettaglio su questo pezzo".
+
+Il flusso e' `piano -> un pezzo per volta -> audit delle misure`, ed e' il
+DEFAULT (spunta "Costruzione a pezzi").
+
+- **La decomposizione non costa una chiamata AI**: il piano la contiene gia'. Un
+  compito per segmento della catena, con gli `extras` che lo indicano come
+  ospite (`of`). Un extra orfano si assegna al segmento che lo CONTIENE per
+  quota, invece di essere scartato.
+- **La coerenza fra pezzi costruiti in conversazioni diverse** e tenuta da tre
+  cose, tutte nel piano: i params condivisi (le quote), la palette dei materiali
+  (nessun pezzo inventa colori), e le **interfacce** — ogni compito porta il
+  pezzo sotto e sopra con la loro quota di confine e la loro sezione, cosi' chi
+  fa la guardia sa che sotto di lei l'impugnatura finisce a 0.230 con sezione
+  0.034 e la sua base combacia invece di galleggiare.
+- **`task_params` e' STRETTO**: solo i params del pezzo, dei suoi dettagli e dei
+  due vicini. Passarli tutti invita a usarli, e un pezzo che cita le misure di
+  uno lontano e' il modo in cui un oggetto costruito a pezzi torna incoerente.
+- **I params del piano VINCONO** su quelli che un pezzo dichiara: un pezzo che
+  ridefinisce una quota della catena la sposterebbe per tutti.
+- **Un pezzo che non esce non ferma gli altri**: si segnala e si tira avanti.
+  Fermarsi butterebbe via anche i pezzi gia' riusciti.
+- **I nomi dei nodi si prefissano col pezzo** (`impugnatura_collare`), e in caso
+  di collisione fra pezzi si prefissa di nuovo invece di sovrascrivere: un nodo
+  perso e' un dettaglio perso.
+- L'asset si mostra DOPO OGNI PEZZO: si vede crescere, e se un pezzo esce male si
+  vede subito quale.
+- La validazione di un pezzo riusa `normalize_spec` come mini-spec. Un secondo
+  validatore per i pezzi sarebbe un secondo validatore che divergono.
+
 - Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
   skinning vero restano fuori.
 

@@ -65,11 +65,36 @@ FAKE_SPEC = {
 FAKE_PATCH = {"patch": [["set", "params.lama_b", 0.95],
                         ["set", "nodes.punta.at", [0, 1.01, 0]]]}
 
-calls = {"plan": 0, "asset": 0, "patch": 0, "critique": 0}
+calls = {"plan": 0, "asset": 0, "patch": 0, "critique": 0, "part": 0}
+parts_seen = []
+
+
+def _fence(obj):
+    """Blocco ```json ... ``` intorno a un oggetto."""
+    return "```json" + chr(10) + json.dumps(obj) + chr(10) + "```"
 
 
 def fake_ai(prompt, model=None, sleep=None, provider=None, images=None):
     text = str(prompt)
+    if "MODELLATORE 3D" in text or "PEZZO DA COSTRUIRE" in text:
+        calls["part"] += 1
+        # Si estrae il nome del pezzo dal compito: la finta AI deve rispondere
+        # con i nodi di QUEL pezzo, altrimenti il test non prova niente.
+        import re as _re
+        m = _re.search(r"PEZZO DA COSTRUIRE: (\S+)", text)
+        name = m.group(1) if m else "pezzo"
+        parts_seen.append(name)
+        body = {"params": {name + "_sp": 0.003},
+                "nodes": [
+                    {"n": name + "_corpo", "p": "cyl", "axis": "y",
+                     "r": name + "_w/2", "len": name + "_b-" + name + "_a",
+                     "at": [0, "(" + name + "_a+" + name + "_b)/2", 0],
+                     "mat": "acciaio"},
+                    {"n": name + "_collare", "p": "torus",
+                     "r": name + "_w/2", "r2": name + "_sp",
+                     "at": [0, name + "_a", 0], "mat": "acciaio"},
+                ]}
+        return _fence(body)
     if "ARCHITETTO" in text or "DISTINTA DI MISURE" in text:
         calls["plan"] += 1
         return "```json\n" + json.dumps(FAKE_PLAN) + "\n```"
@@ -189,6 +214,44 @@ def main():
     print("[9] audit senza piano -> 400")
     code, err = post(base, "/api/asset/audit", {"measured": good})
     ok(code == 400, "400 senza piano")
+
+    print("[10] i compiti si derivano dal piano, senza chiamare l'AI")
+    before_ai = sum(calls.values())
+    code, td = post(base, "/api/asset/tasks", {"plan": data["plan"]})
+    ok(code == 200, "tasks 200")
+    ok(td["count"] == 5, "cinque compiti come i segmenti (%s)" % td["count"])
+    ok(sum(calls.values()) == before_ai, "nessuna chiamata AI per decomporre")
+    names = [t["name"] for t in td["tasks"]]
+    ok(names == ["pomolo", "impugnatura", "guardia", "lama", "punta"],
+       "compiti nell'ordine della catena: %s" % names)
+    t1 = td["tasks"][1]
+    ok(t1["prev"]["n"] == "pomolo" and t1["next"]["n"] == "guardia",
+       "il compito conosce i vicini")
+    ok(abs(t1["prev"]["at"] - 0.055) < 1e-9,
+       "e la quota di confine: %s" % t1["prev"]["at"])
+    ok("CATENA" in td["texts"][1] or "PEZZO DA COSTRUIRE" in td["texts"][1],
+       "il testo del compito e' pronto per il prompt")
+
+    print("[11] un pezzo per volta")
+    code, p0 = post(base, "/api/asset/part",
+                    {"plan": data["plan"], "index": 3, "prompt": "spada",
+                     "detail": 3})
+    ok(code == 200, "part 200")
+    ok(calls["part"] == 1, "una chiamata per un pezzo")
+    ok(parts_seen[-1] == "lama", "il prompt conteneva IL pezzo giusto (%s)" % parts_seen[-1])
+    ok(len(p0["nodes"]) == 2, "torna solo i nodi del pezzo (%d)" % len(p0["nodes"]))
+    ok(all(n["n"].startswith("lama_") for n in p0["nodes"]),
+       "i nodi sono prefissati col pezzo: %s" % [n["n"] for n in p0["nodes"]])
+    ok("lama_a" in p0["params"] and "lama_sp" in p0["params"],
+       "params del piano + quelli del pezzo")
+    ok("pomolo_a" not in p0["params"],
+       "NON riceve i params dei pezzi lontani (contesto stretto)")
+
+    print("[12] indice fuori range e piano mancante")
+    code, _ = post(base, "/api/asset/part", {"plan": data["plan"], "index": 99})
+    ok(code == 400, "indice fuori range -> 400")
+    code, _ = post(base, "/api/asset/part", {"index": 0})
+    ok(code == 400, "senza piano -> 400")
 
     print()
     print("PASS %d  FAIL %d" % (pass_n, fail_n))
