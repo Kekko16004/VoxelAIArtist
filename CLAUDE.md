@@ -617,6 +617,91 @@ Everything is inline in one HTML file. Major systems:
   `walk` reproduces the reference clip key-for-key.
 - **UI shell**: tabbed sidebar (`Genera` / `Vista` / `Disegna` / `Rig`), `.tab-content` scrolls, `.sidebar-footer` pins export/save. `switchTab()` drops back to the `view` tool when leaving `Disegna`. Styling is a dark glassmorphism theme via `:root` CSS custom properties (`--accent-primary`, `--glass-bg`, etc.) with `backdrop-filter` blur and rounded corners.
 
+## SimpleAIModeller (`SimpleAIModeller/`, app separata)
+
+Asset 3D parametrici da prompt (mesh vere, non voxel). App sorella autonoma:
+`python SimpleAIModeller/main.py` o `SimpleAIModeller/run.bat`. Stesso schema
+di PixelAIEditor (server HTTP locale, UI nel browser, riuso di `../src` per
+cookie/provider/parser). L'AI **non scrive codice**: produce una spec JSON
+compatta (`nodes` + `params` + `mats`); il motore JS la interpreta.
+
+- **Una sola implementazione del motore, in JS** (`ui/src/lib/01`–`06`). Python
+  (`src/spec.py`) normalizza e valida solo lo SCHEMA e applica le patch per
+  NOME. Niente parita' Python/JS da mantenere.
+- **`geom/*` non conosce THREE**: primitive e CSG ritornano array piatti, quindi
+  girano in Node dentro `tests/test_geom.mjs` senza browser.
+- **CSG in casa** (`04-csg.js`, BSP). Se dopo una booleana il guscio non e'
+  chiuso si tiene la mesh non tagliata e si emette un avviso.
+- **Tre stili** (`lowpoly` / `pbr` / `toon`), scelti dal campo `style`. In
+  anteprima il rumore e' uno shader object-space; in export GLB viene
+  quantizzato in tinte piatte (un GLB non porta shader). **Niente attributo
+  `color`** nel GLB (invariante 6 del padre).
+- **Critica a cascata**: validatori locali deterministici (`06-validators.js`)
+  poi, se la spunta e' accesa e la sonda (`POST /api/vision/probe`) ha detto
+  che il provider vede le immagini, una passata di critica AI sul contact
+  sheet. Se la vista non c'e', il critico e' l'utente (prompt di testo).
+- **`images=` in coda** su `ai_answer_text` / `complete`: retrocompatibile,
+  nessun chiamante storico cambia. Gemini accetta 1 immagine, Anthropic/OpenAI
+  fino a 8, `custom` zero.
+- Build: `node SimpleAIModeller/ui/build.mjs`. Suite:
+  `bash SimpleAIModeller/tests/run_all.sh` (offline). GUI reale:
+  `.superpowers/check_sam_gui.py` (gitignored, 19 controlli con clic veri).
+- Fase 1 = core di generazione + visore. Editor navigabile, gizmo e Gauntlet
+  Loop multi-agente restano fuori finche' la qualita' degli asset non e'
+  giudicata sufficiente.
+
+### Il piano dell'architetto (`src/plan.py`) — cio' che rende precise le misure
+Il difetto piu' costoso NON e' estetico, e' aritmetico: il modello piazza i pezzi
+indovinando i centri e dichiara un ingombro che non c'entra con cio' che
+costruisce (misurato in GUI il 2026-08-16: una spada con la punta alta 0.45 m in
+FONDO, `size` dichiarato 4.04 m contro 1.13 misurato, 30 "frammenti"). Nessun
+prompt piu' lungo lo risolve, perche' il modello non fa la somma — quindi si
+cambia la **rappresentazione**:
+
+1. **`POST /api/asset/plan`** (`prompt-plan.txt`) chiede una CATENA di segmenti
+   contigui lungo l'asse principale: `{n, from, to, w, d}` in metri. Da
+   `from`/`to` il centro e' `(from+to)/2` e la lunghezza `to-from`: due numeri
+   che si **controllano**, non si indovinano.
+2. **`normalize_plan`** verifica e RIPARA: contiguita' (`chain[i].to ==
+   chain[i+1].from`, chiusa conservando la lunghezza del pezzo successivo),
+   somma totale, extras dentro il loro ospite, e **ricalcola i totali
+   trasversali dal massimo delle sezioni** — un `total` dichiarato piu' piccolo
+   dei suoi pezzi viene scartato.
+3. **`plan_params`** consegna `<pezzo>_a/_b/_w/_d` gia' pronti, e il prompt
+   impone di usarli come espressioni invece di ricopiare numeri a mano.
+4. **`audit_built`** (nessuna AI: e' una somma) confronta la mesh col piano pezzo
+   per pezzo — lunghezza, POSIZIONE, sezioni, pezzi mancanti, pezzi estranei
+   grandi — e ogni difetto porta il numero giusto nel campo `fix`.
+5. La UI cicla: genera → audit → patch → riaudit (`MAX_FIX_ROUNDS = 2`), e si
+   ferma quando **i numeri tornano** — non quando il modello dice che va bene —
+   o quando un giro non migliora niente.
+
+Da non rompere:
+- **Il piano e' il DEFAULT** (`planFirst` assente = true). Disattivarlo riporta
+  al comportamento vecchio, cioe' al difetto.
+- **Con un piano l'ingombro non si dichiara**: `normalize_spec(..., hasPlan=True)`
+  tace su `sizeMissing` e `main.py` sovrascrive `spec["size"]` col totale del
+  piano. Il valore finale e' quello MISURATO sulla mesh; l'audit confronta i due.
+- **`validateSize` si spegne con un piano** (`validateAll(spec, built, {hasPlan})`):
+  l'audit giudica lo stesso fatto con numeri verificati, e due giudizi sulla
+  stessa causa darebbero due difetti.
+- **L'audit vive SOLO in Python.** Il JS misura (`measuredFor`, `partMetrics`) e
+  chiama `/api/asset/audit`. Duplicarlo sarebbe la trappola della doppia
+  implementazione che questo progetto evita per costruzione.
+- Tolleranza `max(6 mm, 18%)`: una sfera di diametro `w` non riempie un segmento
+  piu' lungo di `w`, e pretendere l'uguaglianza esatta darebbe difetti su
+  geometria corretta.
+
+Due falsi positivi trovati in GUI reale, invisibili ai test unitari:
+- **voxelizzazione**: campionare vertici e baricentri lasciava buchi sulle facce
+  grandi e le componenti connesse dicevano "30 frammenti, 5 parti staccate" su
+  una spada tutta attaccata. Ora si rasterizzano i triangoli a passo mezza cella
+  e si contano i **26 vicini** (due pezzi che si toccano di spigolo sono saldati).
+- **`flat_top`**: il modello scrive quella bandiera anche su una spada, perche' la
+  regola delle piattaforme sta fra quelle generali del prompt. Adesso serve anche
+  un'impronta larga e bassa (o un nome che lo dica), altrimenti il validatore
+  chiedeva di appiattire la punta di una lama.
+
 ## PixelAIEditor (`PixelAIEditor/`, app separata)
 
 Editor di pixel art 2D / ritocco foto con generazione AI, con lo **stesso modus

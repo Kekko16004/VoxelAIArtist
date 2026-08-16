@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SimpleAIModeller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+:root {
+  --bg: #0c0a14;
+  --bg2: #14101f;
+  --panel: rgba(255,255,255,0.04);
+  --panel-border: rgba(255,255,255,0.08);
+  --text: #e8e6f0;
+  --muted: #9a96a8;
+  --accent: #7c6af7;
+  --accent2: #4f8cff;
+  --ok: #3ecf8e;
+  --warn: #e6b84d;
+  --err: #e85d6a;
+  --input: rgba(0,0,0,0.35);
+  --radius: 10px;
+  --font: "Plus Jakarta Sans", system-ui, sans-serif;
+  --sidebar-w: 340px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--panel-border); background: var(--panel); border-radius: 8px; padding: 8px 12px; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; color: #fff; font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+input, select, textarea {
+  background: var(--input); border: 1px solid var(--panel-border); border-radius: 8px;
+  padding: 8px 10px; width: 100%;
+}
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.field { margin-bottom: 10px; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+.muted { color: var(--muted); font-size: 12px; }
+
+.app { display: grid; grid-template-columns: var(--sidebar-w) 1fr 300px; height: 100vh; }
+.sidebar, .right {
+  background: var(--bg2); border-right: 1px solid var(--panel-border);
+  overflow: auto; padding: 14px;
+}
+.right { border-right: none; border-left: 1px solid var(--panel-border); }
+.brand { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
+.brand h1 { font-size: 16px; margin: 0; letter-spacing: 0.02em; }
+.brand span { font-size: 11px; color: var(--muted); }
+.section { margin-bottom: 16px; }
+.section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn-row button { flex: 1 1 auto; }
+
+.viewport-wrap { position: relative; background: var(--bg); min-width: 0; }
+#viewport { width: 100%; height: 100%; display: block; }
+.hud {
+  position: absolute; left: 10px; top: 10px; display: flex; gap: 4px; flex-wrap: wrap;
+  background: rgba(18,15,30,0.92); border: 1px solid var(--panel-border);
+  border-radius: 8px; padding: 4px;
+}
+.hud button { padding: 4px 8px; font-size: 12px; }
+.status {
+  position: absolute; left: 10px; right: 10px; bottom: 10px;
+  background: rgba(18,15,30,0.92); border: 1px solid var(--panel-border);
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; min-height: 20px;
+}
+.status[data-kind="error"] { border-color: var(--err); color: #ffb3ba; }
+.status[data-kind="warn"] { border-color: var(--warn); color: #ffe0a0; }
+.status[data-kind="ok"] { border-color: var(--ok); color: #b6f0d0; }
+.status[data-kind="busy"] { border-color: var(--accent); }
+
+#nodesList, #defectsList, #providerList { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+#nodesList li, #providerList li {
+  padding: 6px 8px; border-bottom: 1px solid var(--panel-border); font-family: ui-monospace, monospace;
+}
+#defectsList li { padding: 8px; border-left: 3px solid var(--muted); margin-bottom: 6px; background: var(--panel); border-radius: 0 6px 6px 0; }
+#defectsList li.sev-high { border-left-color: var(--err); }
+#defectsList li.sev-medium { border-left-color: var(--warn); }
+#defectsList li.sev-low { border-left-color: var(--accent2); }
+#defectsList li.ok { border-left-color: var(--ok); }
+#defectsList .fix { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+.param-row { display: grid; grid-template-columns: 70px 1fr; gap: 6px; align-items: center; margin-bottom: 4px; }
+.param-row label { margin: 0; font-family: ui-monospace, monospace; }
+#jsonOut { width: 100%; min-height: 160px; font-family: ui-monospace, monospace; font-size: 11px; resize: vertical; }
+#statsOut { font-size: 12px; color: var(--muted); }
+.plan-box {
+  font-family: ui-monospace, monospace; font-size: 10.5px; line-height: 1.45;
+  white-space: pre; overflow-x: auto; margin: 0; color: var(--text);
+  background: var(--input); border: 1px solid var(--panel-border);
+  border-radius: 8px; padding: 8px; max-height: 240px; overflow-y: auto;
+}
+
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex;
+  align-items: center; justify-content: center; z-index: 50;
+}
+.modal[hidden] { display: none; }
+.modal-card {
+  background: var(--bg2); border: 1px solid var(--panel-border); border-radius: 12px;
+  width: min(560px, 92vw); max-height: 86vh; overflow: auto; padding: 18px;
+}
+.modal-card h2 { margin: 0 0 12px; font-size: 16px; }
+#cookiesInput { min-height: 120px; font-family: ui-monospace, monospace; font-size: 11px; }
+
+#busyOverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 40;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+#busyOverlay[hidden] { display: none; }
+.spinner {
+  width: 42px; height: 42px; border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
+.check input { width: auto; }
+
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 300px 1fr; }
+  .right { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1 data-i18n="app.title">SimpleAIModeller</h1>
+      <span data-i18n="app.tagline">Asset 3D parametrici da prompt</span>
+    </div>
+
+    <div class="section">
+      <div class="field">
+        <label data-i18n="form.prompt">Descrivi l'asset</label>
+        <textarea id="promptInput" rows="4" data-i18n-placeholder="form.promptPh"
+          placeholder="Es. una cassa di legno con coperchio apribile e fasce di ferro"></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label data-i18n="form.cat">Categoria</label>
+          <select id="catSelect">
+            <option value="prop" data-i18n="form.cat.prop">Prop / oggetto</option>
+            <option value="char" data-i18n="form.cat.char">Personaggio</option>
+            <option value="vehicle" data-i18n="form.cat.vehicle">Veicolo</option>
+            <option value="struct" data-i18n="form.cat.struct">Struttura</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="form.style">Stile</label>
+          <select id="styleSelect">
+            <option value="lowpoly" data-i18n="form.style.lowpoly">Low-poly</option>
+            <option value="pbr" data-i18n="form.style.pbr">PBR</option>
+            <option value="toon" data-i18n="form.style.toon">Toon</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label data-i18n="form.detail">Dettaglio</label>
+          <select id="detailSelect">
+            <option value="0" data-i18n="form.detail.0">Bozza</option>
+            <option value="1" data-i18n="form.detail.1">Basso</option>
+            <option value="2" selected data-i18n="form.detail.2">Medio</option>
+            <option value="3" data-i18n="form.detail.3">Alto</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="form.sizeHint">Ingombro suggerito (m, 0 = decide l'AI)</label>
+          <div class="row">
+            <input id="sizeX" type="number" step="0.1" min="0" value="0" title="X">
+            <input id="sizeY" type="number" step="0.1" min="0" value="0" title="Y">
+            <input id="sizeZ" type="number" step="0.1" min="0" value="0" title="Z">
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label data-i18n="form.model">Modello</label>
+        <select id="modelSelect"></select>
+        <div class="muted" id="modelNote"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="groundCheck" checked> <span data-i18n="form.ground">Appoggiato a terra</span></label>
+      <label class="check"><input type="checkbox" id="planCheck" checked> <span data-i18n="form.plan">Piano dell'architetto (consigliato)</span></label>
+      <label class="check"><input type="checkbox" id="autofixCheck" checked> <span data-i18n="form.autofix">Correzione automatica delle misure</span></label>
+      <label class="check"><input type="checkbox" id="visionCheck" checked> <span data-i18n="form.vision">Critica visiva AI</span></label>
+      <div class="muted" id="visionStatus"></div>
+      <div class="field">
+        <label data-i18n="form.notes">Note</label>
+        <input id="notesInput" data-i18n-placeholder="form.notesPh" placeholder="Vincoli extra, palette, riferimenti…">
+      </div>
+      <div class="btn-row">
+        <button class="primary" id="generateBtn" data-i18n="btn.generate">Genera</button>
+        <button id="demoBtn" data-i18n="btn.demo">Demo (senza AI)</button>
+      </div>
+      <div class="btn-row">
+        <button id="critiqueBtn" data-i18n="btn.critique">Critica</button>
+        <button id="patchBtn" data-i18n="btn.patch">Correggi…</button>
+        <button id="settingsBtn" data-i18n="btn.settings">Impostazioni</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="panel.params">Parametri</h2>
+      <div id="paramsList"></div>
+    </div>
+
+    <div class="section">
+      <h2 data-i18n="nav.export">Esporta</h2>
+      <div class="btn-row">
+        <button id="exportGlbBtn" data-i18n="btn.exportGlb">GLB</button>
+        <button id="exportObjBtn" data-i18n="btn.exportObj">OBJ</button>
+        <button id="exportJsonBtn" data-i18n="btn.exportJson">JSON</button>
+        <button id="exportColBtn" data-i18n="btn.exportCol">Collider</button>
+      </div>
+      <div class="btn-row">
+        <button id="sheetBtn" data-i18n="btn.sheet">Contact sheet</button>
+      </div>
+      <label class="check"><input type="checkbox" id="humanCheck" checked> <span data-i18n="form.human">Silhouette 1,70 m</span></label>
+      <div class="field" style="margin-top:10px">
+        <label>Lingua</label>
+        <select id="languageSelect"></select>
+      </div>
+    </div>
+  </aside>
+
+  <main class="viewport-wrap">
+    <canvas id="viewport"></canvas>
+    <div class="hud">
+      <button data-view="front" data-i18n="view.front">Fronte</button>
+      <button data-view="back" data-i18n="view.back">Retro</button>
+      <button data-view="left" data-i18n="view.left">Sinistra</button>
+      <button data-view="right" data-i18n="view.right">Destra</button>
+      <button data-view="top" data-i18n="view.top">Alto</button>
+      <button data-view="persp" data-i18n="view.persp">Prospettiva</button>
+    </div>
+    <div class="status" id="statusBar"></div>
+  </main>
+
+  <aside class="right">
+    <div class="section">
+      <h2 data-i18n="panel.stats">Statistiche</h2>
+      <div id="statsOut" class="muted">—</div>
+    </div>
+    <div class="section">
+      <h2 data-i18n="panel.plan">Piano delle misure</h2>
+      <pre id="planOut" class="plan-box">—</pre>
+    </div>
+    <div class="section">
+      <h2 data-i18n="panel.nodes">Nodi</h2>
+      <ul id="nodesList"></ul>
+    </div>
+    <div class="section">
+      <h2 data-i18n="panel.defects">Difetti</h2>
+      <ul id="defectsList"></ul>
+    </div>
+    <div class="section">
+      <h2 data-i18n="panel.json">Spec JSON</h2>
+      <textarea id="jsonOut" spellcheck="false"></textarea>
+      <div class="btn-row">
+        <button id="applyJsonBtn" data-i18n="btn.applyJson">Applica JSON</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="busyOverlay" hidden><div class="spinner" title="busy"></div></div>
+
+<div class="modal" id="settingsModal" hidden>
+  <div class="modal-card">
+    <h2 data-i18n="settings.title">Impostazioni</h2>
+    <p id="settingsInfo" class="muted"></p>
+    <div class="field">
+      <label data-i18n="settings.cookies">Cookie Gemini (JSON)</label>
+      <textarea id="cookiesInput" data-i18n-placeholder="settings.cookiesPh"
+        placeholder="Incolla qui l'export dei cookie del browser…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="primary" id="saveCookiesBtn" data-i18n="btn.saveCookies">Salva cookie</button>
+      <button id="probeVisionBtn" data-i18n="btn.probeVision">Prova visione</button>
+      <button id="settingsClose" data-i18n="btn.close">Chiudi</button>
+    </div>
+    <div class="section" style="margin-top:16px">
+      <h2 data-i18n="settings.providers">Provider AI</h2>
+      <ul id="providerList"></ul>
+      <p class="muted">I provider si aggiungono anche da VoxelAIArtist: il registro e le chiavi sono condivisi.</p>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+<!--BUNDLE-->
+</script>
+</body>
+</html>

@@ -88,6 +88,36 @@ TYPE_CUSTOM = "custom"
 
 PROVIDER_TYPES = (TYPE_GEMINI, TYPE_ANTHROPIC, TYPE_OPENAI, TYPE_CUSTOM)
 
+# Chi PUO' ricevere un'immagine. E' una capacita' DICHIARATA per tipo, non una
+# promessa: il modello configurato dentro un tipo che la sostiene puo' comunque
+# non essere multimodale (gpt-3.5, un Ollama testuale, un gateway che scarta il
+# blocco immagine senza dirlo). Per questo esiste una SONDA che la verifica
+# davvero mandando un'immagine di prova; qui si sa solo dove l'immagine ha un
+# posto sintatticamente valido in cui andare.
+#
+# `custom` e' fuori per costruzione: l'utente descrive dove infilare il PROMPT
+# (`prompt_path`), e non esiste nessun percorso ovvio dove infilare un'immagine
+# in un endpoint che non abbiamo mai visto. Indovinarlo manderebbe un corpo che
+# il provider rifiuta con un 400 illeggibile.
+VISION_BY_TYPE = {
+    TYPE_GEMINI: True,
+    TYPE_ANTHROPIC: True,
+    TYPE_OPENAI: True,
+    TYPE_CUSTOM: False,
+}
+
+# Il client `gemini` accetta UNA immagine per chiamata
+# (`generate_content(prompt, image)`), non una lista. Chi ha piu' viste da
+# mostrare compone un contact sheet: e' una scelta che il chiamante deve fare
+# consapevolmente, quindi qui si dichiara il limite invece di troncare in
+# silenzio la seconda immagine.
+MAX_IMAGES_BY_TYPE = {
+    TYPE_GEMINI: 1,
+    TYPE_ANTHROPIC: 8,
+    TYPE_OPENAI: 8,
+    TYPE_CUSTOM: 0,
+}
+
 # Il provider di default non sta nel registro: e' un'entry SINTETICA, sempre
 # presente e non cancellabile. Se stesse su disco, un utente potrebbe
 # cancellarla e restare senza alcun modo di generare a configurazione zero —
@@ -676,9 +706,123 @@ def _set_path(obj, path, value):
     return obj
 
 
+# --- Immagini in ingresso ---------------------------------------------------
+
+_IMAGE_MIMES = {
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "gif": "image/gif",
+}
+
+
+def normalize_images(images):
+    """Porta qualunque forma ragionevole a `[{"mime", "b64", "bytes"}, ...]`.
+
+    Si accettano: `bytes` grezzi, una data-URL (`data:image/png;base64,...`),
+    base64 nudo, o un dict `{mime, data|b64}`. Un singolo elemento non in lista
+    viene incartato. Motivo: questa funzione sta al confine fra tre chiamanti
+    diversi (browser che manda data-URL, test che mandano bytes, MCP che manda
+    percorsi) e ognuno userebbe la propria forma; normalizzare qui e' un punto
+    solo invece di tre rami dentro ogni `_complete_*`.
+
+    Un elemento non decodificabile e' un ERRORE, non un elemento saltato: una
+    critica visiva fatta su zero immagini risponderebbe comunque qualcosa di
+    plausibile, che e' il modo peggiore di fallire.
+    """
+    import base64
+
+    if images is None:
+        return []
+    if isinstance(images, (bytes, bytearray, str, dict)):
+        images = [images]
+    out = []
+    for item in images:
+        mime, raw, b64 = "image/png", None, None
+        if isinstance(item, (bytes, bytearray)):
+            raw = bytes(item)
+        elif isinstance(item, dict):
+            mime = str(item.get("mime") or item.get("mimeType") or mime)
+            payload = item.get("data")
+            if payload is None:
+                payload = item.get("b64")
+            if isinstance(payload, (bytes, bytearray)):
+                raw = bytes(payload)
+            else:
+                b64 = str(payload or "")
+        elif isinstance(item, str):
+            b64 = item
+        else:
+            raise AIFormatError("Immagine in un formato non riconosciuto: %s"
+                                % type(item).__name__)
+        if b64 is not None:
+            s = b64.strip()
+            if s.startswith("data:"):
+                head, _, tail = s.partition(",")
+                if ";" in head:
+                    declared = head[5:].split(";", 1)[0].strip()
+                    if declared:
+                        mime = declared
+                s = tail
+            # Il base64 di un canvas arriva spesso con capi di riga dentro.
+            s = "".join(s.split())
+            if not s:
+                raise AIFormatError("Immagine vuota.")
+            try:
+                raw = base64.b64decode(s, validate=False)
+            except Exception as e:                          # noqa: BLE001
+                raise AIFormatError("Immagine non decodificabile: %s" % e) from e
+        if not raw:
+            raise AIFormatError("Immagine vuota.")
+        if mime not in _IMAGE_MIMES.values():
+            # Un mime inventato fa fallire Anthropic con un 400: si ricade sul
+            # PNG, che e' cio' che produce un canvas.
+            mime = "image/png"
+        out.append({"mime": mime, "bytes": raw,
+                    "b64": base64.b64encode(raw).decode("ascii")})
+    return out
+
+
+def _limit_images(entry, images):
+    """Taglia alla capienza del tipo, ma solo dopo averlo DETTO al chiamante."""
+    ptype = entry.get("type")
+    if not images:
+        return []
+    if not VISION_BY_TYPE.get(ptype, False):
+        raise AIFormatError(
+            "Il provider '%s' non sostiene le immagini: la critica visiva va "
+            "disattivata o si sceglie un altro provider."
+            % (entry.get("label") or entry.get("id") or ptype))
+    cap = MAX_IMAGES_BY_TYPE.get(ptype, 1)
+    if len(images) > cap:
+        print("[ai] %d immagini richieste, il provider ne accetta %d: uso le prime."
+              % (len(images), cap))
+        return images[:cap]
+    return images
+
+
+def supports_images(provider=None):
+    """`{supported, reason, maxImages}` per il provider indicato (o l'attivo).
+
+    `reason` e' un CODICE, non una frase: chi lo mostra e' la UI, che sa in che
+    lingua parla l'utente. Stessa regola degli avvisi delle ops 2D.
+    """
+    if isinstance(provider, dict):
+        entry = provider
+    elif provider:
+        entry = get_provider(provider) or {}
+    else:
+        entry = get_active_provider()
+    ptype = entry.get("type") or TYPE_GEMINI
+    ok = bool(VISION_BY_TYPE.get(ptype, False))
+    reason = "ok" if ok else ("customUnsupported" if ptype == TYPE_CUSTOM
+                              else "typeUnsupported")
+    return {"supported": ok, "reason": reason,
+            "maxImages": MAX_IMAGES_BY_TYPE.get(ptype, 0),
+            "type": ptype, "provider": entry.get("id")}
+
+
 # --- Provider: Anthropic ----------------------------------------------------
 
-def _complete_anthropic(entry, prompt):
+def _complete_anthropic(entry, prompt, images=None):
     """POST /v1/messages. HTTP grezzo di proposito: il pacchetto `anthropic` non
     e' installato e aggiungerlo renderebbe l'app dipendente da una libreria che
     serve solo a chi sceglie questo provider."""
@@ -694,6 +838,16 @@ def _complete_anthropic(entry, prompt):
         "anthropic-version": ANTHROPIC_VERSION,
     }
     headers.update(_normalize_headers(entry.get("headers")))
+    # Le immagini vanno PRIMA del testo: il modello legge in ordine e la
+    # domanda deve arrivare dopo cio' su cui va risposta. Senza immagini il
+    # contenuto resta la stringa nuda di sempre, cosi' il corpo inviato dai
+    # chiamanti storici e' byte per byte quello di prima.
+    content = prompt
+    if images:
+        content = [{"type": "image",
+                    "source": {"type": "base64", "media_type": im["mime"],
+                               "data": im["b64"]}} for im in images]
+        content.append({"type": "text", "text": prompt})
     # Corpo MINIMO di proposito: `temperature`, `top_p`, `top_k` e
     # `thinking.budget_tokens` sono RIFIUTATI con 400 dai modelli recenti
     # (Opus 5/4.8/4.7, Sonnet 5, Fable 5), mentre model+max_tokens+messages e'
@@ -702,7 +856,7 @@ def _complete_anthropic(entry, prompt):
     payload = {
         "model": entry.get("model") or ANTHROPIC_MODELS[0],
         "max_tokens": entry.get("max_tokens") or DEFAULT_MAX_TOKENS,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": content}],
     }
     data = _http_post_json(base + "/v1/messages", headers, payload,
                            label=entry.get("label") or "Anthropic")
@@ -731,7 +885,7 @@ def _complete_anthropic(entry, prompt):
 
 # --- Provider: OpenAI-compatibile ------------------------------------------
 
-def _complete_openai(entry, prompt):
+def _complete_openai(entry, prompt, images=None):
     """POST {base}/chat/completions con `Authorization: Bearer`.
 
     Copre OpenAI, OpenRouter, Groq, Together, LM Studio, Ollama, vLLM: e' lo
@@ -750,9 +904,19 @@ def _complete_openai(entry, prompt):
         headers["Authorization"] = "Bearer " + key
     headers.update(_normalize_headers(entry.get("headers")))
     model = entry.get("model") or "gpt-4o-mini"
+    # Senza immagini `content` resta una STRINGA: la forma a blocchi e' accettata
+    # da OpenAI ma non da tutti i gateway compatibili (LM Studio e qualche
+    # proxy la rifiutano o la appiattiscono male), quindi non la si impone a chi
+    # non ne ha bisogno.
+    content = prompt
+    if images:
+        content = [{"type": "text", "text": prompt}]
+        for im in images:
+            content.append({"type": "image_url", "image_url": {
+                "url": "data:%s;base64,%s" % (im["mime"], im["b64"])}})
     payload = {
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": content}],
         # Streaming: Grok 4.5 ragiona a lungo; senza chunk Cloudflare
         # (504/524) taglia prima che arrivi il primo byte.
         "stream": True,
@@ -782,7 +946,7 @@ def _complete_openai(entry, prompt):
 
 # --- Provider: custom -------------------------------------------------------
 
-def _complete_custom(entry, prompt):
+def _complete_custom(entry, prompt, images=None):
     """Provider generico: l'utente descrive dove va il prompt e dove sta la
     risposta. E' l'unico modo di supportare un endpoint che non abbiamo mai
     visto senza aggiungere un branch a ogni richiesta d'utente.
@@ -792,7 +956,17 @@ def _complete_custom(entry, prompt):
     - `response_path`: dove leggere il testo (default `text`).
     - `auth_header` / `auth_prefix`: come mandare la chiave (default
       `Authorization` / `Bearer `).
+
+    Le immagini NON sono supportate e il caso arriva qui solo se qualcuno
+    scavalca `_limit_images`: non esiste un percorso plausibile dove infilarle in
+    un corpo arbitrario, e inventarne uno darebbe un 400 al posto di un
+    messaggio comprensibile.
     """
+    if images:
+        raise AIFormatError(
+            "Un provider di tipo 'custom' non puo' ricevere immagini: il corpo "
+            "della richiesta e' definito dall'utente e non c'e' un campo noto "
+            "in cui metterle.")
     key = get_api_key(entry["id"])
     base = (entry.get("base_url") or "").rstrip("/")
     if not base:
@@ -958,7 +1132,7 @@ def list_models(provider_id=None):
 
 # --- Dispatch ---------------------------------------------------------------
 
-def _complete_gemini(entry, prompt, model=None):
+def _complete_gemini(entry, prompt, model=None, images=None):
     """Ramo Gemini: delega ad `aiclient`, dove vive il client a cookie.
 
     L'import e' LOCALE, non circolare per costruzione: `aiclient` importa questo
@@ -967,7 +1141,7 @@ def _complete_gemini(entry, prompt, model=None):
     `_gemini_client` importa `gemini`.
     """
     import aiclient
-    return aiclient.gemini_answer_text(prompt, model)
+    return aiclient.gemini_answer_text(prompt, model, images=images)
 
 
 def _looks_like_gemini_model(name):
@@ -975,7 +1149,7 @@ def _looks_like_gemini_model(name):
     return s.startswith("gemini") or s.startswith("gemma")
 
 
-def complete(prompt, provider=None, model=None):
+def complete(prompt, provider=None, model=None, images=None):
     """UNA chiamata all'AI col provider indicato (o quello attivo) -> testo.
 
     `provider` puo' essere un id o un'entry gia' risolta. `model` e' il valore
@@ -983,6 +1157,12 @@ def complete(prompt, provider=None, model=None):
     si puo' scegliere grok-3 con la chiave Grok. Un nome Gemini (o vuoto)
     NON sovrascrive il modello del provider a chiave: e' il caso in cui la
     UI non ha ancora aggiornato il menu e manderebbe gemini-3.1-pro a xAI.
+
+    `images` e' in CODA e opzionale, come `provider` prima di lui: nessuno dei
+    chiamanti storici (voxel, coda pack, texture, animazioni, MCP) passa nulla e
+    per loro il corpo inviato resta identico a prima. Con immagini vale la
+    capienza del tipo (`MAX_IMAGES_BY_TYPE`) e un tipo che non le sostiene
+    solleva invece di ignorarle.
     """
     if isinstance(provider, dict):
         entry = provider
@@ -993,19 +1173,21 @@ def complete(prompt, provider=None, model=None):
     else:
         entry = get_active_provider()
 
+    imgs = _limit_images(entry, normalize_images(images))
+
     ptype = entry.get("type")
     if ptype == TYPE_GEMINI:
-        return _complete_gemini(entry, prompt, model)
+        return _complete_gemini(entry, prompt, model, images=imgs)
     chosen = str(model or "").strip()
     if chosen and not _looks_like_gemini_model(chosen):
         entry = dict(entry)
         entry["model"] = chosen
     if ptype == TYPE_ANTHROPIC:
-        return _complete_anthropic(entry, prompt)
+        return _complete_anthropic(entry, prompt, images=imgs)
     if ptype == TYPE_OPENAI:
-        return _complete_openai(entry, prompt)
+        return _complete_openai(entry, prompt, images=imgs)
     if ptype == TYPE_CUSTOM:
-        return _complete_custom(entry, prompt)
+        return _complete_custom(entry, prompt, images=imgs)
     raise AIFormatError("Tipo di provider sconosciuto: %s" % ptype)
 
 
@@ -1035,10 +1217,16 @@ def public_summary():
     info = list_providers()
     active_id = info["active"]
     active = next((p for p in info["providers"] if p["id"] == active_id), None)
+    vision = supports_images(active_id)
     return {
         "active": active_id,
         "activeType": (active or {}).get("type", TYPE_GEMINI),
         "activeLabel": (active or {}).get("label", "Google Gemini"),
         "count": len(info["providers"]),
         "usesCookies": (active or {}).get("type", TYPE_GEMINI) == TYPE_GEMINI,
+        # Capacita' DICHIARATA, non verificata: chi ci fa affidamento (la critica
+        # visiva) manda prima la sonda. Vedi VISION_BY_TYPE.
+        "vision": vision["supported"],
+        "visionReason": vision["reason"],
+        "maxImages": vision["maxImages"],
     }

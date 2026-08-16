@@ -92,26 +92,37 @@ def _gemini_client(model=None):
     return Gemini(auto_cookies=True, timeout=180)
 
 
-def gemini_answer_text(final_prompt, model=None):
+def gemini_answer_text(final_prompt, model=None, images=None):
     """UNA chiamata al client Gemini a cookie -> testo grezzo della risposta.
 
     E' il corpo storico di `ai_answer_text`, ora raggiungibile anche dal ramo
     `gemini_cookies` di `providers.complete()`. Sta QUI e non in providers.py
     perche' cookie e classificazione a indizi testuali sono roba di Gemini, e
     providers.py non deve sapere che esistono.
+
+    `images` e' una lista gia' normalizzata da `providers.normalize_images`. Il
+    client accetta UNA immagine (`generate_content(prompt, image)`), quindi si
+    passa la prima; il taglio con avviso e' avvenuto a monte, in `_limit_images`,
+    dove si sa quante ne accetta il tipo. Si passano i BYTES e non un percorso:
+    l'immagine arriva da un canvas del browser e non esiste su disco, e scriverla
+    in un file temporaneo solo per rileggerla vorrebbe dire scegliere una
+    cartella, gestirne la cancellazione e lasciare in giro il render dell'utente.
     """
     try:
         client = _gemini_client(model)
     except Exception as e:                                  # noqa: BLE001
         raise _classify_ai_error(e) from e
     try:
-        response = client.generate_content(final_prompt)
+        if images:
+            response = client.generate_content(final_prompt, images[0]["bytes"])
+        else:
+            response = client.generate_content(final_prompt)
     except Exception as e:                                  # noqa: BLE001
         raise _classify_ai_error(e) from e
     return response.text if hasattr(response, 'text') else str(response)
 
 
-def ai_answer_text(final_prompt, model=None, provider=None):
+def ai_answer_text(final_prompt, model=None, provider=None, images=None):
     """UNA chiamata all'AI ATTIVA -> testo grezzo della risposta.
 
     Punto di contatto unico: scelta del provider, credenziali e classificazione
@@ -122,11 +133,18 @@ def ai_answer_text(final_prompt, model=None, provider=None):
     esistente deve passarlo, e senza si usa quello attivo — che a configurazione
     zero e' Gemini a cookie, come prima.
 
+    `images` e' l'ultimo arrivato e vale la stessa regola: opzionale, in coda,
+    nessun chiamante storico lo passa. Serve alla critica visiva di
+    SimpleAIModeller. Un provider che non sostiene le immagini solleva
+    `AIFormatError` invece di ignorarle in silenzio — una critica fatta su zero
+    immagini risponderebbe comunque qualcosa di plausibile.
+
     `model` e' il valore del selettore della UI. Se appartiene al provider
     attivo lo usa; un nome Gemini non finisce mai a Grok/Anthropic.
     """
     try:
-        return ai_providers.complete(final_prompt, provider=provider, model=model)
+        return ai_providers.complete(final_prompt, provider=provider, model=model,
+                                     images=images)
     except (AIAuthError, AITransientError, AIFormatError):
         raise
     except Exception as e:                                  # noqa: BLE001
@@ -150,7 +168,8 @@ def _interactive_backoff():
     return waits
 
 
-def ai_answer_text_retrying(final_prompt, model=None, sleep=None, provider=None):
+def ai_answer_text_retrying(final_prompt, model=None, sleep=None, provider=None,
+                            images=None):
     """Come `ai_answer_text` ma ritenta gli errori transitori col backoff.
 
     Gli errori di autenticazione e di formato NON vengono ritentati (come nella
@@ -162,7 +181,8 @@ def ai_answer_text_retrying(final_prompt, model=None, sleep=None, provider=None)
     last = None
     for attempt in range(len(backoff) + 1):
         try:
-            return ai_answer_text(final_prompt, model, provider=provider)
+            return ai_answer_text(final_prompt, model, provider=provider,
+                                  images=images)
         except AITransientError as e:
             last = e
             if attempt >= len(backoff):
