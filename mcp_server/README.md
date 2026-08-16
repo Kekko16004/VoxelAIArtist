@@ -43,18 +43,37 @@ Hai **due modalità** per avviare e collegare il server MCP:
 
 ---
 
-### 🌐 Modalità 1: Server HTTP / SSE con IP & Porta (Consigliata se vuoi un file `.bat` da avviare)
+### 🌐 Modalità 1: Server HTTP con IP & Porta (Consigliata se vuoi un file `.bat` da avviare)
 
-Con questa modalità avvii il server con un doppio click, e il server rimane attivo in ascolto su un indirizzo IP e una porta (es. `http://127.0.0.1:8000/sse`).
+Un doppio click avvia **un solo processo** con **due endpoint** sulla stessa porta:
+
+| Endpoint | Trasporto | Chi lo usa |
+| --- | --- | --- |
+| `http://127.0.0.1:8750/mcp` | Streamable HTTP | Zcode, client con `type: "http"` / `"streamable-http"` |
+| `http://127.0.0.1:8750/sse` | SSE legacy | Kilo Code, Claude, client con `type: "sse"` |
+
+`--sse`, `--http` e `--mcp` fanno la stessa cosa: alzano entrambi.
 
 #### Come avviarlo:
 - Fai doppio click sul file `start_mcp_sse.bat` presente nella root del progetto.
 - Oppure lancia da terminale:
   ```bash
-  python -m mcp_server --sse --host 127.0.0.1 --port 8000
+  python -m mcp_server --sse --host 127.0.0.1 --port 8750
   ```
 
 #### Come collegarlo nei client via URL/IP:
+
+* **Zcode / client Streamable HTTP** (`type` = `http` o `streamable-http`):
+  ```json
+  {
+    "mcpServers": {
+      "voxelai": {
+        "type": "http",
+        "url": "http://127.0.0.1:8750/mcp"
+      }
+    }
+  }
+  ```
 
 * **Kilo Code / Roo Code / Cline**:
   *(ATTENZIONE: Devi mettere OBBLIGATORIAMENTE `"type": "sse"`, altrimenti Kilo rimane bloccato su `stdio`!)*
@@ -63,7 +82,7 @@ Con questa modalità avvii il server con un doppio click, e il server rimane att
     "mcpServers": {
       "voxelai": {
         "type": "sse",
-        "url": "http://127.0.0.1:8000/sse",
+        "url": "http://127.0.0.1:8750/sse",
         "disabled": false
       }
     }
@@ -75,7 +94,7 @@ Con questa modalità avvii il server con un doppio click, e il server rimane att
   {
     "mcpServers": {
       "voxelai": {
-        "url": "http://127.0.0.1:8000/sse"
+        "url": "http://127.0.0.1:8750/sse"
       }
     }
   }
@@ -84,8 +103,8 @@ Con questa modalità avvii il server con un doppio click, e il server rimane att
 * **Cursor / Windsurf**:
   In **Settings** -> **Features** -> **MCP** -> **Add new MCP server**:
   - **Name**: `voxelai`
-  - **Type**: `sse`
-  - **URL**: `http://127.0.0.1:8000/sse`
+  - **Type**: `sse`  (oppure `streamable-http` su `http://127.0.0.1:8750/mcp`)
+  - **URL**: `http://127.0.0.1:8750/sse`
 
 ---
 

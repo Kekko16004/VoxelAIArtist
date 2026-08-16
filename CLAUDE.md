@@ -646,6 +646,90 @@ compatta (`nodes` + `params` + `mats`); il motore JS la interpreta.
 - Build: `node SimpleAIModeller/ui/build.mjs`. Suite:
   `bash SimpleAIModeller/tests/run_all.sh` (offline). GUI reale:
   `.superpowers/check_sam_gui.py` (gitignored, 36 controlli con clic veri).
+  Banco di misura headless: `.superpowers/sam_bench.mjs` (gitignored) carica i
+  moduli 01-06 in una sandbox Node, COSTRUISCE una spec e la misura (ingombro,
+  triangoli, spigoli di bordo, segno del volume, componenti connesse, L/W e W/T
+  per pezzo) renderizzandola in PNG con un rasterizzatore proprio. Disegna
+  ANCHE le facce di spalle (`|N.L|`) di proposito: un banco che facesse il
+  backface culling come l'anteprima nasconderebbe esattamente il difetto
+  descritto qui sotto.
+
+### Il verso delle facce e' un'invariante, non una preferenza (`meshEnsureOutward`)
+**Dodici delle ventiquattro primitive nascevano con i triangoli in ordine
+orario**, cioe' con le normali rivolte DENTRO: `sphere`, `cyl` (anche a
+settore), `torus` (anche ad arco), `tube`, `extr`, `lathe`, `tubepath`, e `loft`
+con sezione `lens` — quella della LAMA. Tutte con **zero spigoli di bordo**:
+gusci perfettamente chiusi, solo con gli indici nell'ordine opposto, quindi
+nessun controllo di tenuta poteva vederli. Cosa rompeva:
+
+- anteprima (`07-materials.js`) ed export (`09-export.js`) usano
+  `THREE.FrontSide`, quindi un guscio rovesciato e' **trasparente**: si guarda
+  dentro l'oggetto. E' il "materiale che si vede solo da un lato" e il
+  coperchio della cassa che sembra cavo (il coperchio E' stagno: si vedeva la
+  sua parete interna lontana, e attraverso quella il piano di legno sotto).
+- il contorno toon (`08-scene.js`) e' un **guscio invertito** (`BackSide`,
+  scala 1.03): su geometria rovesciata `BackSide` disegna le facce **vicine**,
+  quindi un guscio quasi nero copre tutto il pezzo — la "cupola nera".
+- la CSG deduce il dentro/fuori dalla **normale della faccia**, quindi un
+  utensile rovesciato inverte la sottrazione. Misurato: la piastra della
+  serratura della demo era il **TAPPO del buco** (volume 1.43e-5) invece della
+  piastra bucata (2.78e-5).
+- **ogni GLB e OBJ esportati finora sono rovesciati** in Blender e Unity.
+
+La normalizzazione sta in **un punto solo**, `primBuild` (che avvolge
+`primBuildRaw`), e non nelle singole primitive: correggerle una per una
+lascerebbe il difetto pronto a rinascere alla prossima aggiunta al catalogo.
+Agisce **solo sui gusci chiusi** (`meshBoundaryEdges === 0`): su una mesh aperta
+— l'elica non ha i tappi — il volume firmato non ha significato geometrico e
+ribaltarla peggiorerebbe.
+
+Perche' la suite verde non lo vedeva: **ogni asserzione sul volume era avvolta
+in `Math.abs()`**, e `metricsOf` fa lo stesso; una riga di `test_deform.mjs`
+documentava perfino la scelta di scartare il segno. Il segno *era*
+l'informazione. La guardia e' `tests/test_winding.mjs` (39 controlli: ogni
+primitiva chiusa, l'idempotenza, il fatto che `meshMirror` continui a invertire,
+e la booleana che deve dare il buco e non il tappo). **Se fallisce, non
+aggirarlo con `DoubleSide`**: le normali continuerebbero a puntare dentro
+(illuminazione sbagliata) e l'export resterebbe rovesciato.
+
+### Un input degenere non diventa un pezzo da UN METRO, e non tace
+Nove input degeneri diversi producevano un pezzo di 1 m **senza emettere
+niente**: `lathe` con un profilo che non esiste, `lathe` senza `prof`, `loft`
+con una sola sezione o senza `secs`, `tube` con un percorso di un punto,
+`cyl`/`caps` senza `len`, `sphere` senza `r`. Misurato: un pomolo dichiarato
+`r:0.024, len:0.04` veniva costruito **1000x1000x1000 mm**, portando l'asset da
+0.05x1.14 a 1.00x1.44 — ed e' la cupola gigante (lo stile non c'entra: il toon
+la dipingeva di nero col contorno invertito, quindi la si notava li').
+
+Due decisioni, entrambe deliberate:
+- la sostituzione avviene alle dimensioni **DICHIARATE dal nodo**, non a 1 m.
+  Far sparire il pezzo sarebbe peggio: genererebbe un `planPartMissing` di
+  gravita' alta e brucerebbe un giro di correzione su un nodo che era giusto
+  tranne un campo.
+- `primBuild` accetta un `warn(codice, dettaglio)` facoltativo che `buildSpec`
+  riversa nei `warnings` (`unknownProfile`, `profileTooShort`,
+  `loftTooFewSections`, `pathTooShort`, `sizeMissing`). **Il silenzio era il
+  difetto**, non la sostituzione.
+
+`resolveNode` mette `s` a `[1,1,1]` quando manca — ed e' quel ripiego a valere
+un metro. Il ripiego si tiene (serve alle primitive che non usano `s`) ma si
+**marca** con `n.sDefaulted`, o le primitive non possono distinguere "l'utente
+ha chiesto un cubo di 1 m" da "non ha detto niente". Con un `lathe` a punti
+ESPLICITI le coordinate sono assolute e `r`/`len` non servono: chiederli li'
+sarebbe un falso allarme (introdotto e rimosso durante questo lavoro).
+
+### La slenderness va misurata su DUE rapporti, non uno
+La lama-ago (1 m di lunghezza, 6 mm di larghezza) non era intercettata da
+nessun validatore. Il rapporto ovvio — lato lungo diviso lato corto — **non
+funziona**: su una lama corretta (772 x 48 x 6 mm) fa 128, esattamente come su
+un ago (750 x 6 x 6). Cio' che distingue i due casi e' che l'ago e' sottile su
+**due** assi. Ordinati i lati come `[L, W, T]`:
+
+    lama vera   L/W ~ 16    W/T ~ 8
+    ago         L/W ~ 125   W/T ~ 1
+
+Quindi servono entrambi, piu' la **solidita'** (volume diviso volume della
+scatola), che smaschera un guscio aperto o una decorazione filiforme.
 
 ### Deformatori (`ui/src/lib/03b-deform.js`) — perche' non basta piazzare volumi
 Un motore che sa solo POSIZIONARE primitive produce oggetti fatti di mattoni: si
@@ -1166,7 +1250,8 @@ gesto e l'altro invece di applicare e dimenticare.
 ## Server MCP (`mcp_server/`)
 
 Espone VoxelAIArtist come 48 strumenti a un assistente
-(`python -m mcp_server --workdir CARTELLA`, canale stdio). Non avvia la GUI e non
+(`python -m mcp_server --workdir CARTELLA`, canale stdio; `--sse`/`--http` alzano
+insieme `/sse` e `/mcp` Streamable HTTP). Non avvia la GUI e non
 parla col server HTTP: importa `main.py` e i moduli di `src/` in **questo**
 processo e tiene il documento in memoria. La documentazione per l'utente e'
 `mcp_server/README.md`; qui stanno solo le cose che si sbagliano riscrivendole.

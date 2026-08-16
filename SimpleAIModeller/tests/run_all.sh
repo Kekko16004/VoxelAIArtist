@@ -31,6 +31,7 @@ run "Spec Python" python3 tests/test_spec.py
 run "Piano e audit" python3 tests/test_plan.py
 run "Vision probe" python3 tests/test_vision.py
 run "Geometria JS" node tests/test_geom.mjs
+run "Verso delle facce" node tests/test_winding.mjs
 run "Deformatori, bevel, loft" node tests/test_deform.mjs
 run "ZIP bundle" node tests/test_zip.mjs
 run "Endpoint end-to-end (AI finta)" python3 tests/test_server_e2e.py

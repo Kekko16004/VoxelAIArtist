@@ -676,12 +676,58 @@ function primArch(sx, sy, sz, r, wall, seg) {
 }
 
 /** Costruisce la primitiva di un nodo gia' risolto (numeri puri). */
-function primBuild(node, seg, bevelSeg) {
+/**
+ * Costruisce la primitiva di un nodo e ne NORMALIZZA il verso delle facce.
+ *
+ * Il verso non si corregge dentro le singole primitive: dodici delle
+ * ventiquattro nascevano rovesciate, e ripararle una per una lascerebbe il
+ * difetto pronto a tornare con la prossima aggiunta al catalogo. Qui passa
+ * tutto, quindi qui si garantisce l'invariante "le normali escono".
+ * Vedi `meshEnsureOutward` in 02-mesh.js per cosa rompe un guscio rovesciato.
+ */
+function primBuild(node, seg, bevelSeg, warn) {
+    return meshEnsureOutward(primBuildRaw(node, seg, bevelSeg, warn));
+}
+
+/**
+ * `warn(codice, dettaglio)` e' facoltativa e serve a NON restare in silenzio.
+ *
+ * Nove input degeneri diversi producevano un pezzo da UN METRO senza emettere
+ * niente: un `lathe` con un profilo che non esiste, un `loft` con una sola
+ * sezione, un `tube` con un percorso di un punto, un `cyl` senza lunghezza.
+ * Misurato: un pomolo dichiarato `r:0.024, len:0.04` veniva costruito
+ * 1000x1000x1000 mm, portando l'asset da 0.05x1.14 a 1.00x1.44 — ed e' la
+ * cupola nera gigante che si vedeva in stile toon (il contorno a guscio
+ * invertito la dipingeva di nero).
+ *
+ * La sostituzione ora avviene alle dimensioni DICHIARATE dal nodo, non a 1 m,
+ * e con un avviso. Far sparire il pezzo sarebbe peggio: genererebbe un
+ * `planPartMissing` di gravita' alta e brucerebbe un giro di correzione su un
+ * nodo che era giusto tranne un campo.
+ */
+function primBuildRaw(node, seg, bevelSeg, warn) {
     const p = node.p || 'box';
     const s = node.s || [1, 1, 1];
     const axis = node.axis || 'y';
+    const say = typeof warn === 'function' ? warn : function () {};
     seg = seg || 16;
     bevelSeg = bevelSeg || 2;
+    // Lunghezza e raggio "come li ha dichiarati il nodo". `resolveNode` mette
+    // `s` a [1,1,1] quando manca e lo marca con `sDefaulted`: un `s` di
+    // ripiego vale UN METRO, quindi va detto e non usato in silenzio.
+    const noSize = (node.s == null) || node.sDefaulted === true;
+    const declLen = function (dflt) {
+        if (node.len != null) return node.len;
+        if (!noSize) return s[1];
+        say('sizeMissing', p + ' senza len');
+        return dflt;
+    };
+    const declR = function (dflt) {
+        if (node.r != null) return node.r;
+        if (!noSize) return s[0] * 0.5;
+        say('sizeMissing', p + ' senza r');
+        return dflt;
+    };
     switch (p) {
         case 'box':
             // `bevel` non e' piu' decorativo: se c'e', si costruisce una
@@ -693,19 +739,22 @@ function primBuild(node, seg, bevelSeg) {
             return primBox(s[0], s[1], s[2]);
         case 'plane':  return primPlane(s[0], s[2] != null ? s[2] : s[1]);
         case 'sphere': {
-            const r = node.r != null ? node.r : Math.max(s[0], s[1], s[2]) * 0.5;
+            if (node.r == null && noSize) say('sizeMissing', 'sphere senza r');
+            // Senza `r` NE' `s`, `max(s)/2` valeva 0.5: una sfera di UN METRO.
+            const r = node.r != null ? node.r
+                    : (noSize ? 0.02 : Math.max(s[0], s[1], s[2]) * 0.5);
             const m = primSphere(r, seg);
-            if (node.r == null && (s[0] !== s[1] || s[1] !== s[2])) {
+            // L'ellissoide si ottiene scalando la sfera su `s`, quindi ha senso
+            // solo se `s` e' stata dichiarata davvero: col ripiego [1,1,1] la
+            // scalerebbe di 25 volte.
+            if (node.r == null && !noSize && (s[0] !== s[1] || s[1] !== s[2])) {
                 meshScale(m, s[0] / (r * 2), s[1] / (r * 2), s[2] / (r * 2));
             }
             return m;
         }
-        case 'cyl':    return primCyl(node.r != null ? node.r : s[0] * 0.5,
-                                      node.len != null ? node.len : s[1],
+        case 'cyl':    return primCyl(declR(0.02), declLen(0.04),
                                       seg, node.taper, axis, node.arc, node.arcAt);
-        case 'caps':   return primCaps(node.r != null ? node.r : s[0] * 0.5,
-                                       node.len != null ? node.len : s[1],
-                                       seg, axis);
+        case 'caps':   return primCaps(declR(0.02), declLen(0.04), seg, axis);
         case 'torus':  return primTorus(node.r != null ? node.r : s[0] * 0.5,
                                         node.r2 != null ? node.r2 : (node.r || s[0] * 0.5) * 0.3,
                                         seg, node.arc, axis, node.arcAt);
@@ -721,28 +770,53 @@ function primBuild(node, seg, bevelSeg) {
                                     seg, node.wall,
                                     node.taperTo ? node.taperTo.a : null);
             }
-            return primTube(node.r != null ? node.r : s[0] * 0.5,
-                            node.len != null ? node.len : s[1],
-                            node.wall, seg, axis);
+            if (node.path) say('pathTooShort', 'punti=' + node.path.length + ', serve 2');
+            return primTube(declR(0.02), declLen(0.04), node.wall, seg, axis);
         case 'extr':   return primExtr(node.prof || 'rect',
-                                       node.len != null ? node.len : s[1],
+                                       declLen(0.04),
                                        node.sides || seg,
                                        s, axis, node.bevel);
         case 'lathe': {
             // Con un nome noto (`vase`, `bottle`, `goblet`, ...) la silhouette
             // e' normalizzata 0..1 e va scalata su `s`/`r`/`len`; con punti
-            // espliciti sono coordinate assolute e si rispettano.
+            // espliciti sono coordinate ASSOLUTE e si rispettano — in quel caso
+            // `r` e `len` non servono e chiederli sarebbe un falso allarme.
             let prof = node.prof;
-            if (typeof prof === 'string' && vesselProfile(prof)) {
-                const rr = node.r != null ? node.r : (s[0] * 0.5);
-                const hh = node.len != null ? node.len : s[1];
-                prof = vesselProfile(prof).map(p => [p[0] * 2 * rr, p[1] * hh]);
+            if (typeof prof === 'string') {
+                const vp = vesselProfile(prof);
+                if (vp) {
+                    const rr = declR(0.02), hh = declLen(0.04);
+                    prof = vp.map(p => [p[0] * 2 * rr, p[1] * hh]);
+                } else {
+                    // Un nome di silhouette che non esiste NON deve diventare un
+                    // cilindro da un metro. Succedeva perche' `lathe` ed `extr`
+                    // condividono un solo validatore di `prof` con insiemi di nomi
+                    // validi DISGIUNTI: un `prof` sconosciuto veniva "riparato" in
+                    // `rect`, che per `extr` e' valido e per `lathe` non esiste.
+                    say('unknownProfile', String(prof));
+                    return primCyl(declR(0.02), declLen(0.04), node.sides || seg, 1, axis);
+                }
+            }
+            if (!Array.isArray(prof) || prof.length < 2) {
+                say('profileTooShort', 'punti=' + (Array.isArray(prof) ? prof.length : 0));
+                return primCyl(declR(0.02), declLen(0.04), node.sides || seg, 1, axis);
             }
             return primLathe2(prof, node.sides || seg, node.arc, axis,
                               node.wall, node.smooth);
         }
-        case 'loft':   return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
-                                        node.closed !== false);
+        case 'loft': {
+            if (!node.secs || node.secs.length < 2) {
+                // Un loft ha senso solo con almeno due sezioni. Con una sola si
+                // costruisce un cilindro di quella sezione, alto quanto il nodo
+                // dichiara: e' sbagliato, ma e' sbagliato in SCALA.
+                const one = (node.secs && node.secs[0]) || null;
+                say('loftTooFewSections', 'sezioni=' + ((node.secs && node.secs.length) || 0));
+                const rr = one && one.s ? Math.max(one.s[0], one.s[1] != null ? one.s[1] : one.s[0]) * 0.5 : declR(0.02);
+                return primCyl(rr, declLen(0.04), seg, 1, axis);
+            }
+            return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
+                             node.closed !== false);
+        }
         case 'helix':  return primHelix(node.r || 0.4, node.r2, node.len || 1,
                                         node.turns || 4, seg, axis);
         case 'field':  return primField(s[0], s[1], s[2], node.seed, node.amp,

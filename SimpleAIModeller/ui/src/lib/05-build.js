@@ -11,7 +11,15 @@ function resolveNode(node, params) {
     // Copia con tutti i campi numerici risolti.
     const n = { n: node.n, p: node.p || 'box' };
     if (node.s != null) n.s = evalVec3(node.s, params, [1, 1, 1]);
-    else n.s = [1, 1, 1];
+    else {
+        // `s` assente vale UN METRO su ogni lato, ed e' il ripiego piu'
+        // pericoloso del motore: un `cyl` senza `len` usciva alto 1 m. Il
+        // ripiego si TIENE (serve alle primitive che non usano `s`), ma si
+        // marca, cosi' chi ne dipende davvero puo' emettere un avviso invece
+        // di costruire un metro in silenzio.
+        n.s = [1, 1, 1];
+        n.sDefaulted = true;
+    }
     n.at = node.at != null ? evalVec3(node.at, params, [0, 0, 0]) : [0, 0, 0];
     if (node.rot != null) n.rot = evalVec3(node.rot, params, [0, 0, 0]);
     for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'arcAt', 'wall', 'bevel',
@@ -129,8 +137,8 @@ function transformInstance(mesh, at, rot, i, arr) {
     return m;
 }
 
-function buildNodeMesh(node, seg, bevelSeg) {
-    const base = primBuild(node, seg, bevelSeg);
+function buildNodeMesh(node, seg, bevelSeg, warn) {
+    const base = primBuild(node, seg, bevelSeg, warn);
     // I deformatori agiscono in SPAZIO LOCALE, prima di rotazione e
     // traslazione: rastremare dopo aver ruotato darebbe una sezione che varia
     // lungo una direzione obliqua rispetto al pezzo.
@@ -181,7 +189,12 @@ function buildSpec(spec) {
 
     for (const n of resolved) {
         try {
-            solidMeshes[n.n] = buildNodeMesh(n, seg, bevelSeg);
+            // Il canale degli avvisi: un campo degenere (un profilo che non
+            // esiste, un loft con una sezione sola, un tubo senza percorso)
+            // sostituiva in SILENZIO un pezzo da un metro. Ora lo dice.
+            solidMeshes[n.n] = buildNodeMesh(n, seg, bevelSeg, function (code, v) {
+                warnings.push({ code: code, at: n.n, v: v });
+            });
         } catch (e) {
             warnings.push({ code: 'buildFail', at: n.n, v: String(e.message || e).slice(0, 60) });
             solidMeshes[n.n] = meshCreate([], [], n.mat, n.n);

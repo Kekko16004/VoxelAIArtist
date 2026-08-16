@@ -33,7 +33,7 @@ echo ============================================
 echo  SETUP COMPLETATO
 echo  Venv: %cd%\.venv
 echo  Usa:  start_app.bat        (avvia main.py)
-echo        start_mcp_sse.bat     (avvia MCP server)
+echo        start_mcp_sse.bat     (avvia MCP: /mcp + /sse)
 echo  Per l'exe: setup.bat poi build.bat
 echo ============================================
 pause

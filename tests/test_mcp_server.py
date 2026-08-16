@@ -1607,6 +1607,110 @@ def test_pack_senza_run_non_solleva():
         ai.pack_manager = old
 
 
+def test_http_espone_mcp_e_sse():
+    """Un solo processo HTTP: /mcp (Streamable) e /sse (legacy).
+
+    Zcode e i client `type=http` POSTANO su /mcp, non su /sse. Senza questa
+    rotta il bat parte, Kilo funziona, e Zcode dice che il server non esiste.
+    Si parla con l'app Starlette vera (senza aprire una porta) e si fa la
+    stretta di mano completa: initialize, initialized, tools/list.
+    """
+    from starlette.testclient import TestClient
+    from mcp_server import streamable
+
+    streamable.mount(server.mcp)
+    app = server.mcp.sse_app()
+    client = TestClient(app)
+    try:
+        paths = []
+        for r in app.routes:
+            p = getattr(r, "path", None)
+            if p:
+                paths.append(p)
+        check("http: /mcp e' montato", "/mcp" in paths, "rotte: %r" % paths)
+        check("http: /sse e' montato", "/sse" in paths, "rotte: %r" % paths)
+
+        root = client.get("/")
+        check("http: GET / elenca i due trasporti",
+              root.status_code == 200
+              and "/mcp" in root.text and "/sse" in root.text,
+              "%s %s" % (root.status_code, root.text[:200]))
+
+        no_sess = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+                  "params": {}},
+        )
+        check("http: POST senza sessione e' 404, non 405",
+              no_sess.status_code == 404, str(no_sess.status_code))
+
+        init = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "prova", "version": "0"},
+                },
+            },
+        )
+        sid = init.headers.get("mcp-session-id") or init.headers.get("Mcp-Session-Id")
+        check("http: initialize risponde 200", init.status_code == 200,
+              "%s %s" % (init.status_code, init.text[:240]))
+        check("http: initialize da' Mcp-Session-Id", bool(sid),
+              "header: %r" % dict(init.headers))
+        body = init.json()
+        check("http: initialize e' JSON-RPC",
+              body.get("jsonrpc") == "2.0" and "result" in body,
+              repr(body)[:240])
+        proto = (body.get("result") or {}).get("protocolVersion")
+        check("http: protocolVersion echiato dal client",
+              proto == "2025-03-26", repr(proto))
+
+        ack = client.post(
+            "/mcp",
+            headers={"Mcp-Session-Id": sid},
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+        )
+        check("http: initialized e' 202", ack.status_code == 202,
+              str(ack.status_code))
+
+        listed = client.post(
+            "/mcp",
+            headers={"Mcp-Session-Id": sid},
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list",
+                  "params": {}},
+        )
+        check("http: tools/list risponde 200", listed.status_code == 200,
+              "%s %s" % (listed.status_code, listed.text[:240]))
+        tools = ((listed.json().get("result") or {}).get("tools")) or []
+        names = {t.get("name") for t in tools if isinstance(t, dict)}
+        check("http: tools/list espone voxel_new",
+              "voxel_new" in names,
+              "nomi: %r" % sorted(names)[:12])
+        check("http: tools/list ne espone almeno 40",
+              len(names) >= 40, "%d" % len(names))
+
+        called = client.post(
+            "/mcp",
+            headers={"Mcp-Session-Id": sid},
+            json={"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                  "params": {"name": "voxel_list", "arguments": {}}},
+        )
+        check("http: tools/call risponde 200", called.status_code == 200,
+              "%s %s" % (called.status_code, called.text[:240]))
+        content = ((called.json().get("result") or {}).get("content")) or []
+        texts = " ".join(
+            (c.get("text") or "") for c in content if isinstance(c, dict))
+        check("http: tools/call esegue voxel_list",
+              called.json().get("result", {}).get("isError") is not True
+              and texts.strip() != "",
+              texts[:200])
+    finally:
+        asyncio.get_event_loop().run_until_complete(streamable.close_all())
+
+
 def test_stdout_resta_pulito():
     """Il canale del protocollo non deve mai ricevere una riga di prosa.
 

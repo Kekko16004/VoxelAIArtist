@@ -37,7 +37,7 @@ from mcp.server.fastmcp import FastMCP                       # noqa: E402
 
 from mcp_server import ai, compat, edits, exporters, importers  # noqa: E402
 from mcp_server import materials, patch, pixelops, rig, textures  # noqa: E402
-from mcp_server import png as pngmod                         # noqa: E402
+from mcp_server import png as pngmod, streamable             # noqa: E402
 from mcp_server.document import Cell, Document, VoxelObject  # noqa: E402
 from mcp_server.session import SESSION, SessionError         # noqa: E402
 
@@ -1596,7 +1596,8 @@ def main(argv=None):
             UNRESTRICTED = True
         elif a in ("--debug", "-v", "--verbose"):
             debug = True
-        elif a == "--sse":
+        elif a in ("--sse", "--http", "--mcp", "--streamable"):
+            # Un solo processo HTTP: /sse (legacy) e /mcp (Streamable HTTP).
             transport = "sse"
         elif a == "--transport" and i + 1 < len(argv):
             transport = argv[i + 1]
@@ -1665,7 +1666,13 @@ def main(argv=None):
         patch.install()
 
     if transport == "sse":
-        sys.stderr.write("Server SSE attivo su http://%s:%s/sse\n" % (mcp.settings.host, mcp.settings.port))
+        streamable.mount(mcp)
+        base = "http://%s:%s" % (mcp.settings.host, mcp.settings.port)
+        sys.stderr.write(
+            "Server HTTP attivo:\n"
+            "  Streamable HTTP  %s/mcp   (Zcode, type=http)\n"
+            "  SSE legacy       %s/sse   (Kilo/Claude type=sse)\n"
+            % (base, base))
     proxy = compat.protect_stdout()
     mcp.run(transport=transport)
 

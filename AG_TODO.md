@@ -70,6 +70,7 @@
 - [x] mcp start guide readme (100%)
 - [x] add sse transport & start_sse.bat (100%)
 - [x] fix kilo code sse type config (100%)
+- [x] add /mcp streamable-http next to /sse (100%)
 - [x] add --unrestricted mode for all paths write (100%)
 - [x] 14-day generation autosave & retention settings (100%)
 - [x] autosave display name & UI prompt title (100%)

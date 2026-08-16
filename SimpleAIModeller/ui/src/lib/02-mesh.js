@@ -103,12 +103,47 @@ function meshMirror(m, axis) {
     for (let i = 0; i < p.length; i += 3) p[i + a] = -p[i + a];
     // Specchiare inverte l'orientamento delle facce: si scambiano i due
     // indici di ogni triangolo, altrimenti le normali puntano dentro.
+    meshReverse(m);
+    return m;
+}
+
+/** Scambia due indici per triangolo: inverte il verso di TUTTE le facce. */
+function meshReverse(m) {
     const idx = m.idx;
     for (let i = 0; i < idx.length; i += 3) {
         const t = idx[i + 1];
         idx[i + 1] = idx[i + 2];
         idx[i + 2] = t;
     }
+    return m;
+}
+
+/**
+ * Porta le normali VERSO L'ESTERNO, ribaltando la mesh se il volume firmato
+ * e' negativo.
+ *
+ * Serve perche' il verso delle facce non e' una preferenza estetica: decide
+ * cosa si vede e cosa si sottrae. Con `THREE.FrontSide` (anteprima ed export)
+ * un guscio rovesciato e' TRASPARENTE — si guarda dentro l'oggetto; il
+ * contorno toon a guscio invertito (`BackSide`) disegna le facce VICINE e
+ * copre il pezzo di nero; e la CSG deduce il dentro/fuori dalla normale della
+ * faccia, quindi un utensile rovesciato fa dire a una sottrazione "togli tutto
+ * cio' che sta FUORI dal cilindro" e restituisce il TAPPO invece del buco.
+ *
+ * Misurato: 12 delle 24 primitive nascevano rovesciate (sphere, cyl anche a
+ * settore, torus anche ad arco, tube, extr, lathe, tubepath, e loft con
+ * sezione `lens`), tutte con ZERO spigoli di bordo — gusci chiusi, solo con
+ * gli indici nell'ordine opposto. Normalizzare qui le sistema tutte in un
+ * punto e mette al riparo anche le primitive future: correggerle una per una
+ * lascerebbe il difetto pronto a rinascere alla prossima aggiunta.
+ *
+ * Solo su gusci CHIUSI: su una mesh aperta (l'elica non ha i tappi) il volume
+ * firmato non ha significato geometrico e ribaltarla peggiorerebbe.
+ */
+function meshEnsureOutward(m) {
+    if (!m || m.idx.length < 3) return m;
+    if (meshBoundaryEdges(m) !== 0) return m;
+    if (meshVolume(m) < 0) meshReverse(m);
     return m;
 }
 
