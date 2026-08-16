@@ -6,8 +6,11 @@ async function boot() {
     await bootI18n();
     initScene();
     wireUi();
+    initEditor();
+    wireDragDrop();
     // Carica la demo subito, cosi' c'e' qualcosa da vedere senza AI.
     loadDemo();
+    pushHistory();
     populateModels().catch(() => {});
     // Sonda vision in background.
     probeVision().catch(() => {});

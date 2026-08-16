@@ -81,11 +81,23 @@ PRIMITIVES = {
     "tube":   ("r", "len", "axis", "path", "wall"),
     "extr":   ("prof", "len", "axis", "s", "bevel", "sides", "inner"),
     "lathe":  ("prof", "axis", "arc", "sides"),
-    "loft":   ("secs", "axis", "closed"),
+    "loft":   ("secs", "axis", "closed", "shape"),
     "helix":  ("r", "r2", "len", "axis", "turns"),
     "field":  ("s", "seed", "amp", "freq", "axis"),
     "stairs": ("s", "steps", "axis"),
     "arch":   ("s", "r", "axis", "wall"),
+}
+
+# Sezioni trasversali del loft. `lens` e' la sezione di una LAMA (due archi che
+# si incontrano in due punte laterali): senza, ogni lama e' un parallelepipedo.
+LOFT_SHAPES = ("ellipse", "rect", "lens", "hex", "tri")
+
+LOFT_SHAPE_ALIASES = {
+    "circle": "ellipse", "round": "ellipse", "cerchio": "ellipse",
+    "box": "rect", "square": "rect", "rettangolo": "rect", "quad": "rect",
+    "blade": "lens", "lente": "lens", "lenticular": "lens", "diamond": "lens",
+    "hexagon": "hex", "esagono": "hex",
+    "triangle": "tri", "triangolo": "tri",
 }
 
 PRIM_ALIASES = {
@@ -567,6 +579,99 @@ def _node(raw, warns, params, index):
         node["bend"] = {"a": _scalar(_first(bend, "a", "angle", default=0),
                                      warns, at, params),
                         "axis": str(_first(bend, "axis", default="y"))[:1].lower()}
+
+    # --- Deformatori -------------------------------------------------------
+    # Un motore che sa solo piazzare volumi produce oggetti fatti di mattoni.
+    # Questi campi sono cio' che rende una lama una lama: si accettano in
+    # diverse forme (numero, [a,b], {x,z}) perche' il generatore le usa tutte.
+    def _pair(v):
+        if isinstance(v, dict):
+            out = {}
+            for src, dst in (("a", "a"), ("x", "a"), ("w", "a"),
+                             ("b", "b"), ("z", "b"), ("d", "b")):
+                if src in v and v[src] is not None and dst not in out:
+                    out[dst] = _scalar(v[src], warns, at, params)
+            if "a" not in out:
+                out["a"] = 1.0
+            if "b" not in out:
+                out["b"] = out["a"]
+            return out
+        if isinstance(v, (list, tuple)) and v:
+            a = _scalar(v[0], warns, at, params)
+            b = _scalar(v[1], warns, at, params) if len(v) > 1 else a
+            return {"a": a, "b": b}
+        s = _scalar(v, warns, at, params)
+        return {"a": s, "b": s}
+
+    taper_to = _first(raw, "taperTo", "taper_to", "taperEnd", "narrowTo",
+                      "tipScale", "endScale")
+    if taper_to is not None:
+        node["taperTo"] = _pair(taper_to)
+    taper_from = _first(raw, "taper0", "taperFrom", "taper_from", "startScale",
+                        "baseScale")
+    if taper_from is not None:
+        node["taper0"] = _pair(taper_from)
+
+    squash = _first(raw, "squash", "flatten", "oneSide")
+    if isinstance(squash, dict):
+        node["squash"] = {
+            "axis": str(_first(squash, "axis", default="z"))[:1].lower(),
+            "side": ("min" if str(_first(squash, "side", default="max")).lower()
+                     .startswith("min") else "max"),
+            "f": _clamp(_num(_first(squash, "f", "factor", "amount", default=0.5), 0.5),
+                        0.0, 1.0),
+        }
+
+    shear = _first(raw, "shear", "slant", "lean")
+    if isinstance(shear, dict):
+        node["shear"] = {
+            "by": str(_first(shear, "by", "towards", "axis", default="z"))[:1].lower(),
+            "amount": _scalar(_first(shear, "amount", "a", "offset", default=0),
+                              warns, at, params),
+        }
+    elif shear is not None:
+        node["shear"] = {"by": "z", "amount": _scalar(shear, warns, at, params)}
+
+    twist = _first(raw, "twist", "twistDeg")
+    if twist is not None and not isinstance(twist, dict):
+        node["twist"] = _scalar(twist, warns, at, params)
+
+    bend_a = _first(raw, "bendA", "bendDeg", "curve")
+    if bend_a is not None:
+        node["bendA"] = _scalar(bend_a, warns, at, params)
+        bend_to = _first(raw, "bendTo", "bendTowards")
+        if bend_to:
+            node["bendTo"] = str(bend_to)[:1].lower()
+    elif isinstance(bend, dict) and bend.get("a"):
+        # `bend: {a, axis}` e' la forma storica: si traduce nei campi nuovi
+        # invece di tenere due strade che fanno la stessa cosa.
+        node["bendA"] = node["bend"]["a"]
+        node["bendTo"] = node["bend"].get("axis") or "z"
+        node.pop("bend", None)
+
+    warp = _first(raw, "warp", "roughness_deform", "irregular", "bumpy")
+    if isinstance(warp, dict):
+        node["warp"] = {
+            "amp": _scalar(_first(warp, "amp", "amount", "a", default=0),
+                           warns, at, params),
+            "freq": _scalar(_first(warp, "freq", "frequency", "f", default=4),
+                            warns, at, params),
+            "seed": int(_clamp(_num(_first(warp, "seed", default=0), 0), 0, 99999)),
+        }
+    elif warp is not None:
+        node["warp"] = {"amp": _scalar(warp, warns, at, params), "freq": 4, "seed": 0}
+
+    shape = _first(raw, "shape", "section", "crossSection", "sezione")
+    if shape is not None and not isinstance(shape, (list, tuple, dict)):
+        sh = str(shape).strip().lower()
+        sh = LOFT_SHAPE_ALIASES.get(sh, sh)
+        if sh in LOFT_SHAPES:
+            node["shape"] = sh
+        else:
+            _warn(warns, "unknownShape", at, shape)
+
+    if _first(raw, "locked", "manual") is not None:
+        node["locked"] = bool(_first(raw, "locked", "manual"))
 
     bone = _first(raw, "bone", "armature_bone", "attach", "joint")
     if bone:
@@ -1330,6 +1435,25 @@ def spec_digest(spec, max_nodes=60):
                                      else "pts%d" % len(n["prof"])))
         if n.get("secs"):
             bits.append("secs=%d" % len(n["secs"]))
+        if n.get("shape"):
+            bits.append("shape=%s" % n["shape"])
+        # I deformatori nel digest: senza, il correttore non sa che una lama e'
+        # gia' rastremata e la "aggiusta" cambiando le misure invece dei coni.
+        if n.get("taperTo"):
+            bits.append("taperTo=%s/%s" % (_fmt(n["taperTo"]["a"]), _fmt(n["taperTo"]["b"])))
+        if n.get("taper0"):
+            bits.append("taper0=%s/%s" % (_fmt(n["taper0"]["a"]), _fmt(n["taper0"]["b"])))
+        if n.get("twist"):
+            bits.append("twist=%s" % _fmt(n["twist"]))
+        if n.get("bendA"):
+            bits.append("bend=%s>%s" % (_fmt(n["bendA"]), n.get("bendTo") or "z"))
+        if n.get("shear"):
+            bits.append("shear=%s>%s" % (_fmt(n["shear"]["amount"]), n["shear"]["by"]))
+        if n.get("squash"):
+            bits.append("squash=%s%s/%s" % (n["squash"]["axis"], n["squash"]["side"],
+                                            _fmt(n["squash"]["f"])))
+        if n.get("warp"):
+            bits.append("warp=%s" % _fmt(n["warp"]["amp"]))
         L.append(" ".join(bits))
     if len(nodes) > max_nodes:
         L.append("  ... e altri %d nodi" % (len(nodes) - max_nodes))

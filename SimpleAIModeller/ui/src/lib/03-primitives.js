@@ -598,13 +598,21 @@ function primArch(sx, sy, sz, r, wall, seg) {
 }
 
 /** Costruisce la primitiva di un nodo gia' risolto (numeri puri). */
-function primBuild(node, seg) {
+function primBuild(node, seg, bevelSeg) {
     const p = node.p || 'box';
     const s = node.s || [1, 1, 1];
     const axis = node.axis || 'y';
     seg = seg || 16;
+    bevelSeg = bevelSeg || 2;
     switch (p) {
-        case 'box':    return primBox(s[0], s[1], s[2]);
+        case 'box':
+            // `bevel` non e' piu' decorativo: se c'e', si costruisce una
+            // scatola RACCORDATA. Era il campo piu' usato dal generatore e
+            // veniva ignorato in silenzio.
+            if (node.bevel && node.bevel > 1e-6) {
+                return primRoundBox(s[0], s[1], s[2], node.bevel, bevelSeg);
+            }
+            return primBox(s[0], s[1], s[2]);
         case 'plane':  return primPlane(s[0], s[2] != null ? s[2] : s[1]);
         case 'sphere': {
             const r = node.r != null ? node.r : Math.max(s[0], s[1], s[2]) * 0.5;
@@ -633,7 +641,8 @@ function primBuild(node, seg) {
                                        node.sides || seg,
                                        s, axis);
         case 'lathe':  return primLathe(node.prof, node.sides || seg, node.arc, axis);
-        case 'loft':   return primLoft(node.secs, seg, axis);
+        case 'loft':   return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
+                                        node.closed !== false);
         case 'helix':  return primHelix(node.r || 0.4, node.r2, node.len || 1,
                                         node.turns || 4, seg, axis);
         case 'field':  return primField(s[0], s[1], s[2], node.seed, node.amp,

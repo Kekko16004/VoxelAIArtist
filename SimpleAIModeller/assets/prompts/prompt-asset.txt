@@ -57,6 +57,9 @@ REGOLE NON NEGOZIABILI SULLE MISURE
 4. Per una primitiva tonda (`cyl`, `caps`, `tube`, `torus`) il piano da' la
    LARGHEZZA: il raggio e' `w/2`. Confondere raggio e diametro raddoppia il
    pezzo, ed e' l'errore piu' frequente di tutti.
+   Per una `sphere` che deve RIEMPIRE un segmento piu' lungo del suo diametro
+   usa `s:[w, b-a, d]` (ellissoide) invece di `r`: con `r` la sfera resta corta
+   e lascia un buco nella catena.
 5. `axis` di ogni pezzo allungato = l'asse principale del piano, sempre, a meno
    che il pezzo sia trasversale di natura (una guardia, un assale, una traversa).
 6. Non dichiarare `size` nella spec: l'ingombro lo misura il motore. Se lo
@@ -148,17 +151,24 @@ Piano: asse Y, `pomolo 0.000-0.055 w0.048`, `impugnatura 0.055-0.230 w0.034`,
       "len":"impugnatura_b-impugnatura_a",
       "at":[0,"(impugnatura_a+impugnatura_b)/2",0], "mat":"cuoio" },
     { "n":"guardia", "p":"box", "s":["guardia_w","guardia_b-guardia_a","guardia_d"],
-      "at":[0,"(guardia_a+guardia_b)/2",0], "mat":"acciaio" },
-    { "n":"lama", "p":"box", "s":["lama_w","lama_b-lama_a","lama_d"],
-      "at":[0,"(lama_a+lama_b)/2",0], "bevel":"lama_d*0.4", "mat":"acciaio" },
-    { "n":"punta", "p":"pyr", "s":["lama_w","punta_b-punta_a","lama_d"],
-      "at":[0,"(punta_a+punta_b)/2",0], "mat":"acciaio" }
+      "at":[0,"(guardia_a+guardia_b)/2",0], "bevel":0.004, "mat":"acciaio" },
+    { "n":"lama", "p":"loft", "axis":"y", "shape":"lens",
+      "secs":[ {"at":"lama_a","s":["lama_w","lama_d"]},
+               {"at":"lama_b","s":["lama_w*0.85","lama_d*0.8"]} ],
+      "at":[0,0,0], "mat":"acciaio" },
+    { "n":"punta", "p":"loft", "axis":"y", "shape":"lens",
+      "secs":[ {"at":"punta_a","s":["lama_w*0.85","lama_d*0.8"]},
+               {"at":"punta_b","s":[0.004,0.003]} ],
+      "at":[0,0,0], "mat":"acciaio" }
   ]
 }
 ```
 Cinque pezzi, cinque centri calcolati, zero numeri indovinati. La punta e' in
 CIMA (`punta_a` = 0.900) perche' il piano la mette la': l'errore classico e'
-metterla in fondo o farla grande come mezzo oggetto.
+metterla in fondo o farla grande come mezzo oggetto. Lama e punta sono `loft`
+con sezione a LENTE, non scatole: e' cio' che da' il filo.
+Nota: in un `loft` le `secs.at` sono coordinate ASSOLUTE sull'asse, quindi `at`
+resta `[0,0,0]` — la posizione e' gia' nelle sezioni.
 
 ### PRIMITIVE
 Tutte parametriche. `s` e' [x,y,z] (dimensione PIENA, non il raggio).
@@ -197,8 +207,47 @@ Tutte parametriche. `s` e' [x,y,z] (dimensione PIENA, non il raggio).
 - `"mir":"x"` — specchia il nodo sull'asse indicato. Per una coppia
   braccio/gamba/ruota scrivi UN nodo con `"mir":"x"` invece di due.
 - `"rot":[gx,gy,gz]` — rotazione in GRADI.
-- `"bevel"` su `box`/`extr` addolcisce gli spigoli: un filo di bevel (2-5% della
-  misura minore) e' cio' che distingue un oggetto costruito da un cubo grezzo.
+
+### DEFORMATORI (obbligatori per non fare oggetti di mattoni)
+Un volume non deformato si vede: e' un parallelepipedo. Ogni pezzo che nella
+realta' si assottiglia, si stringe, si inclina o e' irregolare DEVE portare uno
+di questi campi. Agiscono lungo l'`axis` del nodo, prima di rotazione e
+posizione.
+
+- `"bevel": 0.004` — RACCORDO vero degli spigoli (su `box`). Un filo di bevel
+  (2-5% della misura minore) e' cio' che distingue un oggetto costruito da un
+  cubo grezzo. Mettilo su quasi tutte le scatole.
+- `"taperTo": 0.2` — scala la SEZIONE all'estremo finale dell'asse. 1 = niente,
+  0.2 = si stringe all'80%, 0 = punta. Per asse e' `{"x":0.15,"z":1}`:
+  **stringe solo su X e lascia lo spessore** — e' esattamente come si fa il filo
+  di una lama, una pala, un'ala, una pinna.
+- `"taper0": {"x":0.6,"z":1}` — la stessa cosa all'estremo INIZIALE (un manico
+  che si allarga verso il pomolo, un tronco piu' grosso a terra).
+- `"squash": {"axis":"z","side":"max","f":0.3}` — schiaccia SOLO UN LATO:
+  il dorso di una lama resta spesso e il filo si assottiglia, una pinna,
+  un cuneo asimmetrico.
+- `"shear": {"by":"z","amount":0.08}` — inclina progressivamente: tetti, rampe,
+  sciabole, appoggi obliqui, spalle spioventi.
+- `"twist": 25` — torsione in gradi lungo l'asse: colonne tortili, corde,
+  canne di fucile rigate, corna.
+- `"bendA": 30, "bendTo":"z"` — piega in gradi: sciabole, corni, code, tubi,
+  archi, artigli.
+- `"warp": {"amp":0.01,"freq":8}` — irregolarita' superficiale: rocce, terreno,
+  corteccia, metallo martellato, macerie. NON usarla su superfici lavorate.
+- `loft` + `"shape"` — la SEZIONE del pezzo: `lens` (lente biconvessa: e' la
+  sezione di una LAMA, e da' il filo), `rect`, `hex`, `tri`, `ellipse`.
+  `"secs":[{"at":0.27,"s":[0.05,0.010]},{"at":0.86,"s":[0.042,0.008]},
+            {"at":1.02,"s":[0.004,0.003]}]` — una lama vera in tre sezioni.
+
+ESEMPI DI USO GIUSTO (copia il ragionamento):
+- lama di spada: `loft` `shape:"lens"` con 3 sezioni che si stringono verso la
+  punta, oppure `box` + `"taperTo":{"x":0.25,"z":0.6}` + `"bevel"` piccolo.
+- manico: `cyl` con `"taper0":0.85` e `"taperTo":0.9` (si stringe in mezzo).
+- tetto: `box` + `"shear"` oppure `wedge`.
+- roccia: `sphere` o `field` + `"warp"` con amp 3-8% della dimensione.
+- gamba di tavolo: `box`/`cyl` + `"taperTo":0.65`.
+- canna di cannone: `cyl` + `"taperTo":0.8`.
+- ala/pinna: `box` + `"taperTo":{"x":0.15,"z":0.4}` + `"squash"`.
 
 ### MATERIALI
 `mats` associa un nome a un materiale. `col` e' la tinta base, `rough` 0..1,

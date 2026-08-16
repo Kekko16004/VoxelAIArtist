@@ -215,15 +215,18 @@ function partMetrics(built) {
     return out;
 }
 
-/** Payload di misura per `POST /api/asset/audit` (o per auditPlanLocal). */
-function measuredFor(built) {
+/** Payload di misura per `POST /api/asset/audit`. */
+function measuredFor(built, spec) {
     const b = built.bounds;
     const r = (v) => Math.round(v * 100000) / 100000;
+    const locked = ((spec && spec.nodes) || [])
+        .filter(n => n.locked).map(n => n.n);
     return {
         total: b.size.map(r),
         min: b.min.map(r),
         max: b.max.map(r),
         parts: partMetrics(built),
+        locked: locked,
     };
 }
 

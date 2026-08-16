@@ -113,10 +113,14 @@ function showSpecInUi(spec, built, defects) {
         list.innerHTML = '';
         for (const n of (spec.nodes || [])) {
             const li = document.createElement('li');
+            li.dataset.node = n.n;
             li.textContent = n.n + '  ·  ' + n.p
                 + (n.mat ? '  ·  ' + n.mat : '')
                 + (n.op ? '  ·  ' + n.op + '→' + n.of : '')
-                + (n.mir ? '  ·  mir:' + n.mir : '');
+                + (n.mir ? '  ·  mir:' + n.mir : '')
+                + (n.locked ? '  ·  🔒' : '');
+            li.addEventListener('click', () => selectNode(n.n));
+            if (n.n === selectedName) li.classList.add('selected');
             list.appendChild(li);
         }
     }
@@ -179,7 +183,7 @@ async function auditAgainstPlan(spec, built) {
     try {
         const data = await apiPost('/api/asset/audit', {
             plan: appState.plan,
-            measured: measuredFor(built),
+            measured: measuredFor(built, spec),
         });
         return data.defects || [];
     } catch (e) {
@@ -608,6 +612,16 @@ function wireUi() {
     });
 
     // Export
+    const expBundle = $('exportBundleBtn');
+    if (expBundle) expBundle.addEventListener('click', async () => {
+        try {
+            setBusy(true, t('status.zipping'));
+            const n = await exportBundle(appState.spec, appState.built, appState.plan);
+            setStatus(t('status.bundled', { kb: Math.round(n / 1024) }), 'ok');
+        } catch (e) {
+            setStatus(t('err.export', { msg: e.message }), 'error');
+        } finally { setBusy(false); }
+    });
     const expGlb = $('exportGlbBtn');
     if (expGlb) expGlb.addEventListener('click', async () => {
         try {
@@ -674,6 +688,23 @@ function wireUi() {
         } catch (e) {
             setStatus(t('err.generic', { msg: e.message }), 'error');
         }
+    });
+
+    // Import (bottone + input file; il drag&drop e' agganciato altrove)
+    const impBtn = $('importBtn');
+    const impInput = $('importInput');
+    if (impBtn && impInput) {
+        impBtn.addEventListener('click', () => impInput.click());
+        impInput.addEventListener('change', async () => {
+            const f = impInput.files && impInput.files[0];
+            if (f) await openAnyFile(f);
+            impInput.value = '';
+        });
+    }
+    const clearRef = $('clearRefBtn');
+    if (clearRef) clearRef.addEventListener('click', () => {
+        clearReference();
+        setStatus(t('status.refCleared'), 'ok');
     });
 
     // Ctrl+Enter to generate

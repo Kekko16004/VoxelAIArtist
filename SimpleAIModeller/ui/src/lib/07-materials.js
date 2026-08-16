@@ -43,27 +43,44 @@ float _samCell(vec3 p){
 `;
 
 function makeGradientEnv() {
-    // CubeTexture a gradiente su canvas: metalness senza envMap e' nero.
-    const size = 32;
+    // CubeTexture a gradiente su canvas: metalness senza envMap rende NERO
+    // (e' fisicamente giusto: niente da riflettere). Il cielo e' chiaro in alto
+    // e il terreno scuro in basso, cosi' un metallo mostra un orizzonte invece
+    // di una tinta piatta — e' l'orizzonte a farlo leggere come metallo.
+    const size = 64;
     const faces = [];
-    const cols = [
-        [0x88,0x99,0xaa], [0x44,0x55,0x66], // +x -x
-        [0xcc,0xdd,0xee], [0x33,0x33,0x44], // +y -y
-        [0x77,0x88,0x99], [0x55,0x66,0x77], // +z -z
+    const spec = [
+        { top: [150, 168, 190], bot: [70, 74, 86] },    // +x
+        { top: [130, 148, 172], bot: [62, 66, 78] },    // -x
+        { top: [205, 222, 240], bot: [190, 205, 225] }, // +y (cielo)
+        { top: [40, 40, 48], bot: [26, 26, 32] },       // -y (terra)
+        { top: [140, 158, 182], bot: [66, 70, 82] },    // +z
+        { top: [120, 138, 162], bot: [58, 62, 74] },    // -z
     ];
     for (let f = 0; f < 6; f++) {
         const c = document.createElement('canvas');
         c.width = c.height = size;
         const ctx = c.getContext('2d');
         const g = ctx.createLinearGradient(0, 0, 0, size);
-        const [r,g1,b] = cols[f];
-        g.addColorStop(0, 'rgb(' + Math.min(255,r+40) + ',' + Math.min(255,g1+40) + ',' + Math.min(255,b+40) + ')');
-        g.addColorStop(1, 'rgb(' + r + ',' + g1 + ',' + b + ')');
+        const s = spec[f];
+        g.addColorStop(0, 'rgb(' + s.top.join(',') + ')');
+        g.addColorStop(1, 'rgb(' + s.bot.join(',') + ')');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, size, size);
+        // Una macchia chiara: e' il riflesso speculare che da' la "luce"
+        // ai metalli e alle vernici lucide.
+        if (f === 2 || f === 4) {
+            const rg = ctx.createRadialGradient(size * 0.35, size * 0.3, 1,
+                                                size * 0.35, size * 0.3, size * 0.5);
+            rg.addColorStop(0, 'rgba(255,255,255,0.9)');
+            rg.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = rg;
+            ctx.fillRect(0, 0, size, size);
+        }
         faces.push(c);
     }
     const tex = new THREE.CubeTexture(faces);
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
     tex.needsUpdate = true;
     return tex;
 }
@@ -94,22 +111,40 @@ function buildMaterial(def, style) {
             transparent: opacity < 1,
             opacity: opacity,
         });
+    } else if (style === 'pbr') {
+        // MeshPhysicalMaterial: il clearcoat e' cio' che fa leggere una vernice
+        // come vernice e un metallo lucidato come lucidato. Su MeshStandard non
+        // c'e', e il risultato e' "plastica opaca" qualunque valore si metta.
+        mat = new THREE.MeshPhysicalMaterial({
+            color: new THREE.Color(rgb.r, rgb.g, rgb.b),
+            roughness: rough,
+            metalness: metal,
+            transparent: opacity < 1,
+            opacity: opacity,
+            envMap: getEnvMap(),
+            envMapIntensity: 1.15,
+            clearcoat: metal > 0.5 ? 0.35 : (rough < 0.4 ? 0.5 : 0.08),
+            clearcoatRoughness: Math.max(0.04, rough * 0.5),
+            sheen: rough > 0.75 ? 0.25 : 0,   // tessuti, cuoio, legno grezzo
+            sheenColor: new THREE.Color(rgb.r, rgb.g, rgb.b),
+            flatShading: false,
+        });
     } else {
         mat = new THREE.MeshStandardMaterial({
             color: new THREE.Color(rgb.r, rgb.g, rgb.b),
             roughness: rough,
             metalness: metal,
-            flatShading: style === 'lowpoly',
+            flatShading: true,
             transparent: opacity < 1,
             opacity: opacity,
-            envMap: (style === 'pbr' || metal > 0.1) ? getEnvMap() : null,
-            envMapIntensity: style === 'pbr' ? 0.7 : 0.35,
+            envMap: getEnvMap(),
+            envMapIntensity: metal > 0.1 ? 0.85 : 0.4,
         });
-        if (emit > 0) {
-            const ec = def.emitCol ? hexToRgb(def.emitCol) : rgb;
-            mat.emissive = new THREE.Color(ec.r, ec.g, ec.b);
-            mat.emissiveIntensity = emit;
-        }
+    }
+    if (emit > 0 && mat.emissive) {
+        const ec = def.emitCol ? hexToRgb(def.emitCol) : rgb;
+        mat.emissive = new THREE.Color(ec.r, ec.g, ec.b);
+        mat.emissiveIntensity = emit;
     }
 
     // Rumore procedurale via onBeforeCompile (object-space, triplanare).
@@ -127,6 +162,10 @@ function buildMaterial(def, style) {
             shader.uniforms.samSeed = { value: seed * 0.17 };
             shader.uniforms.samCol2 = { value: new THREE.Vector3(col2.r, col2.g, col2.b) };
             shader.uniforms.samBands = { value: noise.bands || 0 };
+            shader.uniforms.samRoughAmp = {
+                value: noise.roughAmp != null ? noise.roughAmp
+                     : (style === 'pbr' ? 0.35 : 0.15),
+            };
             shader.vertexShader = shader.vertexShader
                 .replace('#include <common>',
                     '#include <common>\nvarying vec3 samObjPos;')
@@ -142,7 +181,7 @@ function buildMaterial(def, style) {
                 .replace('#include <common>',
                     '#include <common>\n' + NOISE_GLSL + `
 varying vec3 samObjPos;
-uniform float samScale, samAmp, samSeed, samBands;
+uniform float samScale, samAmp, samSeed, samBands, samRoughAmp;
 uniform vec3 samCol2;
 float stripeN(vec3 p){ return step(0.5, fract(p.x*0.5+samSeed)); }
 float spotN(vec3 p){ return step(0.65, _samNoise(p)); }
@@ -157,6 +196,19 @@ float spotN(vec3 p){ return step(0.65, _samNoise(p)); }
   diffuseColor.rgb = mix(diffuseColor.rgb, samCol2, t);
 }
 `);
+            // La ruvidita' variabile e' cio' che distingue una superficie usata
+            // da una verniciata a spruzzo: senza, il riflesso e' uniforme su
+            // tutto il pezzo e il materiale sembra plastica.
+            if (shader.fragmentShader.indexOf('#include <roughnessmap_fragment>') >= 0) {
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <roughnessmap_fragment>',
+                    `#include <roughnessmap_fragment>
+{
+  float rn = ${noiseFn}(samObjPos * samScale * 1.7 + samSeed + 3.1);
+  roughnessFactor = clamp(roughnessFactor + (rn - 0.5) * samRoughAmp, 0.03, 1.0);
+}
+`);
+            }
         };
         mat.customProgramCacheKey = () => key;
     }

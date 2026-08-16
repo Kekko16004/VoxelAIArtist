@@ -645,10 +645,73 @@ compatta (`nodes` + `params` + `mats`); il motore JS la interpreta.
   fino a 8, `custom` zero.
 - Build: `node SimpleAIModeller/ui/build.mjs`. Suite:
   `bash SimpleAIModeller/tests/run_all.sh` (offline). GUI reale:
-  `.superpowers/check_sam_gui.py` (gitignored, 19 controlli con clic veri).
-- Fase 1 = core di generazione + visore. Editor navigabile, gizmo e Gauntlet
-  Loop multi-agente restano fuori finche' la qualita' degli asset non e'
-  giudicata sufficiente.
+  `.superpowers/check_sam_gui.py` (gitignored, 36 controlli con clic veri).
+
+### Deformatori (`ui/src/lib/03b-deform.js`) — perche' non basta piazzare volumi
+Un motore che sa solo POSIZIONARE primitive produce oggetti fatti di mattoni: si
+vede subito, ed e' il limite che si nota per primo su una spada o un veicolo.
+Le forme reali sono primitive DEFORMATE, non primitive nuove — aggiungerne una al
+catalogo per ogni forma sarebbe un catalogo infinito. Quindi:
+
+- `taperTo` / `taper0` scalano la SEZIONE lungo l'asse, **per-asse**
+  (`{"x":0.15,"z":1}` stringe solo X e lascia lo spessore: e' il filo di una
+  lama, un'ala, una pala); `squash` schiaccia **un solo lato**; `shear` inclina;
+  `twist` torce; `bendA` piega; `warp` sposta i vertici lungo la normale con
+  value-noise (rocce, corteccia, metallo martellato).
+- `bevel` su `box` costruisce una **rounded box vera** (`primRoundBox`): si
+  proietta una griglia sulla superficie della scatola arrotondata, quindi i
+  vertici condivisi fra due facce cadono nello stesso punto e il guscio resta
+  chiuso senza cuciture. **Prima il campo era accettato e IGNORATO in silenzio.**
+- `loft` ha una `shape` (`lens` / `rect` / `hex` / `tri` / `ellipse`): `lens` e'
+  la sezione di una LAMA, e senza quella ogni lama e' un parallelepipedo.
+- **In un `loft` le `secs.at` sono coordinate ASSOLUTE** sull'asse, e la mesh NON
+  viene ricentrata: il costruttore le prende dal piano (`lama_a`, `lama_b`) senza
+  calcolare un centro. Ricentrare sposterebbe ogni loft di mezza lunghezza.
+- L'ordine e' fisso: primitiva → deformatori (in spazio LOCALE) → rot → at →
+  `arr` → `mir`. Deformare dopo la rotazione darebbe una rastremazione obliqua
+  rispetto al pezzo.
+- I campi dei deformatori si risolvono in `resolveNode` (possono essere
+  espressioni); `03b-deform.js` vede solo numeri e resta testabile in Node.
+
+### Editor (`09d-editor.js`)
+Selezione per raycast + outliner, gizmo (`TransformControls`), undo/redo,
+duplica/elimina, wireframe, scorciatoie G/R/S/W/F/1-6/Del/Ctrl+Z/Ctrl+D.
+
+- **Il gizmo scrive NELLA SPEC**, non sulla scena: muovere una mesh e lasciare la
+  spec com'era darebbe un modello che al primo rebuild torna dov'era e un export
+  che non corrisponde a cio' che si vede. Le misure sono espressioni, quindi il
+  delta si SOMMA all'espressione (`(lama_a+lama_b)/2+0.03`) invece di
+  sostituirla: il nodo resta legato alla catena del piano.
+- Un nodo mosso a mano diventa `locked`, viaggia in `measuredFor(...).locked` e
+  **l'audit lo salta**. Senza, il ratchet "correggerebbe" ogni modifica manuale
+  al giro dopo e l'editor sarebbe inutilizzabile.
+- **`pushHistory` registra lo stato PRIMA della modifica**, quindi lo stato
+  attuale non e' nello stack: `undo()` deposita prima il presente in cima, poi
+  scende. Senza, il primo undo salta indietro di DUE passi — difetto trovato coi
+  clic veri (duplica, elimina, undo restituiva 5 nodi invece di 6).
+
+### Import / export
+- `.sam.json` si RIAPRE (passa da `/api/asset/normalize`, non da un parser
+  duplicato nel browser). Un GLB/OBJ entra come **riferimento** semitrasparente:
+  una mesh non e' convertibile in spec parametrica, e fingere di importarla come
+  nodi darebbe un asset non piu' modificabile che sembra modificabile.
+- Il bundle e' **un solo ZIP** (`09b-zip.js`, store mode scritto a mano) perche' i
+  browser bloccano i download multipli: GLB + spec + piano + collider + LEGGIMI.
+  Data fissa nell'header, cosi' due export dello stesso asset sono binariamente
+  identici e si possono confrontare. CRC32 verificato contro `zlib.crc32`.
+
+### Rendering
+Tone mapping ACES + ombre PCF morbide + tre luci e un rimbalzo da terra (senza il
+rimbalzo il sotto degli oggetti e' nero e la forma non si legge). `pbr` usa
+`MeshPhysicalMaterial` col **clearcoat**: e' cio' che fa leggere una vernice come
+vernice, e su `MeshStandard` non esiste — il risultato sarebbe "plastica opaca"
+qualunque valore si metta. Il rumore procedurale modula anche la RUVIDITA'
+(`samRoughAmp`), che e' cio' che distingue una superficie usata da una verniciata
+a spruzzo. L'envMap e' un CubeTexture a gradiente con una macchia speculare: un
+metallo senza orizzonte da riflettere resta una tinta piatta.
+
+- Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
+  skinning vero restano fuori.
 
 ### Il piano dell'architetto (`src/plan.py`) — cio' che rende precise le misure
 Il difetto piu' costoso NON e' estetico, e' aritmetico: il modello piazza i pezzi

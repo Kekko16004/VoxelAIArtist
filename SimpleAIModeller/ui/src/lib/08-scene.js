@@ -16,6 +16,14 @@ function initScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x0c0a14, 1);
     renderer.shadowMap.enabled = true;
+    if (THREE.PCFSoftShadowMap !== undefined) renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Tone mapping: senza, i metalli e le luci speculari si bruciano a bianco e
+    // il modello sembra sovraesposto. ACES e' quello che usano i motori di
+    // gioco, quindi cio' che si vede qui somiglia a cio' che si vedra' la'.
+    if (THREE.ACESFilmicToneMapping !== undefined) {
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+    }
     if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
     else if (renderer.outputEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -29,20 +37,34 @@ function initScene() {
     controls.target.set(0, 0.8, 0);
     controls.addEventListener('change', () => { _needsRender = true; });
 
-    // Luci
-    const hemi = new THREE.HemisphereLight(0xb0c4de, 0x2a2030, 0.7);
+    // Luci: tre punti + rimbalzo da terra. Il rimbalzo non e' un vezzo — senza,
+    // il sotto degli oggetti e' nero e la forma non si legge.
+    const hemi = new THREE.HemisphereLight(0xc2d4ee, 0x3a3040, 0.55);
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffffff, 0.95);
+    const key = new THREE.DirectionalLight(0xfff4e6, 2.1);
     key.position.set(3, 6, 4);
     key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.bias = -0.0008;
+    key.shadow.normalBias = 0.02;
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.55);
     fill.position.set(-4, 2, -2);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffccaa, 0.25);
-    rim.position.set(0, 3, -5);
+    const rim = new THREE.DirectionalLight(0xffccaa, 0.7);
+    rim.position.set(-1, 2.5, -5);
     scene.add(rim);
+    const bounce = new THREE.DirectionalLight(0x6a7a90, 0.25);
+    bounce.position.set(0, -3, 1);
+    scene.add(bounce);
+
+    // Piano che riceve l'ombra: da' appoggio visivo senza chiudere la scena.
+    const shadowMat = new THREE.ShadowMaterial({ opacity: 0.35 });
+    const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), shadowMat);
+    shadowPlane.rotation.x = -Math.PI / 2;
+    shadowPlane.position.y = 0;
+    shadowPlane.receiveShadow = true;
+    scene.add(shadowPlane);
 
     // Griglia
     gridHelper = new THREE.GridHelper(10, 20, 0x445566, 0x2a3040);

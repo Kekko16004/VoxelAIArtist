@@ -15,7 +15,7 @@ const ok = (c, m) => { if (c) { pass++; console.log('  OK  ' + m); } else { fail
 
 // Carica i moduli puri (01-06) in un contesto condiviso.
 const files = [
-  '01-expr.js', '02-mesh.js', '03-primitives.js',
+  '01-expr.js', '02-mesh.js', '03-primitives.js', '03b-deform.js',
   '04-csg.js', '05-build.js', '06-validators.js',
 ];
 const code = files.map(f => fs.readFileSync(path.join(LIB, f), 'utf8')).join('\n')

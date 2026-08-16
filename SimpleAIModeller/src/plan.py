@@ -392,8 +392,13 @@ def audit_built(plan, measured, tol_abs=TOL_ABS, tol_rel=TOL_REL):
                 })
 
     parts = (measured or {}).get("parts") or {}
-    planned = {s["n"]: s for s in plan["chain"]}
-    planned_extras = {s["n"]: s for s in plan["extras"]}
+    # Un nodo mosso a mano nell'editor arriva marcato: la sua posizione e' una
+    # SCELTA dell'utente, non un errore del modello. Senza questa esclusione il
+    # ratchet "correggerebbe" ogni modifica manuale al giro dopo, e l'editor
+    # diventerebbe inutilizzabile.
+    locked = set((measured or {}).get("locked") or [])
+    planned = {s["n"]: s for s in plan["chain"] if s["n"] not in locked}
+    planned_extras = {s["n"]: s for s in plan["extras"] if s["n"] not in locked}
 
     for name, seg in planned.items():
         got = parts.get(name)
@@ -465,7 +470,9 @@ def audit_built(plan, measured, tol_abs=TOL_ABS, tol_rel=TOL_REL):
     # Pezzi che il piano non prevede: non sono un errore di per se', ma se sono
     # grandi lo sono (e' cosi' che compare la piramide gigante).
     for name, got in parts.items():
-        if name in planned or name in planned_extras:
+        if name in planned or name in planned_extras or name in locked:
+            continue
+        if any(s["n"] == name for s in plan["chain"] + plan["extras"]):
             continue
         size = got.get("size") or [0, 0, 0]
         if _num(size[ai]) > plan["axisLength"] * 0.25:

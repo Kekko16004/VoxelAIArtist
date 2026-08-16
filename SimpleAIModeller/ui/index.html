@@ -74,6 +74,25 @@ label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px
   border-radius: 8px; padding: 4px;
 }
 .hud button { padding: 4px 8px; font-size: 12px; }
+.hud-tools { top: 52px; }
+.hud-tools button.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: #fff; }
+.hud-sep { width: 1px; background: var(--panel-border); margin: 2px 3px; }
+.sel-info {
+  position: absolute; right: 10px; top: 10px; max-width: 40%;
+  background: rgba(18,15,30,0.92); border: 1px solid var(--panel-border);
+  border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted);
+  font-family: ui-monospace, monospace;
+}
+body.dragging::after {
+  content: ''; position: fixed; inset: 0; z-index: 60; pointer-events: none;
+  border: 3px dashed var(--accent); background: rgba(124,106,247,0.08);
+}
+#nodesList li { cursor: pointer; }
+#nodesList li:hover { background: var(--panel); }
+#nodesList li.selected {
+  background: linear-gradient(90deg, rgba(124,106,247,0.25), transparent);
+  border-left: 3px solid var(--accent); padding-left: 5px;
+}
 .status {
   position: absolute; left: 10px; right: 10px; bottom: 10px;
   background: rgba(18,15,30,0.92); border: 1px solid var(--panel-border);
@@ -223,6 +242,9 @@ label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px
     <div class="section">
       <h2 data-i18n="nav.export">Esporta</h2>
       <div class="btn-row">
+        <button id="exportBundleBtn" class="primary" data-i18n="btn.exportBundle">Bundle ZIP</button>
+      </div>
+      <div class="btn-row">
         <button id="exportGlbBtn" data-i18n="btn.exportGlb">GLB</button>
         <button id="exportObjBtn" data-i18n="btn.exportObj">OBJ</button>
         <button id="exportJsonBtn" data-i18n="btn.exportJson">JSON</button>
@@ -230,10 +252,15 @@ label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px
       </div>
       <div class="btn-row">
         <button id="sheetBtn" data-i18n="btn.sheet">Contact sheet</button>
+        <button id="importBtn" data-i18n="btn.import">Importa…</button>
+      </div>
+      <input type="file" id="importInput" accept=".json,.glb,.gltf,.obj" hidden>
+      <div class="btn-row">
+        <button id="clearRefBtn" data-i18n="btn.clearRef">Togli riferimento</button>
       </div>
       <label class="check"><input type="checkbox" id="humanCheck" checked> <span data-i18n="form.human">Silhouette 1,70 m</span></label>
       <div class="field" style="margin-top:10px">
-        <label>Lingua</label>
+        <label data-i18n="form.lang">Lingua</label>
         <select id="languageSelect"></select>
       </div>
     </div>
@@ -249,6 +276,19 @@ label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px
       <button data-view="top" data-i18n="view.top">Alto</button>
       <button data-view="persp" data-i18n="view.persp">Prospettiva</button>
     </div>
+    <div class="hud hud-tools">
+      <button data-gizmo="translate" title="G" data-i18n="btn.move">Sposta</button>
+      <button data-gizmo="rotate" title="R" data-i18n="btn.rotate">Ruota</button>
+      <button data-gizmo="scale" title="S" data-i18n="btn.scale">Scala</button>
+      <span class="hud-sep"></span>
+      <button id="undoBtn" title="Ctrl+Z" data-i18n="btn.undo">Annulla</button>
+      <button id="redoBtn" title="Ctrl+Y" data-i18n="btn.redo">Ripeti</button>
+      <span class="hud-sep"></span>
+      <button id="dupNodeBtn" title="Ctrl+D" data-i18n="btn.duplicate">Duplica</button>
+      <button id="deleteNodeBtn" title="Del" data-i18n="btn.delete">Elimina</button>
+      <button id="wireBtn" title="W" data-i18n="btn.wire">Wireframe</button>
+    </div>
+    <div class="sel-info" id="selInfo"></div>
     <div class="status" id="statusBar"></div>
   </main>
 
@@ -1423,13 +1463,21 @@ function primArch(sx, sy, sz, r, wall, seg) {
 }
 
 /** Costruisce la primitiva di un nodo gia' risolto (numeri puri). */
-function primBuild(node, seg) {
+function primBuild(node, seg, bevelSeg) {
     const p = node.p || 'box';
     const s = node.s || [1, 1, 1];
     const axis = node.axis || 'y';
     seg = seg || 16;
+    bevelSeg = bevelSeg || 2;
     switch (p) {
-        case 'box':    return primBox(s[0], s[1], s[2]);
+        case 'box':
+            // `bevel` non e' piu' decorativo: se c'e', si costruisce una
+            // scatola RACCORDATA. Era il campo piu' usato dal generatore e
+            // veniva ignorato in silenzio.
+            if (node.bevel && node.bevel > 1e-6) {
+                return primRoundBox(s[0], s[1], s[2], node.bevel, bevelSeg);
+            }
+            return primBox(s[0], s[1], s[2]);
         case 'plane':  return primPlane(s[0], s[2] != null ? s[2] : s[1]);
         case 'sphere': {
             const r = node.r != null ? node.r : Math.max(s[0], s[1], s[2]) * 0.5;
@@ -1458,7 +1506,8 @@ function primBuild(node, seg) {
                                        node.sides || seg,
                                        s, axis);
         case 'lathe':  return primLathe(node.prof, node.sides || seg, node.arc, axis);
-        case 'loft':   return primLoft(node.secs, seg, axis);
+        case 'loft':   return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
+                                        node.closed !== false);
         case 'helix':  return primHelix(node.r || 0.4, node.r2, node.len || 1,
                                         node.turns || 4, seg, axis);
         case 'field':  return primField(s[0], s[1], s[2], node.seed, node.amp,
@@ -1467,6 +1516,419 @@ function primBuild(node, seg) {
         case 'arch':   return primArch(s[0], s[1], s[2], node.r, node.wall, seg);
         default:       return primBox(s[0], s[1], s[2]);
     }
+}
+
+// =======================================================================
+//  03b - Deformatori (niente THREE, array piatti)
+//
+//  Perche' esistono: un motore che sa solo PIAZZARE volumi produce oggetti
+//  fatti di mattoni. Una lama si assottiglia verso la punta e verso il
+//  filo, un manico si stringe in mezzo, un tetto e' inclinato, una roccia
+//  e' irregolare. Sono tutte deformazioni di una primitiva, non primitive
+//  nuove: aggiungerne una al catalogo per ogni forma sarebbe un catalogo
+//  infinito.
+//
+//  Tutti operano in SPAZIO LOCALE (primitiva centrata sull'origine) e
+//  PRIMA di rotazione e traslazione: deformare dopo aver ruotato darebbe
+//  una rastremazione obliqua rispetto al pezzo.
+// =======================================================================
+
+const AXIS_I = { x: 0, y: 1, z: 2 };
+
+function axisIndex(axis) {
+    const i = AXIS_I[String(axis || 'y').toLowerCase()[0]];
+    return i === undefined ? 1 : i;
+}
+
+/** Estensione [min,max] della mesh lungo un asse. */
+function meshExtent(m, ai) {
+    const p = m.pos;
+    if (!p.length) return [0, 0];
+    let lo = p[ai], hi = p[ai];
+    for (let i = ai; i < p.length; i += 3) {
+        if (p[i] < lo) lo = p[i];
+        if (p[i] > hi) hi = p[i];
+    }
+    return [lo, hi];
+}
+
+/** Fattore normalizzato 0..1 lungo l'asse (0 = estremo min, 1 = estremo max). */
+function _tFactor(v, lo, hi) {
+    const span = hi - lo;
+    if (Math.abs(span) < 1e-9) return 0.5;
+    const t = (v - lo) / span;
+    return t < 0 ? 0 : (t > 1 ? 1 : t);
+}
+
+/**
+ * Rastremazione: scala la SEZIONE trasversale lungo l'asse.
+ * `s0` e `s1` sono i fattori di scala all'estremo MIN e MAX, ognuno
+ * `{a, b}` sui due assi trasversali (a = primo asse in ordine XYZ).
+ * E' il deformatore che fa una lama, un tronco, una gamba di un tavolo.
+ */
+function meshTaper(m, axis, s0, s1) {
+    const ai = axisIndex(axis);
+    const [lo, hi] = meshExtent(m, ai);
+    const cross = [0, 1, 2].filter(i => i !== ai);
+    const p = m.pos;
+    const a0 = (s0 && s0.a != null) ? s0.a : 1;
+    const b0 = (s0 && s0.b != null) ? s0.b : 1;
+    const a1 = (s1 && s1.a != null) ? s1.a : 1;
+    const b1 = (s1 && s1.b != null) ? s1.b : 1;
+    for (let i = 0; i < p.length; i += 3) {
+        const t = _tFactor(p[i + ai], lo, hi);
+        const sa = a0 + (a1 - a0) * t;
+        const sb = b0 + (b1 - b0) * t;
+        p[i + cross[0]] *= sa;
+        p[i + cross[1]] *= sb;
+    }
+    return m;
+}
+
+/**
+ * Inclinazione: sposta la sezione progressivamente lungo `by`.
+ * `amount` e' lo spostamento TOTALE fra i due estremi, in unita' di mondo.
+ * Serve per tetti, rampe, lame a sciabola, appoggi obliqui.
+ */
+function meshShear(m, axis, by, amount) {
+    const ai = axisIndex(axis);
+    const bi = axisIndex(by);
+    if (ai === bi) return m;
+    const [lo, hi] = meshExtent(m, ai);
+    const p = m.pos;
+    for (let i = 0; i < p.length; i += 3) {
+        const t = _tFactor(p[i + ai], lo, hi) - 0.5;
+        p[i + bi] += amount * t;
+    }
+    return m;
+}
+
+/** Torsione: rotazione progressiva attorno all'asse. `deg` e' l'angolo TOTALE. */
+function meshTwist(m, axis, deg) {
+    const ai = axisIndex(axis);
+    const [lo, hi] = meshExtent(m, ai);
+    const cross = [0, 1, 2].filter(i => i !== ai);
+    const p = m.pos;
+    const rad = (deg || 0) * Math.PI / 180;
+    for (let i = 0; i < p.length; i += 3) {
+        const t = _tFactor(p[i + ai], lo, hi) - 0.5;
+        const a = rad * t;
+        const c = Math.cos(a), s = Math.sin(a);
+        const u = p[i + cross[0]], v = p[i + cross[1]];
+        p[i + cross[0]] = u * c - v * s;
+        p[i + cross[1]] = u * s + v * c;
+    }
+    return m;
+}
+
+/**
+ * Piega: curva la mesh lungo l'asse, nel piano (asse, verso).
+ * `deg` e' l'angolo TOTALE della curvatura. Corni, sciabole, archi, tubi
+ * piegati, code.
+ */
+function meshBend(m, axis, deg, towards) {
+    const ai = axisIndex(axis);
+    const bi = axisIndex(towards || (ai === 1 ? 'z' : 'y'));
+    if (ai === bi) return m;
+    const rad = (deg || 0) * Math.PI / 180;
+    if (Math.abs(rad) < 1e-6) return m;
+    const [lo, hi] = meshExtent(m, ai);
+    const len = hi - lo;
+    if (len < 1e-9) return m;
+    // Raggio tale che l'arco lungo `len` copra `rad`.
+    const R = len / rad;
+    const p = m.pos;
+    for (let i = 0; i < p.length; i += 3) {
+        const s = p[i + ai] - (lo + hi) * 0.5;    // arco dal centro
+        const off = p[i + bi];                     // distanza dall'asse neutro
+        const a = s / R;
+        const r = R - off;
+        p[i + ai] = Math.sin(a) * r;
+        p[i + bi] = R - Math.cos(a) * r;
+    }
+    return m;
+}
+
+/**
+ * Irregolarita' superficiale: sposta i vertici lungo la normale con
+ * value-noise. Rocce, terreno, corteccia, metallo martellato.
+ * `amp` e' in unita' di mondo.
+ */
+function meshWarp(m, amp, freq, seed) {
+    amp = amp || 0;
+    if (Math.abs(amp) < 1e-9) return m;
+    freq = freq || 4;
+    seed = (seed || 0) * 0.137;
+    const n = meshNormals(m);
+    const p = m.pos;
+    function hash(x, y, z) {
+        let h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + seed) * 43758.5453;
+        return (h - Math.floor(h)) * 2 - 1;
+    }
+    function noise(x, y, z) {
+        const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+        const xf = x - xi, yf = y - yi, zf = z - zi;
+        const sx = xf * xf * (3 - 2 * xf), sy = yf * yf * (3 - 2 * yf), sz = zf * zf * (3 - 2 * zf);
+        let acc = 0;
+        for (let dz = 0; dz < 2; dz++) {
+            for (let dy = 0; dy < 2; dy++) {
+                for (let dx = 0; dx < 2; dx++) {
+                    const w = (dx ? sx : 1 - sx) * (dy ? sy : 1 - sy) * (dz ? sz : 1 - sz);
+                    acc += w * hash(xi + dx, yi + dy, zi + dz);
+                }
+            }
+        }
+        return acc;
+    }
+    for (let i = 0; i < p.length; i += 3) {
+        const d = noise(p[i] * freq, p[i + 1] * freq, p[i + 2] * freq) * amp;
+        p[i] += n[i] * d;
+        p[i + 1] += n[i + 1] * d;
+        p[i + 2] += n[i + 2] * d;
+    }
+    return m;
+}
+
+/**
+ * Schiacciamento asimmetrico su UN lato: comprime solo la meta' positiva o
+ * negativa di un asse. E' il "stringere solo da un lato" — un filo di lama,
+ * uno scalino a sbalzo, un profilo a goccia.
+ */
+function meshSquash(m, axis, side, factor) {
+    const ai = axisIndex(axis);
+    const p = m.pos;
+    const f = factor == null ? 0.5 : factor;
+    const positive = String(side || 'max') !== 'min';
+    for (let i = 0; i < p.length; i += 3) {
+        const v = p[i + ai];
+        if (positive ? v > 0 : v < 0) p[i + ai] = v * f;
+    }
+    return m;
+}
+
+/**
+ * Scatola con RACCORDO vero (rounded box).
+ *
+ * Si costruisce una griglia su ogni faccia e si proietta ogni vertice sulla
+ * superficie della scatola arrotondata: preso il punto piu' vicino sulla
+ * scatola INTERNA (quella ristretta di `r`), il vertice finisce a distanza
+ * `r` da quello. E' la definizione della rounded box, e per costruzione i
+ * vertici condivisi da due facce cadono nello stesso punto — quindi il
+ * guscio resta chiuso senza cuciture da saldare a mano.
+ *
+ * Un bevel e' cio' che distingue un oggetto costruito da un cubo grezzo, e
+ * fino a ieri il campo `bevel` della spec veniva ACCETTATO E IGNORATO.
+ */
+function primRoundBox(sx, sy, sz, r, seg) {
+    const hx = sx * 0.5, hy = sy * 0.5, hz = sz * 0.5;
+    const maxR = Math.min(hx, hy, hz) * 0.98;
+    r = Math.max(0, Math.min(r || 0, maxR));
+    if (r < 1e-6) return primBox(sx, sy, sz);
+    seg = Math.max(1, Math.min(8, seg | 0 || 2));
+    const ix = hx - r, iy = hy - r, iz = hz - r;
+
+    const pos = [];
+    const idx = [];
+    const n = seg + 1;
+
+    // Sei facce, ognuna una griglia (n+1)x(n+1) sul quadrato della faccia.
+    const faces = [
+        { o: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0] },   // +Z
+        { o: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0] },  // -Z
+        { o: [1, 0, 0], u: [0, 0, -1], v: [0, 1, 0] },   // +X
+        { o: [-1, 0, 0], u: [0, 0, 1], v: [0, 1, 0] },   // -X
+        { o: [0, 1, 0], u: [1, 0, 0], v: [0, 0, -1] },   // +Y
+        { o: [0, -1, 0], u: [1, 0, 0], v: [0, 0, 1] },   // -Y
+    ];
+
+    function project(x, y, z) {
+        // punto piu' vicino sulla scatola interna
+        const cx = Math.max(-ix, Math.min(ix, x));
+        const cy = Math.max(-iy, Math.min(iy, y));
+        const cz = Math.max(-iz, Math.min(iz, z));
+        let dx = x - cx, dy = y - cy, dz = z - cz;
+        const l = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (l < 1e-9) return [x, y, z];
+        return [cx + dx / l * r, cy + dy / l * r, cz + dz / l * r];
+    }
+
+    for (const f of faces) {
+        const base = (pos.length / 3) | 0;
+        for (let j = 0; j <= n; j++) {
+            const fv = (j / n) * 2 - 1;
+            for (let i2 = 0; i2 <= n; i2++) {
+                const fu = (i2 / n) * 2 - 1;
+                const x = f.o[0] * hx + f.u[0] * fu * hx + f.v[0] * fv * hx;
+                const y = f.o[1] * hy + f.u[1] * fu * hy + f.v[1] * fv * hy;
+                const z = f.o[2] * hz + f.u[2] * fu * hz + f.v[2] * fv * hz;
+                // Le componenti lungo l'asse della faccia restano al bordo.
+                const px = f.o[0] !== 0 ? f.o[0] * hx : x;
+                const py = f.o[1] !== 0 ? f.o[1] * hy : y;
+                const pz = f.o[2] !== 0 ? f.o[2] * hz : z;
+                const q = project(px, py, pz);
+                pos.push(q[0], q[1], q[2]);
+            }
+        }
+        const stride = n + 1;
+        for (let j = 0; j < n; j++) {
+            for (let i2 = 0; i2 < n; i2++) {
+                const a = base + j * stride + i2;
+                const b = a + 1;
+                const c = a + stride;
+                const d = c + 1;
+                idx.push(a, b, c, b, d, c);
+            }
+        }
+    }
+    return meshCreate(pos, idx);
+}
+
+/** Sezione 2D per il loft: rettangolo, ellisse, lente (lama), esagono. */
+function sectionPoints(shape, seg) {
+    const s = String(shape || 'ellipse').toLowerCase();
+    seg = Math.max(4, seg | 0 || 12);
+    const pts = [];
+    if (s === 'rect' || s === 'box') {
+        // Rettangolo con densita' uniforme sul perimetro (4 lati x k punti).
+        const k = Math.max(1, Math.round(seg / 4));
+        const corners = [[0.5, 0.5], [-0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]];
+        for (let c = 0; c < 4; c++) {
+            const a = corners[c], b = corners[(c + 1) % 4];
+            for (let i = 0; i < k; i++) {
+                const t = i / k;
+                pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+            }
+        }
+    } else if (s === 'lens' || s === 'blade' || s === 'lente') {
+        // Lente biconvessa: e' la sezione di una LAMA. Due archi che si
+        // incontrano in due punte laterali: e' cio' che da' il filo.
+        const k = Math.max(3, Math.round(seg / 2));
+        for (let i = 0; i <= k; i++) {
+            const t = (i / k) * 2 - 1;
+            pts.push([t * 0.5, Math.cos(t * Math.PI / 2) * 0.5]);
+        }
+        for (let i = k - 1; i > 0; i--) {
+            const t = (i / k) * 2 - 1;
+            pts.push([t * 0.5, -Math.cos(t * Math.PI / 2) * 0.5]);
+        }
+    } else if (s === 'hex' || s === 'hexagon') {
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+            pts.push([Math.cos(a) * 0.5, Math.sin(a) * 0.5]);
+        }
+    } else if (s === 'tri') {
+        for (let i = 0; i < 3; i++) {
+            const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+            pts.push([Math.cos(a) * 0.5, Math.sin(a) * 0.5]);
+        }
+    } else {
+        for (let i = 0; i < seg; i++) {
+            const a = (i / seg) * Math.PI * 2;
+            pts.push([Math.cos(a) * 0.5, Math.sin(a) * 0.5]);
+        }
+    }
+    return pts;
+}
+
+/**
+ * Loft con sezione a scelta e scala per-sezione su DUE assi.
+ * Sostituisce il vecchio loft sempre-ellittico: una carrozzeria, un fusto,
+ * una lama non sono cilindri schiacciati.
+ */
+function primLoft2(secs, shape, seg, axis, closedEnds) {
+    if (!secs || secs.length < 2) return primCyl(0.5, 1, seg, 1, axis);
+    const sorted = secs.slice().sort((a, b) => a.at - b.at);
+    const ring = sectionPoints(shape, seg);
+    const rn = ring.length;
+    const pos = [];
+    const idx = [];
+    for (let i = 0; i < sorted.length; i++) {
+        const sc = sorted[i];
+        const sa = (sc.s && sc.s[0] != null) ? sc.s[0] : 1;
+        const sb = (sc.s && sc.s[1] != null) ? sc.s[1] : sa;
+        for (let k = 0; k < rn; k++) {
+            pos.push(ring[k][0] * sa, sc.at, ring[k][1] * sb);
+        }
+    }
+    for (let i = 0; i < sorted.length - 1; i++) {
+        for (let k = 0; k < rn; k++) {
+            const k2 = (k + 1) % rn;
+            const a = i * rn + k, b = i * rn + k2;
+            const c = (i + 1) * rn + k, d = (i + 1) * rn + k2;
+            idx.push(a, c, b, b, c, d);
+        }
+    }
+    if (closedEnds !== false) {
+        for (const [si, flip] of [[0, true], [sorted.length - 1, false]]) {
+            const base = si * rn;
+            const ci = (pos.length / 3) | 0;
+            let cx = 0, cy = 0, cz = 0;
+            for (let k = 0; k < rn; k++) {
+                cx += pos[(base + k) * 3];
+                cy += pos[(base + k) * 3 + 1];
+                cz += pos[(base + k) * 3 + 2];
+            }
+            pos.push(cx / rn, cy / rn, cz / rn);
+            for (let k = 0; k < rn; k++) {
+                const k2 = (k + 1) % rn;
+                if (flip) idx.push(ci, base + k, base + k2);
+                else idx.push(ci, base + k2, base + k);
+            }
+        }
+    }
+    let m = meshCreate(pos, idx);
+    // NON si ricentra: in un loft le `secs.at` sono coordinate ASSOLUTE
+    // sull'asse, cosi' il costruttore le prende dal piano (`lama_a`, `lama_b`)
+    // e non deve calcolare un centro. Ricentrare qui renderebbe falsa quella
+    // promessa e sposterebbe ogni loft di mezza lunghezza.
+    if (axis === 'x') meshRotate(m, 0, 0, -90);
+    else if (axis === 'z') meshRotate(m, 90, 0, 0);
+    return m;
+}
+
+/** Normalizza il campo `taper`/`taper0` in `{a, b}`. */
+function _taperPair(v, fallback) {
+    if (v == null) return null;
+    if (typeof v === 'number') return { a: v, b: v };
+    if (typeof v === 'object') {
+        const a = (v.a != null) ? v.a : (v.x != null ? v.x : (v.w != null ? v.w : 1));
+        const b = (v.b != null) ? v.b : (v.z != null ? v.z : (v.d != null ? v.d : a));
+        return { a: a, b: b };
+    }
+    return fallback || null;
+}
+
+/**
+ * Applica tutti i deformatori dichiarati su un nodo GIA' risolto.
+ * L'ordine e' fisso e non e' arbitrario: rastremare dopo aver piegato
+ * darebbe una sezione che varia lungo una curva invece che lungo il pezzo.
+ */
+function applyDeformers(m, node) {
+    const axis = node.axis || 'y';
+    // 1. rastremazione (sezione lungo l'asse)
+    const t1 = _taperPair(node.taperTo != null ? node.taperTo : node.taperObj);
+    const t0 = _taperPair(node.taper0);
+    if (t0 || t1) {
+        meshTaper(m, axis, t0 || { a: 1, b: 1 }, t1 || { a: 1, b: 1 });
+    }
+    // 2. schiacciamento asimmetrico
+    if (node.squash) {
+        meshSquash(m, node.squash.axis || 'z', node.squash.side,
+                   node.squash.f != null ? node.squash.f : 0.5);
+    }
+    // 3. inclinazione
+    if (node.shear && node.shear.by != null) {
+        meshShear(m, axis, node.shear.by, node.shear.amount || 0);
+    }
+    // 4. torsione
+    if (node.twist) meshTwist(m, axis, node.twist);
+    // 5. piega
+    if (node.bendA) meshBend(m, axis, node.bendA, node.bendTo);
+    // 6. irregolarita'
+    if (node.warp && node.warp.amp) {
+        meshWarp(m, node.warp.amp, node.warp.freq, node.warp.seed);
+    }
+    return m;
 }
 
 // =======================================================================
@@ -1765,13 +2227,56 @@ function resolveNode(node, params) {
     n.at = node.at != null ? evalVec3(node.at, params, [0, 0, 0]) : [0, 0, 0];
     if (node.rot != null) n.rot = evalVec3(node.rot, params, [0, 0, 0]);
     for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'wall', 'bevel',
-                     'amp', 'freq', 'turns', 'inner']) {
+                     'amp', 'freq', 'turns', 'inner', 'twist', 'bendA']) {
         if (node[k] != null) n[k] = evalExpr(node[k], params);
     }
     for (const k of ['sides', 'steps', 'seed']) {
         if (node[k] != null) n[k] = Math.round(evalExpr(node[k], params));
     }
     if (node.axis) n.axis = node.axis;
+    if (node.shape) n.shape = node.shape;
+    if (node.bendTo) n.bendTo = node.bendTo;
+
+    // Deformatori: i loro campi sono oggetti, e ognuno puo' contenere
+    // espressioni. Si risolvono qui, non nel deformatore, cosi' quel modulo
+    // resta puramente geometrico e testabile con numeri.
+    function pair(v) {
+        if (v == null) return null;
+        if (typeof v === 'object' && !Array.isArray(v)) {
+            const a = v.a != null ? v.a : (v.x != null ? v.x : (v.w != null ? v.w : 1));
+            const b = v.b != null ? v.b : (v.z != null ? v.z : (v.d != null ? v.d : a));
+            return { a: evalExpr(a, params), b: evalExpr(b, params) };
+        }
+        if (Array.isArray(v)) {
+            return { a: evalExpr(v[0], params),
+                     b: evalExpr(v.length > 1 ? v[1] : v[0], params) };
+        }
+        const s = evalExpr(v, params);
+        return { a: s, b: s };
+    }
+    if (node.taperTo != null) n.taperTo = pair(node.taperTo);
+    if (node.taper0 != null) n.taper0 = pair(node.taper0);
+    if (node.squash) {
+        n.squash = {
+            axis: node.squash.axis || 'z',
+            side: node.squash.side || 'max',
+            f: node.squash.f != null ? evalExpr(node.squash.f, params) : 0.5,
+        };
+    }
+    if (node.shear) {
+        n.shear = {
+            by: node.shear.by || 'z',
+            amount: evalExpr(node.shear.amount != null ? node.shear.amount : 0, params),
+        };
+    }
+    if (node.warp) {
+        n.warp = {
+            amp: evalExpr(node.warp.amp != null ? node.warp.amp : 0, params),
+            freq: evalExpr(node.warp.freq != null ? node.warp.freq : 4, params),
+            seed: Math.round(evalExpr(node.warp.seed != null ? node.warp.seed : 0, params)),
+        };
+    }
+
     if (node.prof != null) {
         if (Array.isArray(node.prof)) {
             n.prof = node.prof.map(p => [
@@ -1800,6 +2305,7 @@ function resolveNode(node, params) {
     if (node.bone) n.bone = node.bone;
     if (node.role) n.role = node.role;
     if (node.hidden) n.hidden = true;
+    if (node.locked) n.locked = true;
     if (node.interactive) n.interactive = true;
     return n;
 }
@@ -1817,8 +2323,12 @@ function transformInstance(mesh, at, rot, i, arr) {
     return m;
 }
 
-function buildNodeMesh(node, seg) {
-    const base = primBuild(node, seg);
+function buildNodeMesh(node, seg, bevelSeg) {
+    const base = primBuild(node, seg, bevelSeg);
+    // I deformatori agiscono in SPAZIO LOCALE, prima di rotazione e
+    // traslazione: rastremare dopo aver ruotato darebbe una sezione che varia
+    // lungo una direzione obliqua rispetto al pezzo.
+    applyDeformers(base, node);
     base.mat = node.mat || '';
     base.name = node.n || '';
     const count = (node.arr && node.arr.n) || 1;
@@ -1846,6 +2356,7 @@ function buildSpec(spec) {
     const params = Object.assign({}, spec.params || {});
     const detail = Math.max(0, Math.min(3, spec.detail | 0));
     const seg = DETAIL_LEVELS[detail].seg;
+    const bevelSeg = DETAIL_LEVELS[detail].bevel;
 
     // Budget nodi: non si taglia in silenzio, si avvisa.
     const budget = DETAIL_LEVELS[detail].nodes;
@@ -1864,7 +2375,7 @@ function buildSpec(spec) {
 
     for (const n of resolved) {
         try {
-            solidMeshes[n.n] = buildNodeMesh(n, seg);
+            solidMeshes[n.n] = buildNodeMesh(n, seg, bevelSeg);
         } catch (e) {
             warnings.push({ code: 'buildFail', at: n.n, v: String(e.message || e).slice(0, 60) });
             solidMeshes[n.n] = meshCreate([], [], n.mat, n.n);
@@ -2149,15 +2660,18 @@ function partMetrics(built) {
     return out;
 }
 
-/** Payload di misura per `POST /api/asset/audit` (o per auditPlanLocal). */
-function measuredFor(built) {
+/** Payload di misura per `POST /api/asset/audit`. */
+function measuredFor(built, spec) {
     const b = built.bounds;
     const r = (v) => Math.round(v * 100000) / 100000;
+    const locked = ((spec && spec.nodes) || [])
+        .filter(n => n.locked).map(n => n.n);
     return {
         total: b.size.map(r),
         min: b.min.map(r),
         max: b.max.map(r),
         parts: partMetrics(built),
+        locked: locked,
     };
 }
 
@@ -2446,27 +2960,44 @@ float _samCell(vec3 p){
 `;
 
 function makeGradientEnv() {
-    // CubeTexture a gradiente su canvas: metalness senza envMap e' nero.
-    const size = 32;
+    // CubeTexture a gradiente su canvas: metalness senza envMap rende NERO
+    // (e' fisicamente giusto: niente da riflettere). Il cielo e' chiaro in alto
+    // e il terreno scuro in basso, cosi' un metallo mostra un orizzonte invece
+    // di una tinta piatta — e' l'orizzonte a farlo leggere come metallo.
+    const size = 64;
     const faces = [];
-    const cols = [
-        [0x88,0x99,0xaa], [0x44,0x55,0x66], // +x -x
-        [0xcc,0xdd,0xee], [0x33,0x33,0x44], // +y -y
-        [0x77,0x88,0x99], [0x55,0x66,0x77], // +z -z
+    const spec = [
+        { top: [150, 168, 190], bot: [70, 74, 86] },    // +x
+        { top: [130, 148, 172], bot: [62, 66, 78] },    // -x
+        { top: [205, 222, 240], bot: [190, 205, 225] }, // +y (cielo)
+        { top: [40, 40, 48], bot: [26, 26, 32] },       // -y (terra)
+        { top: [140, 158, 182], bot: [66, 70, 82] },    // +z
+        { top: [120, 138, 162], bot: [58, 62, 74] },    // -z
     ];
     for (let f = 0; f < 6; f++) {
         const c = document.createElement('canvas');
         c.width = c.height = size;
         const ctx = c.getContext('2d');
         const g = ctx.createLinearGradient(0, 0, 0, size);
-        const [r,g1,b] = cols[f];
-        g.addColorStop(0, 'rgb(' + Math.min(255,r+40) + ',' + Math.min(255,g1+40) + ',' + Math.min(255,b+40) + ')');
-        g.addColorStop(1, 'rgb(' + r + ',' + g1 + ',' + b + ')');
+        const s = spec[f];
+        g.addColorStop(0, 'rgb(' + s.top.join(',') + ')');
+        g.addColorStop(1, 'rgb(' + s.bot.join(',') + ')');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, size, size);
+        // Una macchia chiara: e' il riflesso speculare che da' la "luce"
+        // ai metalli e alle vernici lucide.
+        if (f === 2 || f === 4) {
+            const rg = ctx.createRadialGradient(size * 0.35, size * 0.3, 1,
+                                                size * 0.35, size * 0.3, size * 0.5);
+            rg.addColorStop(0, 'rgba(255,255,255,0.9)');
+            rg.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = rg;
+            ctx.fillRect(0, 0, size, size);
+        }
         faces.push(c);
     }
     const tex = new THREE.CubeTexture(faces);
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
     tex.needsUpdate = true;
     return tex;
 }
@@ -2497,22 +3028,40 @@ function buildMaterial(def, style) {
             transparent: opacity < 1,
             opacity: opacity,
         });
+    } else if (style === 'pbr') {
+        // MeshPhysicalMaterial: il clearcoat e' cio' che fa leggere una vernice
+        // come vernice e un metallo lucidato come lucidato. Su MeshStandard non
+        // c'e', e il risultato e' "plastica opaca" qualunque valore si metta.
+        mat = new THREE.MeshPhysicalMaterial({
+            color: new THREE.Color(rgb.r, rgb.g, rgb.b),
+            roughness: rough,
+            metalness: metal,
+            transparent: opacity < 1,
+            opacity: opacity,
+            envMap: getEnvMap(),
+            envMapIntensity: 1.15,
+            clearcoat: metal > 0.5 ? 0.35 : (rough < 0.4 ? 0.5 : 0.08),
+            clearcoatRoughness: Math.max(0.04, rough * 0.5),
+            sheen: rough > 0.75 ? 0.25 : 0,   // tessuti, cuoio, legno grezzo
+            sheenColor: new THREE.Color(rgb.r, rgb.g, rgb.b),
+            flatShading: false,
+        });
     } else {
         mat = new THREE.MeshStandardMaterial({
             color: new THREE.Color(rgb.r, rgb.g, rgb.b),
             roughness: rough,
             metalness: metal,
-            flatShading: style === 'lowpoly',
+            flatShading: true,
             transparent: opacity < 1,
             opacity: opacity,
-            envMap: (style === 'pbr' || metal > 0.1) ? getEnvMap() : null,
-            envMapIntensity: style === 'pbr' ? 0.7 : 0.35,
+            envMap: getEnvMap(),
+            envMapIntensity: metal > 0.1 ? 0.85 : 0.4,
         });
-        if (emit > 0) {
-            const ec = def.emitCol ? hexToRgb(def.emitCol) : rgb;
-            mat.emissive = new THREE.Color(ec.r, ec.g, ec.b);
-            mat.emissiveIntensity = emit;
-        }
+    }
+    if (emit > 0 && mat.emissive) {
+        const ec = def.emitCol ? hexToRgb(def.emitCol) : rgb;
+        mat.emissive = new THREE.Color(ec.r, ec.g, ec.b);
+        mat.emissiveIntensity = emit;
     }
 
     // Rumore procedurale via onBeforeCompile (object-space, triplanare).
@@ -2530,6 +3079,10 @@ function buildMaterial(def, style) {
             shader.uniforms.samSeed = { value: seed * 0.17 };
             shader.uniforms.samCol2 = { value: new THREE.Vector3(col2.r, col2.g, col2.b) };
             shader.uniforms.samBands = { value: noise.bands || 0 };
+            shader.uniforms.samRoughAmp = {
+                value: noise.roughAmp != null ? noise.roughAmp
+                     : (style === 'pbr' ? 0.35 : 0.15),
+            };
             shader.vertexShader = shader.vertexShader
                 .replace('#include <common>',
                     '#include <common>\nvarying vec3 samObjPos;')
@@ -2545,7 +3098,7 @@ function buildMaterial(def, style) {
                 .replace('#include <common>',
                     '#include <common>\n' + NOISE_GLSL + `
 varying vec3 samObjPos;
-uniform float samScale, samAmp, samSeed, samBands;
+uniform float samScale, samAmp, samSeed, samBands, samRoughAmp;
 uniform vec3 samCol2;
 float stripeN(vec3 p){ return step(0.5, fract(p.x*0.5+samSeed)); }
 float spotN(vec3 p){ return step(0.65, _samNoise(p)); }
@@ -2560,6 +3113,19 @@ float spotN(vec3 p){ return step(0.65, _samNoise(p)); }
   diffuseColor.rgb = mix(diffuseColor.rgb, samCol2, t);
 }
 `);
+            // La ruvidita' variabile e' cio' che distingue una superficie usata
+            // da una verniciata a spruzzo: senza, il riflesso e' uniforme su
+            // tutto il pezzo e il materiale sembra plastica.
+            if (shader.fragmentShader.indexOf('#include <roughnessmap_fragment>') >= 0) {
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <roughnessmap_fragment>',
+                    `#include <roughnessmap_fragment>
+{
+  float rn = ${noiseFn}(samObjPos * samScale * 1.7 + samSeed + 3.1);
+  roughnessFactor = clamp(roughnessFactor + (rn - 0.5) * samRoughAmp, 0.03, 1.0);
+}
+`);
+            }
         };
         mat.customProgramCacheKey = () => key;
     }
@@ -2615,6 +3181,14 @@ function initScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x0c0a14, 1);
     renderer.shadowMap.enabled = true;
+    if (THREE.PCFSoftShadowMap !== undefined) renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Tone mapping: senza, i metalli e le luci speculari si bruciano a bianco e
+    // il modello sembra sovraesposto. ACES e' quello che usano i motori di
+    // gioco, quindi cio' che si vede qui somiglia a cio' che si vedra' la'.
+    if (THREE.ACESFilmicToneMapping !== undefined) {
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+    }
     if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
     else if (renderer.outputEncoding !== undefined) renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -2628,20 +3202,34 @@ function initScene() {
     controls.target.set(0, 0.8, 0);
     controls.addEventListener('change', () => { _needsRender = true; });
 
-    // Luci
-    const hemi = new THREE.HemisphereLight(0xb0c4de, 0x2a2030, 0.7);
+    // Luci: tre punti + rimbalzo da terra. Il rimbalzo non e' un vezzo — senza,
+    // il sotto degli oggetti e' nero e la forma non si legge.
+    const hemi = new THREE.HemisphereLight(0xc2d4ee, 0x3a3040, 0.55);
     scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffffff, 0.95);
+    const key = new THREE.DirectionalLight(0xfff4e6, 2.1);
     key.position.set(3, 6, 4);
     key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.bias = -0.0008;
+    key.shadow.normalBias = 0.02;
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.55);
     fill.position.set(-4, 2, -2);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffccaa, 0.25);
-    rim.position.set(0, 3, -5);
+    const rim = new THREE.DirectionalLight(0xffccaa, 0.7);
+    rim.position.set(-1, 2.5, -5);
     scene.add(rim);
+    const bounce = new THREE.DirectionalLight(0x6a7a90, 0.25);
+    bounce.position.set(0, -3, 1);
+    scene.add(bounce);
+
+    // Piano che riceve l'ombra: da' appoggio visivo senza chiudere la scena.
+    const shadowMat = new THREE.ShadowMaterial({ opacity: 0.35 });
+    const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), shadowMat);
+    shadowPlane.rotation.x = -Math.PI / 2;
+    shadowPlane.position.y = 0;
+    shadowPlane.receiveShadow = true;
+    scene.add(shadowPlane);
 
     // Griglia
     gridHelper = new THREE.GridHelper(10, 20, 0x445566, 0x2a3040);
@@ -3146,6 +3734,657 @@ function exportColliders(spec) {
 }
 
 // =======================================================================
+//  09b - ZIP scritto a mano (store, nessuna dipendenza)
+//
+//  Serve perche' i browser BLOCCANO i download multipli: un bundle
+//  GLB + spec + collider + README deve uscire come UN file. Store mode
+//  (nessuna compressione) perche' un GLB e' gia' compresso e implementare
+//  deflate a mano costerebbe piu' di quanto risparmierebbe.
+//
+//  La data e' FISSA di proposito: un timestamp reale renderebbe due export
+//  dello stesso asset binariamente diversi, e si perderebbe la possibilita'
+//  di dire "e' cambiato qualcosa?" confrontando i file.
+// =======================================================================
+
+function _crc32(buf) {
+    let table = _crc32.table;
+    if (!table) {
+        table = _crc32.table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            table[i] = c >>> 0;
+        }
+    }
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+const ZIP_TIME = 0;
+const ZIP_DATE = 33;      // 1980-01-01
+
+function zipBuild(entries) {
+    const enc = new TextEncoder();
+    const files = [];
+    for (const e of entries) {
+        const nameBytes = enc.encode(e.name);
+        const data = (e.data instanceof Uint8Array) ? e.data
+            : (e.data instanceof ArrayBuffer) ? new Uint8Array(e.data)
+            : enc.encode(String(e.data));
+        files.push({ nameBytes: nameBytes, data: data, crc: _crc32(data) });
+    }
+    let localSize = 0, centralSize = 0;
+    for (const f of files) {
+        localSize += 30 + f.nameBytes.length + f.data.length;
+        centralSize += 46 + f.nameBytes.length;
+    }
+    const out = new Uint8Array(localSize + centralSize + 22);
+    const dv = new DataView(out.buffer);
+    let off = 0;
+    const offsets = [];
+
+    for (const f of files) {
+        offsets.push(off);
+        dv.setUint32(off, 0x04034b50, true); off += 4;
+        dv.setUint16(off, 20, true); off += 2;              // versione minima
+        dv.setUint16(off, 0, true); off += 2;               // flag
+        dv.setUint16(off, 0, true); off += 2;               // metodo 0 = store
+        dv.setUint16(off, ZIP_TIME, true); off += 2;
+        dv.setUint16(off, ZIP_DATE, true); off += 2;
+        dv.setUint32(off, f.crc, true); off += 4;
+        dv.setUint32(off, f.data.length, true); off += 4;   // compressa
+        dv.setUint32(off, f.data.length, true); off += 4;   // originale
+        dv.setUint16(off, f.nameBytes.length, true); off += 2;
+        dv.setUint16(off, 0, true); off += 2;               // extra
+        out.set(f.nameBytes, off); off += f.nameBytes.length;
+        out.set(f.data, off); off += f.data.length;
+    }
+
+    const centralStart = off;
+    for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        dv.setUint32(off, 0x02014b50, true); off += 4;
+        dv.setUint16(off, 20, true); off += 2;              // versione creatore
+        dv.setUint16(off, 20, true); off += 2;              // versione minima
+        dv.setUint16(off, 0, true); off += 2;               // flag
+        dv.setUint16(off, 0, true); off += 2;               // metodo
+        dv.setUint16(off, ZIP_TIME, true); off += 2;
+        dv.setUint16(off, ZIP_DATE, true); off += 2;
+        dv.setUint32(off, f.crc, true); off += 4;
+        dv.setUint32(off, f.data.length, true); off += 4;
+        dv.setUint32(off, f.data.length, true); off += 4;
+        dv.setUint16(off, f.nameBytes.length, true); off += 2;
+        dv.setUint16(off, 0, true); off += 2;               // extra
+        dv.setUint16(off, 0, true); off += 2;               // commento
+        dv.setUint16(off, 0, true); off += 2;               // disco
+        dv.setUint16(off, 0, true); off += 2;               // attributi interni
+        dv.setUint32(off, 0, true); off += 4;               // attributi esterni
+        dv.setUint32(off, offsets[i], true); off += 4;      // offset locale
+        out.set(f.nameBytes, off); off += f.nameBytes.length;
+    }
+    const centralBytes = off - centralStart;
+
+    dv.setUint32(off, 0x06054b50, true); off += 4;
+    dv.setUint16(off, 0, true); off += 2;                   // disco
+    dv.setUint16(off, 0, true); off += 2;                   // disco del central
+    dv.setUint16(off, files.length, true); off += 2;
+    dv.setUint16(off, files.length, true); off += 2;
+    dv.setUint32(off, centralBytes, true); off += 4;
+    dv.setUint32(off, centralStart, true); off += 4;
+    dv.setUint16(off, 0, true); off += 2;                   // commento
+    return out;
+}
+
+/** Bundle completo: GLB + spec + piano + collider + istruzioni. */
+async function exportBundle(spec, built, plan) {
+    const id = (spec && spec.id) || 'asset';
+    const glb = await exportGLB(spec, built, { silent: true, binary: true });
+    const glbBytes = new Uint8Array(await glb.arrayBuffer());
+    const entries = [
+        { name: id + '.glb', data: glbBytes },
+        { name: id + '.sam.json', data: JSON.stringify(spec, null, 2) },
+        { name: id + '.colliders.json', data: JSON.stringify({
+            id: id, unit: 'm', up: 'y', colliders: (spec && spec.col) || [],
+        }, null, 2) },
+        { name: 'LEGGIMI.txt', data: bundleReadme(spec, built, plan) },
+    ];
+    if (plan) {
+        entries.push({ name: id + '.plan.json', data: JSON.stringify(plan, null, 2) });
+    }
+    const zip = zipBuild(entries);
+    downloadBlob(id + '.zip', new Blob([zip], { type: 'application/zip' }));
+    return zip.length;
+}
+
+function bundleReadme(spec, built, plan) {
+    const b = built ? built.bounds : null;
+    const L = [];
+    L.push('Asset generato con SimpleAIModeller');
+    L.push('');
+    L.push('id        : ' + ((spec && spec.id) || '?'));
+    L.push('categoria : ' + ((spec && spec.cat) || '?'));
+    L.push('stile     : ' + ((spec && spec.style) || '?'));
+    if (b) {
+        L.push('ingombro  : ' + b.size.map(v => v.toFixed(4)).join(' x ') + ' m');
+    }
+    L.push('nodi      : ' + ((spec && spec.nodes && spec.nodes.length) || 0));
+    L.push('triangoli : ' + (built ? meshTriCount(built.merged) : 0));
+    L.push('');
+    L.push('CONVENZIONI');
+    L.push('  unita = metri, Y in alto, fronte verso +Z');
+    L.push('  pivot al centro della base (personaggi: ai piedi)');
+    L.push('  ogni nodo e una mesh nominata: leve, coperchi e ruote si animano');
+    L.push('');
+    L.push('FILE');
+    L.push('  .glb            modello (Unity/Godot/Blender)');
+    L.push('  .sam.json       spec parametrica: riapribile e modificabile');
+    L.push('  .plan.json      distinta di misure verificata');
+    L.push('  .colliders.json forme di collisione (box/sfere/capsule)');
+    if (plan) {
+        L.push('');
+        L.push('PIANO DELLE MISURE');
+        L.push('  asse ' + plan.axis.toUpperCase() + ', lunghezza '
+               + plan.axisLength.toFixed(4) + ' m');
+        for (const s of plan.chain) {
+            L.push('  ' + s.n.padEnd(18) + s.from.toFixed(4) + ' -> ' + s.to.toFixed(4));
+        }
+    }
+    return L.join('\n');
+}
+
+// =======================================================================
+//  09c - Import: spec .sam.json, GLB/OBJ come RIFERIMENTO
+//
+//  Due cose diverse e non vanno confuse:
+//   - una spec si RIAPRE (torna modificabile, parametri compresi);
+//   - una mesh esterna non e' convertibile in spec parametrica, quindi
+//     entra come RIFERIMENTO: si vede accanto/sovrapposta e serve a
+//     confrontare proporzioni. Fingere di importarla come nodi darebbe un
+//     asset non piu' modificabile che sembra modificabile.
+// =======================================================================
+
+let referenceObj = null;
+
+async function importSpecFile(file) {
+    const text = await file.text();
+    let raw;
+    try {
+        raw = JSON.parse(text);
+    } catch (e) {
+        throw new Error(t('err.badJson'));
+    }
+    // Passa dal server: normalizza, avvisa, e riempie i default. Farlo qui
+    // duplicherebbe `normalize_spec`.
+    const data = await apiPost('/api/asset/normalize', { spec: raw });
+    return data;
+}
+
+async function importReferenceFile(file) {
+    const name = (file.name || '').toLowerCase();
+    const buf = await file.arrayBuffer();
+    clearReference();
+    if (name.endsWith('.glb') || name.endsWith('.gltf')) {
+        const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+        const loader = new GLTFLoader();
+        return new Promise((resolve, reject) => {
+            loader.parse(buf, '', (gltf) => {
+                referenceObj = gltf.scene;
+                prepareReference(referenceObj);
+                resolve(referenceInfo());
+            }, reject);
+        });
+    }
+    if (name.endsWith('.obj')) {
+        const { OBJLoader } = await import('three/addons/loaders/OBJLoader.js');
+        const loader = new OBJLoader();
+        const txt = new TextDecoder().decode(buf);
+        referenceObj = loader.parse(txt);
+        prepareReference(referenceObj);
+        return referenceInfo();
+    }
+    throw new Error(t('err.unsupportedFile', { name: file.name }));
+}
+
+function prepareReference(obj) {
+    const mat = new THREE.MeshStandardMaterial({
+        color: 0x4f8cff, transparent: true, opacity: 0.28,
+        roughness: 0.8, depthWrite: false, side: THREE.DoubleSide,
+    });
+    obj.traverse((c) => {
+        if (c.isMesh) {
+            c.material = mat;
+            c.castShadow = false;
+            c.receiveShadow = false;
+        }
+    });
+    obj.name = 'reference';
+    scene.add(obj);
+    _needsRender = true;
+}
+
+function referenceInfo() {
+    if (!referenceObj) return null;
+    const box = new THREE.Box3().setFromObject(referenceObj);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    return { size: [size.x, size.y, size.z], min: box.min.toArray() };
+}
+
+function clearReference() {
+    if (!referenceObj) return;
+    scene.remove(referenceObj);
+    referenceObj.traverse((c) => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material && c.material.dispose) c.material.dispose();
+    });
+    referenceObj = null;
+    _needsRender = true;
+}
+
+/** Trascinamento su tutta la finestra: la via piu' rapida per aprire un file. */
+function wireDragDrop() {
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    window.addEventListener('dragover', (e) => {
+        stop(e);
+        document.body.classList.add('dragging');
+    });
+    window.addEventListener('dragleave', (e) => {
+        stop(e);
+        document.body.classList.remove('dragging');
+    });
+    window.addEventListener('drop', async (e) => {
+        stop(e);
+        document.body.classList.remove('dragging');
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        await openAnyFile(file);
+    });
+}
+
+async function openAnyFile(file) {
+    const name = (file.name || '').toLowerCase();
+    try {
+        if (name.endsWith('.json')) {
+            const data = await importSpecFile(file);
+            appState.plan = null;
+            renderPlan(null);
+            pushHistory();
+            const built = showSpec(data.spec);
+            appState.spec = data.spec;
+            appState.built = built;
+            const defects = validateAll(data.spec, built, { hasPlan: false });
+            showSpecInUi(data.spec, built, defects);
+            setStatus(t('status.imported', { name: file.name }), 'ok');
+        } else {
+            const info = await importReferenceFile(file);
+            setStatus(t('status.reference', {
+                name: file.name,
+                size: info ? info.size.map(v => v.toFixed(2)).join(' x ') : '?',
+            }), 'ok');
+        }
+    } catch (e) {
+        setStatus(t('err.generic', { msg: e.message || e }), 'error');
+    }
+}
+
+// =======================================================================
+//  09d - Editor: selezione, gizmo, undo/redo, scorciatoie
+//
+//  Il gizmo scrive NELLA SPEC, non sulla scena: spostare una mesh e
+//  lasciare la spec com'era darebbe un modello che al primo rebuild torna
+//  dov'era, e un export che non corrisponde a cio' che si vede.
+//
+//  Un nodo mosso a mano viene marcato `locked`: l'audit lo salta, perche'
+//  la posizione scelta dall'utente non e' un errore del modello. Senza
+//  questo, il ratchet "correggerebbe" ogni modifica manuale al giro dopo.
+// =======================================================================
+
+let gizmo = null;
+let selectedName = '';
+let selectedMesh = null;
+let gizmoMode = 'translate';
+let historyStack = [];
+let historyIndex = -1;
+const HISTORY_MAX = 60;
+
+function currentSnap() {
+    return JSON.stringify({ spec: appState.spec, plan: appState.plan });
+}
+
+function pushHistory() {
+    if (!appState.spec) return;
+    const snap = currentSnap();
+    // Una modifica nuova azzera il redo: tenere un futuro che non discende
+    // dal presente e' il modo classico di far ricomparire roba cancellata.
+    if (historyIndex < historyStack.length - 1) {
+        historyStack = historyStack.slice(0, historyIndex + 1);
+    }
+    if (historyStack.length && historyStack[historyStack.length - 1] === snap) return;
+    historyStack.push(snap);
+    if (historyStack.length > HISTORY_MAX) historyStack.shift();
+    historyIndex = historyStack.length - 1;
+}
+
+function restoreHistory(delta) {
+    const target = historyIndex + delta;
+    if (target < 0 || target >= historyStack.length) return false;
+    historyIndex = target;
+    const snap = JSON.parse(historyStack[historyIndex]);
+    appState.spec = snap.spec;
+    appState.plan = snap.plan;
+    renderPlan(appState.plan);
+    const built = showSpec(appState.spec);
+    appState.built = built;
+    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    showSpecInUi(appState.spec, built, defects);
+    selectNode(selectedName, true);
+    return true;
+}
+
+/**
+ * `pushHistory` registra lo stato PRIMA della modifica (e' il punto in cui si
+ * torna), quindi lo stato ATTUALE non e' ancora nello stack. Se si annullasse
+ * subito, si salterebbe indietro di due passi: il primo undo dopo un'azione
+ * riporterebbe allo stato precedente a quello precedente. Qui, prima di
+ * scendere, si deposita lo stato attuale in cima — cosi' esiste anche un futuro
+ * a cui il redo puo' tornare.
+ */
+function undo() {
+    if (!appState.spec || !historyStack.length) return;
+    const cur = currentSnap();
+    if (historyIndex === historyStack.length - 1 && historyStack[historyIndex] !== cur) {
+        historyStack.push(cur);
+        historyIndex = historyStack.length - 1;
+        if (historyStack.length > HISTORY_MAX) {
+            historyStack.shift();
+            historyIndex--;
+        }
+    }
+    if (restoreHistory(-1)) setStatus(t('status.undo'), 'ok');
+}
+
+function redo() {
+    if (restoreHistory(1)) setStatus(t('status.redo'), 'ok');
+}
+
+function specNode(name) {
+    if (!appState.spec) return null;
+    return (appState.spec.nodes || []).find(n => n.n === name) || null;
+}
+
+function findMeshByName(name) {
+    if (!assetRoot) return null;
+    let found = null;
+    assetRoot.traverse((c) => {
+        if (!found && c.isMesh && c.name === name) found = c;
+    });
+    return found;
+}
+
+function selectNode(name, quiet) {
+    selectedName = name || '';
+    selectedMesh = name ? findMeshByName(name) : null;
+
+    // Evidenzia nell'outliner.
+    $$('#nodesList li').forEach((li) => {
+        li.classList.toggle('selected', li.dataset.node === selectedName);
+    });
+
+    if (gizmo) {
+        if (selectedMesh) {
+            gizmo.attach(selectedMesh);
+            gizmo.visible = true;
+        } else {
+            gizmo.detach();
+            gizmo.visible = false;
+        }
+    }
+    const box = $('selInfo');
+    if (box) {
+        const n = specNode(selectedName);
+        box.textContent = n
+            ? t('sel.info', {
+                name: n.n, prim: n.p,
+                mat: n.mat || '—',
+                locked: n.locked ? t('sel.locked') : '',
+            })
+            : t('sel.none');
+    }
+    if (!quiet) _needsRender = true;
+}
+
+/** Click nel viewport: raycast sulle parti. */
+function wirePicking() {
+    const canvas = $('viewport');
+    if (!canvas) return;
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    let downX = 0, downY = 0;
+    canvas.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; });
+    canvas.addEventListener('pointerup', (e) => {
+        // Un trascinamento e' orbita, non selezione: senza questa soglia
+        // ogni rotazione della camera cambierebbe la selezione.
+        if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return;
+        if (gizmo && gizmo.dragging) return;
+        const r = canvas.getBoundingClientRect();
+        ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+        ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+        ray.setFromCamera(ndc, camera);
+        const hits = ray.intersectObjects(assetRoot ? assetRoot.children : [], true);
+        const hit = hits.find(h => h.object && h.object.isMesh
+                              && !/_outline$/.test(h.object.name));
+        selectNode(hit ? hit.object.name : '');
+    });
+}
+
+function initGizmo() {
+    if (!TransformControls || !camera || !renderer) return;
+    gizmo = new TransformControls(camera, renderer.domElement);
+    gizmo.setSpace('local');
+    gizmo.visible = false;
+    gizmo.addEventListener('change', () => { _needsRender = true; });
+    gizmo.addEventListener('dragging-changed', (e) => {
+        if (controls) controls.enabled = !e.value;
+        if (e.value) {
+            pushHistory();
+            _gizmoStart = selectedMesh ? {
+                pos: selectedMesh.position.clone(),
+                rot: selectedMesh.rotation.clone(),
+                scale: selectedMesh.scale.clone(),
+            } : null;
+        } else {
+            commitGizmo();
+        }
+    });
+    // In r15x+ TransformControls non e' un Object3D: si aggiunge il suo helper.
+    const helper = (typeof gizmo.getHelper === 'function') ? gizmo.getHelper() : gizmo;
+    scene.add(helper);
+    gizmo._helper = helper;
+}
+
+let _gizmoStart = null;
+
+/**
+ * Scrive la trasformazione del gizmo nella spec.
+ *
+ * Le misure sono ESPRESSIONI (`(lama_a+lama_b)/2`): sostituirle con un numero
+ * scollegherebbe il nodo dalla catena del piano. Quindi si scrive il valore
+ * numerico E si marca il nodo `locked`, cosi' l'audit non lo tratta piu' come
+ * un errore del modello — e' una scelta di chi lo ha mosso.
+ */
+function commitGizmo() {
+    if (!selectedMesh || !selectedName || !appState.spec) return;
+    const node = specNode(selectedName);
+    if (!node) return;
+    const built = appState.built;
+    const partBefore = built && built.parts.find(p => p.name === selectedName);
+
+    if (gizmoMode === 'translate') {
+        const d = selectedMesh.position;
+        if (d.lengthSq() < 1e-12) return;
+        const at = (partBefore ? meshBounds(partBefore).center : [0, 0, 0]);
+        // `at` della spec e' il centro del volume: si somma lo spostamento.
+        const cur = Array.isArray(node.at) ? node.at.slice() : [0, 0, 0];
+        node.at = [
+            _numOrExpr(cur[0], d.x), _numOrExpr(cur[1], d.y), _numOrExpr(cur[2], d.z),
+        ];
+    } else if (gizmoMode === 'rotate') {
+        const e = selectedMesh.rotation;
+        const deg = (v) => Math.round(v * 180 / Math.PI * 100) / 100;
+        const cur = Array.isArray(node.rot) ? node.rot.slice() : [0, 0, 0];
+        node.rot = [
+            _numOrExpr(cur[0], deg(e.x)), _numOrExpr(cur[1], deg(e.y)),
+            _numOrExpr(cur[2], deg(e.z)),
+        ];
+    } else if (gizmoMode === 'scale') {
+        const s = selectedMesh.scale;
+        const cur = Array.isArray(node.s) ? node.s.slice() : [1, 1, 1];
+        node.s = [_mulOrExpr(cur[0], s.x), _mulOrExpr(cur[1], s.y), _mulOrExpr(cur[2], s.z)];
+    }
+    node.locked = true;
+    selectedMesh.position.set(0, 0, 0);
+    selectedMesh.rotation.set(0, 0, 0);
+    selectedMesh.scale.set(1, 1, 1);
+
+    rebuildAfterEdit();
+}
+
+/** Somma un delta a un campo che puo' essere numero o espressione. */
+function _numOrExpr(cur, delta) {
+    if (Math.abs(delta) < 1e-9) return cur;
+    if (typeof cur === 'number') return Math.round((cur + delta) * 100000) / 100000;
+    const d = Math.round(delta * 100000) / 100000;
+    return '(' + String(cur) + ')' + (d >= 0 ? '+' : '') + d;
+}
+
+function _mulOrExpr(cur, factor) {
+    if (Math.abs(factor - 1) < 1e-9) return cur;
+    if (typeof cur === 'number') return Math.round(cur * factor * 100000) / 100000;
+    return '(' + String(cur) + ')*' + (Math.round(factor * 100000) / 100000);
+}
+
+function rebuildAfterEdit() {
+    const built = showSpec(appState.spec);
+    appState.built = built;
+    const defects = validateAll(appState.spec, built, { hasPlan: !!appState.plan });
+    showSpecInUi(appState.spec, built, defects);
+    selectNode(selectedName, true);
+}
+
+function setGizmoMode(mode) {
+    gizmoMode = mode;
+    if (gizmo) gizmo.setMode(mode);
+    $$('[data-gizmo]').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-gizmo') === mode);
+    });
+    _needsRender = true;
+}
+
+function deleteSelected() {
+    if (!selectedName || !appState.spec) return;
+    pushHistory();
+    const name = selectedName;
+    appState.spec.nodes = (appState.spec.nodes || []).filter(n => n.n !== name);
+    // Le booleane che puntavano al nodo cancellato restano orfane.
+    for (const n of appState.spec.nodes) {
+        if (n.of === name) { delete n.op; delete n.of; }
+    }
+    selectNode('');
+    rebuildAfterEdit();
+    setStatus(t('status.deleted', { name: name }), 'ok');
+}
+
+function duplicateSelected() {
+    const node = specNode(selectedName);
+    if (!node || !appState.spec) return;
+    pushHistory();
+    const copy = JSON.parse(JSON.stringify(node));
+    let i = 2;
+    const names = new Set(appState.spec.nodes.map(n => n.n));
+    while (names.has(copy.n + '_' + i)) i++;
+    copy.n = copy.n + '_' + i;
+    copy.locked = true;
+    appState.spec.nodes.push(copy);
+    rebuildAfterEdit();
+    selectNode(copy.n);
+    setStatus(t('status.duplicated', { name: copy.n }), 'ok');
+}
+
+function toggleWireframe() {
+    if (!assetRoot) return;
+    assetRoot.traverse((c) => {
+        if (c.isMesh && c.material && !/_outline$/.test(c.name)) {
+            c.material.wireframe = !c.material.wireframe;
+        }
+    });
+    _needsRender = true;
+}
+
+function frameSelection() {
+    if (selectedMesh && appState.built) {
+        const part = appState.built.parts.find(p => p.name === selectedName);
+        if (part) {
+            fitCameraToAsset(meshBounds(part));
+            return;
+        }
+    }
+    if (appState.built) fitCameraToAsset(appState.built.bounds);
+}
+
+function wireShortcuts() {
+    window.addEventListener('keydown', (e) => {
+        const tag = (e.target && e.target.tagName) || '';
+        // In un campo di testo le lettere sono testo, non comandi.
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+            if (e.key === 'Escape') e.target.blur();
+            return;
+        }
+        const k = e.key.toLowerCase();
+        if ((e.ctrlKey || e.metaKey) && k === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) redo(); else undo();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
+        if ((e.ctrlKey || e.metaKey) && k === 'd') { e.preventDefault(); duplicateSelected(); return; }
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (k === 'g') { setGizmoMode('translate'); e.preventDefault(); }
+        else if (k === 'r') { setGizmoMode('rotate'); e.preventDefault(); }
+        else if (k === 's') { setGizmoMode('scale'); e.preventDefault(); }
+        else if (k === 'w') { toggleWireframe(); e.preventDefault(); }
+        else if (k === 'f') { frameSelection(); e.preventDefault(); }
+        else if (k === 'delete' || k === 'backspace') { deleteSelected(); e.preventDefault(); }
+        else if (k === 'escape') { selectNode(''); }
+        else if (k >= '1' && k <= '6') {
+            const views = ['front', 'back', 'left', 'right', 'top', 'persp'];
+            setView(views[parseInt(k, 10) - 1]);
+            e.preventDefault();
+        }
+    });
+}
+
+function initEditor() {
+    initGizmo();
+    wirePicking();
+    wireShortcuts();
+    setGizmoMode('translate');
+    $$('[data-gizmo]').forEach(b => {
+        b.addEventListener('click', () => setGizmoMode(b.getAttribute('data-gizmo')));
+    });
+    const del = $('deleteNodeBtn');
+    if (del) del.addEventListener('click', deleteSelected);
+    const dup = $('dupNodeBtn');
+    if (dup) dup.addEventListener('click', duplicateSelected);
+    const un = $('undoBtn');
+    if (un) un.addEventListener('click', undo);
+    const re = $('redoBtn');
+    if (re) re.addEventListener('click', redo);
+    const wf = $('wireBtn');
+    if (wf) wf.addEventListener('click', toggleWireframe);
+}
+
+// =======================================================================
 //  10 - i18n (stesso schema del padre: t() + data-i18n)
 // =======================================================================
 
@@ -3393,10 +4632,14 @@ function showSpecInUi(spec, built, defects) {
         list.innerHTML = '';
         for (const n of (spec.nodes || [])) {
             const li = document.createElement('li');
+            li.dataset.node = n.n;
             li.textContent = n.n + '  ·  ' + n.p
                 + (n.mat ? '  ·  ' + n.mat : '')
                 + (n.op ? '  ·  ' + n.op + '→' + n.of : '')
-                + (n.mir ? '  ·  mir:' + n.mir : '');
+                + (n.mir ? '  ·  mir:' + n.mir : '')
+                + (n.locked ? '  ·  🔒' : '');
+            li.addEventListener('click', () => selectNode(n.n));
+            if (n.n === selectedName) li.classList.add('selected');
             list.appendChild(li);
         }
     }
@@ -3459,7 +4702,7 @@ async function auditAgainstPlan(spec, built) {
     try {
         const data = await apiPost('/api/asset/audit', {
             plan: appState.plan,
-            measured: measuredFor(built),
+            measured: measuredFor(built, spec),
         });
         return data.defects || [];
     } catch (e) {
@@ -3888,6 +5131,16 @@ function wireUi() {
     });
 
     // Export
+    const expBundle = $('exportBundleBtn');
+    if (expBundle) expBundle.addEventListener('click', async () => {
+        try {
+            setBusy(true, t('status.zipping'));
+            const n = await exportBundle(appState.spec, appState.built, appState.plan);
+            setStatus(t('status.bundled', { kb: Math.round(n / 1024) }), 'ok');
+        } catch (e) {
+            setStatus(t('err.export', { msg: e.message }), 'error');
+        } finally { setBusy(false); }
+    });
     const expGlb = $('exportGlbBtn');
     if (expGlb) expGlb.addEventListener('click', async () => {
         try {
@@ -3956,6 +5209,23 @@ function wireUi() {
         }
     });
 
+    // Import (bottone + input file; il drag&drop e' agganciato altrove)
+    const impBtn = $('importBtn');
+    const impInput = $('importInput');
+    if (impBtn && impInput) {
+        impBtn.addEventListener('click', () => impInput.click());
+        impInput.addEventListener('change', async () => {
+            const f = impInput.files && impInput.files[0];
+            if (f) await openAnyFile(f);
+            impInput.value = '';
+        });
+    }
+    const clearRef = $('clearRefBtn');
+    if (clearRef) clearRef.addEventListener('click', () => {
+        clearReference();
+        setStatus(t('status.refCleared'), 'ok');
+    });
+
     // Ctrl+Enter to generate
     const prompt = $('promptInput');
     if (prompt) prompt.addEventListener('keydown', (e) => {
@@ -3974,8 +5244,11 @@ async function boot() {
     await bootI18n();
     initScene();
     wireUi();
+    initEditor();
+    wireDragDrop();
     // Carica la demo subito, cosi' c'e' qualcosa da vedere senza AI.
     loadDemo();
+    pushHistory();
     populateModels().catch(() => {});
     // Sonda vision in background.
     probeVision().catch(() => {});

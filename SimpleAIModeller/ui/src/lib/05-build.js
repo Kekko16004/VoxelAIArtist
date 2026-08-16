@@ -15,13 +15,56 @@ function resolveNode(node, params) {
     n.at = node.at != null ? evalVec3(node.at, params, [0, 0, 0]) : [0, 0, 0];
     if (node.rot != null) n.rot = evalVec3(node.rot, params, [0, 0, 0]);
     for (const k of ['r', 'r2', 'len', 'taper', 'arc', 'wall', 'bevel',
-                     'amp', 'freq', 'turns', 'inner']) {
+                     'amp', 'freq', 'turns', 'inner', 'twist', 'bendA']) {
         if (node[k] != null) n[k] = evalExpr(node[k], params);
     }
     for (const k of ['sides', 'steps', 'seed']) {
         if (node[k] != null) n[k] = Math.round(evalExpr(node[k], params));
     }
     if (node.axis) n.axis = node.axis;
+    if (node.shape) n.shape = node.shape;
+    if (node.bendTo) n.bendTo = node.bendTo;
+
+    // Deformatori: i loro campi sono oggetti, e ognuno puo' contenere
+    // espressioni. Si risolvono qui, non nel deformatore, cosi' quel modulo
+    // resta puramente geometrico e testabile con numeri.
+    function pair(v) {
+        if (v == null) return null;
+        if (typeof v === 'object' && !Array.isArray(v)) {
+            const a = v.a != null ? v.a : (v.x != null ? v.x : (v.w != null ? v.w : 1));
+            const b = v.b != null ? v.b : (v.z != null ? v.z : (v.d != null ? v.d : a));
+            return { a: evalExpr(a, params), b: evalExpr(b, params) };
+        }
+        if (Array.isArray(v)) {
+            return { a: evalExpr(v[0], params),
+                     b: evalExpr(v.length > 1 ? v[1] : v[0], params) };
+        }
+        const s = evalExpr(v, params);
+        return { a: s, b: s };
+    }
+    if (node.taperTo != null) n.taperTo = pair(node.taperTo);
+    if (node.taper0 != null) n.taper0 = pair(node.taper0);
+    if (node.squash) {
+        n.squash = {
+            axis: node.squash.axis || 'z',
+            side: node.squash.side || 'max',
+            f: node.squash.f != null ? evalExpr(node.squash.f, params) : 0.5,
+        };
+    }
+    if (node.shear) {
+        n.shear = {
+            by: node.shear.by || 'z',
+            amount: evalExpr(node.shear.amount != null ? node.shear.amount : 0, params),
+        };
+    }
+    if (node.warp) {
+        n.warp = {
+            amp: evalExpr(node.warp.amp != null ? node.warp.amp : 0, params),
+            freq: evalExpr(node.warp.freq != null ? node.warp.freq : 4, params),
+            seed: Math.round(evalExpr(node.warp.seed != null ? node.warp.seed : 0, params)),
+        };
+    }
+
     if (node.prof != null) {
         if (Array.isArray(node.prof)) {
             n.prof = node.prof.map(p => [
@@ -50,6 +93,7 @@ function resolveNode(node, params) {
     if (node.bone) n.bone = node.bone;
     if (node.role) n.role = node.role;
     if (node.hidden) n.hidden = true;
+    if (node.locked) n.locked = true;
     if (node.interactive) n.interactive = true;
     return n;
 }
@@ -67,8 +111,12 @@ function transformInstance(mesh, at, rot, i, arr) {
     return m;
 }
 
-function buildNodeMesh(node, seg) {
-    const base = primBuild(node, seg);
+function buildNodeMesh(node, seg, bevelSeg) {
+    const base = primBuild(node, seg, bevelSeg);
+    // I deformatori agiscono in SPAZIO LOCALE, prima di rotazione e
+    // traslazione: rastremare dopo aver ruotato darebbe una sezione che varia
+    // lungo una direzione obliqua rispetto al pezzo.
+    applyDeformers(base, node);
     base.mat = node.mat || '';
     base.name = node.n || '';
     const count = (node.arr && node.arr.n) || 1;
@@ -96,6 +144,7 @@ function buildSpec(spec) {
     const params = Object.assign({}, spec.params || {});
     const detail = Math.max(0, Math.min(3, spec.detail | 0));
     const seg = DETAIL_LEVELS[detail].seg;
+    const bevelSeg = DETAIL_LEVELS[detail].bevel;
 
     // Budget nodi: non si taglia in silenzio, si avvisa.
     const budget = DETAIL_LEVELS[detail].nodes;
@@ -114,7 +163,7 @@ function buildSpec(spec) {
 
     for (const n of resolved) {
         try {
-            solidMeshes[n.n] = buildNodeMesh(n, seg);
+            solidMeshes[n.n] = buildNodeMesh(n, seg, bevelSeg);
         } catch (e) {
             warnings.push({ code: 'buildFail', at: n.n, v: String(e.message || e).slice(0, 60) });
             solidMeshes[n.n] = meshCreate([], [], n.mat, n.n);
