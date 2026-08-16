@@ -633,9 +633,19 @@ function primBuild(node, seg, bevelSeg) {
                                         seg, node.arc);
         case 'wedge':  return primWedge(s[0], s[1], s[2]);
         case 'pyr':    return primPyr(s[0], s[1], s[2]);
-        case 'tube':   return primTube(node.r != null ? node.r : s[0] * 0.5,
-                                       node.len != null ? node.len : s[1],
-                                       node.wall, seg, axis);
+        case 'tube':
+            // Con un `path` il tubo SEGUE la curva: e' il primitivo delle anse,
+            // dei becchi, dei cavi, dei corrimano. Prima `path` veniva accettato
+            // e ignorato, e un'ansa chiesta cosi' usciva come una lamella piatta.
+            if (node.path && node.path.length >= 2) {
+                return primTubePath(node.path,
+                                    node.r != null ? node.r : s[0] * 0.5,
+                                    seg, node.wall,
+                                    node.taperTo ? node.taperTo.a : null);
+            }
+            return primTube(node.r != null ? node.r : s[0] * 0.5,
+                            node.len != null ? node.len : s[1],
+                            node.wall, seg, axis);
         case 'extr':   return primExtr(node.prof || 'rect',
                                        node.len != null ? node.len : s[1],
                                        node.sides || seg,

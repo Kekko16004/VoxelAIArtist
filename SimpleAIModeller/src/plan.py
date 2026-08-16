@@ -32,6 +32,44 @@ import re
 AXES = ("x", "y", "z")
 AXIS_INDEX = {"x": 0, "y": 1, "z": 2}
 
+# Come si COSTRUISCE l'oggetto. E' la decisione piu' importante del piano, e
+# sbagliarla non si recupera con nessun prompt.
+#
+# Il difetto che ha reso necessario questo campo: un vaso e' UNA superficie di
+# rivoluzione — un profilo, uno spin, una parete, un labbro bevellato, un solo
+# oggetto — e tagliarlo in cinque segmenti costruiti da cinque chiamate
+# indipendenti produce una PILA DI DISCHI TORNITI. Che e' esattamente cio' che
+# usciva. La catena di segmenti va benissimo per una spada (pomolo, impugnatura,
+# guardia e lama SONO solidi distinti) ed e' sbagliata per un vaso.
+STRATEGIES = ("revolve", "chain", "shell", "limbs")
+
+STRATEGY_ALIASES = {
+    "lathe": "revolve", "spin": "revolve", "rotational": "revolve",
+    "rivoluzione": "revolve", "tornio": "revolve", "axisymmetric": "revolve",
+    "stack": "chain", "segments": "chain", "catena": "chain",
+    "parts": "chain", "assembly": "chain",
+    "box": "shell", "boolean": "shell", "hollow": "shell",
+    "architecture": "shell", "guscio": "shell", "building": "shell",
+    "character": "limbs", "humanoid": "limbs", "creature": "limbs",
+    "arti": "limbs", "body": "limbs",
+}
+
+# Parole che dicono "questo oggetto e' tondo attorno a un asse". Servono a
+# INDOVINARE la strategia quando il piano non la dichiara: meglio un'euristica
+# esplicita che un default sbagliato per meta' degli oggetti.
+_REVOLVE_HINTS = (
+    "vaso", "vase", "anfora", "amphora", "bottiglia", "bottle", "calice",
+    "goblet", "bicchiere", "tazza", "cup", "mug", "ciotola", "bowl", "scodella",
+    "piatto", "plate", "pentola", "pot", "pignatta", "giara", "urna", "urn",
+    "jar", "barattolo", "colonna", "column", "pilastro", "balaustra",
+    "baluster", "candelabro", "candlestick", "lampada", "lamp", "lampadario",
+    "chandelier", "cupola", "dome", "campana", "bell", "botte", "barrel",
+    "secchio", "bucket", "ruota", "wheel", "pomolo", "knob", "fungo",
+    "mushroom", "clessidra", "hourglass", "trottola", "top", "fontana",
+    "fountain", "torretta", "turret", "silo", "tornio", "boccale", "brocca",
+    "pitcher", "teiera", "teapot", "ampolla", "flask", "provetta", "vial",
+)
+
 # Tolleranze dell'audit. Sono due perche' un errore di 2 mm su una lama di 60 cm
 # e' rumore di arrotondamento, mentre 2 mm su uno spessore di 8 mm e' il 25%.
 TOL_ABS = 0.006          # 6 mm
@@ -179,6 +217,16 @@ def normalize_plan(raw, request=None):
         "chain": chain,
         "extras": extras,
     }
+
+    # --- Strategia di costruzione --------------------------------------------
+    strat = str(_first(raw, "strategy", "strategia", "construction", "build",
+                       default="") or "").strip().lower()
+    strat = STRATEGY_ALIASES.get(strat, strat)
+    if strat not in STRATEGIES:
+        if strat:
+            _warn(warns, "unknownStrategy", "strategy", strat)
+        strat = _infer_strategy(plan, request, warns)
+    plan["strategy"] = strat
 
     # --- Riparazione della catena --------------------------------------------
     # Un piano con buchi o sovrapposizioni non e' un piano: si chiude la catena
@@ -488,9 +536,43 @@ def audit_built(plan, measured, tol_abs=TOL_ABS, tol_rel=TOL_REL):
     return defects
 
 
+def _infer_strategy(plan, request, warns):
+    """Indovina la strategia quando il piano non la dichiara.
+
+    Due indizi, entrambi buoni:
+      - il NOME dell'oggetto (un vaso e' un vaso);
+      - la GEOMETRIA della catena: se ogni segmento ha larghezza e profondita'
+        quasi uguali, l'oggetto e' tondo attorno all'asse per costruzione, e
+        tagliarlo in solidi separati lo trasformerebbe in una pila di dischi.
+    """
+    text = " ".join([str(plan.get("asset") or ""), str(request or "")]).lower()
+    for hint in _REVOLVE_HINTS:
+        if hint in text:
+            _warn(warns, "strategyInferred", "strategy", "revolve/" + hint)
+            return "revolve"
+
+    chain = plan.get("chain") or []
+    if chain:
+        square = 0
+        for s in chain:
+            w, d = s["w"], s["d"]
+            if w > 1e-6 and abs(w - d) / max(w, d) < 0.12:
+                square += 1
+        if square == len(chain) and len(chain) >= 3:
+            _warn(warns, "strategyInferred", "strategy", "revolve/sezioniTonde")
+            return "revolve"
+
+    if "person" in text or "uman" in text or "creatur" in text or "robot" in text:
+        return "limbs"
+    if "edifici" in text or "casa" in text or "buildin" in text or "torre" in text:
+        return "shell"
+    return "chain"
+
+
 def plan_stats(plan):
     return {
         "axis": plan["axis"],
+        "strategy": plan.get("strategy") or "chain",
         "axisLength": plan["axisLength"],
         "total": plan["total"],
         "segments": len(plan["chain"]),
@@ -503,31 +585,35 @@ def plan_stats(plan):
 # --- Decomposizione in TASK ---------------------------------------------------
 
 def plan_tasks(plan):
-    """Il piano diventa una lista di compiti, uno per segmento.
+    """Il piano diventa una lista di compiti. La STRATEGIA decide come.
 
     Perche' a pezzi
     ---------------
     Un modello che deve emettere sessanta nodi in una sola risposta perde
-    precisione su tutti: sbaglia una misura qui, dimentica un dettaglio la',
-    inventa un materiale nuovo a meta' strada. Sei chiamate da cinque nodi
-    ognuna, ognuna con davanti UN pezzo e le sue misure, non hanno quel problema
-    — ed e' anche l'unico modo di chiedere davvero "il massimo dettaglio su
-    questo pezzo".
+    precisione su tutti. Compiti piccoli e ben definiti no.
 
-    La decomposizione NON costa una chiamata AI: il piano la contiene gia'. Ogni
-    segmento della catena e' un compito, e gli `extras` che lo indicano come
-    ospite (`of`) vanno con lui. Chiederla a un modello sarebbe pagare per
-    un'informazione che abbiamo.
+    Ma "pezzo" non vuol dire sempre "segmento della catena", e sbagliarlo e' il
+    difetto piu' grave che questo file ha avuto. Un vaso e' UNA superficie di
+    rivoluzione: un profilo, uno spin, una parete, un labbro. Tagliarlo in cinque
+    segmenti costruiti da cinque chiamate indipendenti produce una PILA DI DISCHI
+    TORNITI, ed e' esattamente cio' che usciva. Per una spada invece i segmenti
+    SONO solidi distinti (pomolo, impugnatura, guardia, lama) e la catena e' la
+    decomposizione giusta.
 
-    Ogni task porta le sue INTERFACCE: il pezzo sotto e quello sopra, con la
-    quota di confine e la loro sezione. E' cio' che tiene coerente un oggetto
-    costruito in sei conversazioni diverse: chi fa la guardia sa che sotto di lei
-    l'impugnatura finisce a 0.230 con sezione 0.034, quindi la sua base combacia
-    invece di galleggiare.
+    Quindi:
+      - `revolve`: UN compito costruisce il corpo intero come un solo `lathe` con
+        il profilo completo; i segmenti diventano le STAZIONI di quel profilo.
+        Gli extras (manici, fasce, piedi separati) restano compiti a se'.
+      - `chain` / `shell` / `limbs`: un compito per segmento, con gli extras
+        appesi al loro ospite.
+
+    Ogni task porta le sue INTERFACCE: e' cio' che tiene coerente un oggetto
+    costruito in piu' conversazioni.
     """
     chain = plan.get("chain") or []
     extras = plan.get("extras") or []
     mats = plan.get("materials") or []
+    strategy = plan.get("strategy") or "chain"
 
     by_host = {}
     orphans = []
@@ -555,31 +641,81 @@ def plan_tasks(plan):
         if best:
             by_host.setdefault(best, []).append(e)
 
+    def mats_for(names_set):
+        return [m["n"] for m in mats if names_set & set(m.get("on") or [])]
+
     tasks = []
+
+    if strategy == "revolve" and chain:
+        # UN compito per tutto il corpo. Le stazioni del profilo sono i segmenti.
+        body_names = {s["n"] for s in chain}
+        # Gli extras che sono davvero parte del profilo (fasce, collarini
+        # concentrici) restano al corpo; quelli che sporgono (manici, becchi,
+        # piedi) sono compiti a se', perche' non sono solidi di rivoluzione.
+        inline, standalone = [], []
+        for e in extras:
+            w, d = e["w"], e["d"]
+            round_ish = w > 1e-6 and abs(w - d) / max(w, d) < 0.15
+            wide = w >= max(0.35 * max(s["w"] for s in chain), 1e-6)
+            (inline if (round_ish and wide) else standalone).append(e)
+
+        tasks.append({
+            "i": 0,
+            "n": 1 + len(standalone),
+            "name": plan.get("asset") and "corpo" or "corpo",
+            "kind": "revolve",
+            "seg": {"n": "corpo", "from": chain[0]["from"], "to": chain[-1]["to"],
+                    "w": max(s["w"] for s in chain),
+                    "d": max(s["d"] for s in chain)},
+            "stations": [{"n": s["n"], "from": s["from"], "to": s["to"],
+                          "w": s["w"], "d": s["d"]} for s in chain],
+            "extras": inline,
+            "prev": None,
+            "next": None,
+            "role": "corpo tornito completo",
+            "suggestedMats": mats_for(body_names | {e["n"] for e in inline})
+                             or [m["n"] for m in mats[:1]],
+            "budget": 3 + len(inline),
+        })
+        for j, e in enumerate(standalone):
+            host = e.get("of") if e.get("of") in names else "corpo"
+            tasks.append({
+                "i": j + 1,
+                "n": 1 + len(standalone),
+                "name": e["n"],
+                "kind": "detail",
+                "seg": e,
+                "stations": [],
+                "extras": [],
+                "prev": {"n": "corpo", "at": e["from"],
+                         "w": _radius_at(chain, e["from"]) * 2,
+                         "d": _radius_at(chain, e["from"]) * 2},
+                "next": None,
+                "role": "dettaglio applicato sul corpo (%s)" % host,
+                "suggestedMats": mats_for({e["n"]}),
+                "budget": 3,
+            })
+        return tasks
+
     for i, seg in enumerate(chain):
         prev_seg = chain[i - 1] if i > 0 else None
         next_seg = chain[i + 1] if i + 1 < len(chain) else None
         own_extras = by_host.get(seg["n"], [])
-        # Materiali pertinenti: quelli che nominano questo pezzo o i suoi
-        # dettagli. Si passa comunque TUTTA la palette (serve a non inventarne
-        # di nuovi), ma si segnala quali sono i suoi.
         own_names = {seg["n"]} | {e["n"] for e in own_extras}
-        suggested = [m["n"] for m in mats
-                     if own_names & set(m.get("on") or [])]
         tasks.append({
             "i": i,
             "n": len(chain),
             "name": seg["n"],
+            "kind": "segment",
             "seg": seg,
+            "stations": [],
             "extras": own_extras,
             "prev": ({"n": prev_seg["n"], "at": prev_seg["to"],
                       "w": prev_seg["w"], "d": prev_seg["d"]} if prev_seg else None),
             "next": ({"n": next_seg["n"], "at": next_seg["from"],
                       "w": next_seg["w"], "d": next_seg["d"]} if next_seg else None),
             "role": seg.get("role") or "",
-            "suggestedMats": suggested,
-            # Quanti nodi ha senso chiedere per QUESTO pezzo: il corpo
-            # principale ne merita piu' di un collarino.
+            "suggestedMats": mats_for(own_names),
             "budget": max(2, min(12, 2 + len(own_extras) * 2
                                  + (2 if seg["to"] - seg["from"]
                                     > plan["axisLength"] * 0.25 else 0))),
@@ -587,11 +723,74 @@ def plan_tasks(plan):
     return tasks
 
 
+def _radius_at(chain, y):
+    """Raggio del corpo alla quota y: serve a dire a un manico dove attaccarsi."""
+    for s in chain:
+        if s["from"] - TOL_ABS <= y <= s["to"] + TOL_ABS:
+            return s["w"] / 2.0
+    best, bestd = chain[0], None
+    for s in chain:
+        d = min(abs(y - s["from"]), abs(y - s["to"]))
+        if bestd is None or d < bestd:
+            bestd, best = d, s
+    return best["w"] / 2.0
+
+
 def task_text(plan, task):
     """Il compito come testo, con le interfacce. Va nel prompt del pezzo."""
     ax = plan["axis"].upper()
     seg = task["seg"]
+    kind = task.get("kind") or "segment"
     L = []
+
+    if kind == "revolve":
+        L.append("COMPITO: IL CORPO INTERO, come UN SOLO solido di rivoluzione.")
+        L.append("")
+        L.append("Questo oggetto e' tondo attorno all'asse %s: si costruisce con"
+                 " UN nodo `lathe`, non impilando cilindri. Un profilo, uno spin,"
+                 " una parete, un labbro." % ax)
+        L.append("  altezza totale sull'asse %s: da %.4f a %.4f  (%.4f)"
+                 % (ax, seg["from"], seg["to"], seg["to"] - seg["from"]))
+        L.append("  diametro massimo: %.4f" % seg["w"])
+        L.append("")
+        L.append("STAZIONI DEL PROFILO (il diametro che l'oggetto deve avere a")
+        L.append("quelle quote: il tuo profilo deve passarci dentro, con una")
+        L.append("curva continua):")
+        L.append("  quota %s      da       a        diametro   raggio"
+                 % ax.lower())
+        for st in task.get("stations") or []:
+            L.append("  %-14s %-8.4f %-8.4f %-10.4f %.4f"
+                     % (st["n"][:14], st["from"], st["to"], st["w"], st["w"] / 2))
+        if task.get("extras"):
+            L.append("")
+            L.append("RILIEVI concentrici da includere nel profilo (non nodi a se'):")
+            for e in task["extras"]:
+                L.append("  - %-14s da %.4f a %.4f, diametro %.4f"
+                         % (e["n"], e["from"], e["to"], e["w"]))
+        L.append("")
+        L.append("  Nodi attesi: 1 (il corpo) piu' al massimo %d per i rilievi che"
+                 % max(1, len(task.get("extras") or [])))
+        L.append("  il profilo non puo' esprimere. NON spezzare il corpo.")
+        return "\n".join(L)
+
+    if kind == "detail":
+        L.append("COMPITO: un DETTAGLIO applicato su un corpo gia' costruito.")
+        L.append("")
+        L.append("  nome: %s" % task["name"])
+        L.append("  sull'asse %s va da %.4f a %.4f  (lunghezza %.4f)"
+                 % (ax, seg["from"], seg["to"], seg["to"] - seg["from"]))
+        L.append("  sezione: %.4f x %.4f" % (seg["w"], seg["d"]))
+        if task.get("prev"):
+            p = task["prev"]
+            L.append("  il CORPO a quella quota ha raggio %.4f: il tuo dettaglio"
+                     " deve partire da la' e sovrapporsi di 1-2 mm, non"
+                     " galleggiare." % (p["w"] / 2))
+        L.append("  Se e' una coppia (due manici, due anse), usa UN nodo con"
+                 " \"mir\":\"x\" invece di due.")
+        L.append("")
+        L.append("  Nodi attesi: da 1 a %d." % (task["budget"] + 1))
+        return "\n".join(L)
+
     L.append("PEZZO DA COSTRUIRE: %s   (%d di %d)"
              % (task["name"], task["i"] + 1, task["n"]))
     L.append("  sull'asse %s va da %.4f a %.4f  (lunghezza %.4f)"
@@ -631,19 +830,25 @@ def task_text(plan, task):
 
 
 def task_params(plan, task):
-    """Solo i params che servono a QUESTO pezzo, piu' quelli dei vicini.
+    """Solo i params che servono a QUESTO compito, piu' quelli dei vicini.
 
     Passare tutti i parametri di tutti i segmenti invita a usarli, e un pezzo
     che cita le misure di un altro e' il modo in cui un oggetto costruito a pezzi
-    torna incoerente.
+    torna incoerente. Il corpo tornito e' l'eccezione: le stazioni del profilo
+    SONO i segmenti, quindi gli servono tutti.
     """
-    keep = {task["name"]}
-    keep.update(e["n"] for e in task["extras"])
-    if task["prev"]:
-        keep.add(task["prev"]["n"])
-    if task["next"]:
-        keep.add(task["next"]["n"])
     allp = plan_params(plan)
+    kind = task.get("kind") or "segment"
+    if kind == "revolve":
+        keep = {st["n"] for st in (task.get("stations") or [])}
+        keep.update(e["n"] for e in (task.get("extras") or []))
+    else:
+        keep = {task["name"]}
+        keep.update(e["n"] for e in (task.get("extras") or []))
+        if task.get("prev") and task["prev"].get("n"):
+            keep.add(task["prev"]["n"])
+        if task.get("next") and task["next"].get("n"):
+            keep.add(task["next"]["n"])
     out = {}
     for k, v in allp.items():
         base = k.rsplit("_", 1)[0]

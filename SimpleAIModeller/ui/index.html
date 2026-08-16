@@ -1499,9 +1499,19 @@ function primBuild(node, seg, bevelSeg) {
                                         seg, node.arc);
         case 'wedge':  return primWedge(s[0], s[1], s[2]);
         case 'pyr':    return primPyr(s[0], s[1], s[2]);
-        case 'tube':   return primTube(node.r != null ? node.r : s[0] * 0.5,
-                                       node.len != null ? node.len : s[1],
-                                       node.wall, seg, axis);
+        case 'tube':
+            // Con un `path` il tubo SEGUE la curva: e' il primitivo delle anse,
+            // dei becchi, dei cavi, dei corrimano. Prima `path` veniva accettato
+            // e ignorato, e un'ansa chiesta cosi' usciva come una lamella piatta.
+            if (node.path && node.path.length >= 2) {
+                return primTubePath(node.path,
+                                    node.r != null ? node.r : s[0] * 0.5,
+                                    seg, node.wall,
+                                    node.taperTo ? node.taperTo.a : null);
+            }
+            return primTube(node.r != null ? node.r : s[0] * 0.5,
+                            node.len != null ? node.len : s[1],
+                            node.wall, seg, axis);
         case 'extr':   return primExtr(node.prof || 'rect',
                                        node.len != null ? node.len : s[1],
                                        node.sides || seg,
@@ -1899,8 +1909,7 @@ function primLoft2(secs, shape, seg, axis, closedEnds) {
     return m;
 }
 
-/** Normalizza il campo `taper`/`taper0` in `{a, b}`. */
-function _taperPair(v, fallback) {
+/** Normalizza il campo `taper`/`taper0` in `{a, b}`. */function _taperPair(v, fallback) {
     if (v == null) return null;
     if (typeof v === 'number') return { a: v, b: v };
     if (typeof v === 'object') {
@@ -2151,6 +2160,140 @@ function applyDeformers(m, node) {
         meshWarp(m, node.warp.amp, node.warp.freq, node.warp.seed);
     }
     return m;
+}
+
+// =======================================================================
+//  TUBO LUNGO UN PERCORSO (anse, becchi, cavi, tubature, corrimano, archi)
+//
+//  `tube` accettava un campo `path` e lo IGNORAVA — la terza della stessa
+//  famiglia, dopo `bevel` su box e su extr. Il sintomo: un'ansa di vaso
+//  chiesta come tubo piegato usciva come una lamella piatta, perche' si
+//  cadeva sul tubo RETTO e poi la si piegava con `bendA`.
+//
+//  Un'ansa, un becco, un cavo, un corrimano sono una SEZIONE TRASCINATA
+//  lungo una curva. Con quattro punti si descrive un'ansa vera; senza, si
+//  combattono rotazioni e piegature per ottenere qualcosa che somigli.
+//
+//  Le terne di riferimento si trasportano lungo la curva (parallel
+//  transport) invece di ricalcolarle da un "su" fisso: con un "su" fisso la
+//  sezione si capovolge quando la curva diventa verticale, e il tubo si
+//  strozza in un punto qualsiasi.
+// =======================================================================
+
+function _catmullPath(pts, samples) {
+    if (!pts || pts.length < 2) return pts || [];
+    const n = pts.length;
+    if (n === 2) {
+        const out = [];
+        for (let i = 0; i < samples; i++) {
+            const t = i / (samples - 1);
+            out.push([pts[0][0] + (pts[1][0] - pts[0][0]) * t,
+                      pts[0][1] + (pts[1][1] - pts[0][1]) * t,
+                      pts[0][2] + (pts[1][2] - pts[0][2]) * t]);
+        }
+        return out;
+    }
+    const out = [];
+    const total = Math.max(n, samples | 0);
+    for (let i = 0; i < total; i++) {
+        const t = (i / (total - 1)) * (n - 1);
+        const k = Math.min(n - 2, Math.floor(t));
+        const f = t - k;
+        const p0 = pts[Math.max(0, k - 1)];
+        const p1 = pts[k];
+        const p2 = pts[Math.min(n - 1, k + 1)];
+        const p3 = pts[Math.min(n - 1, k + 2)];
+        const f2 = f * f, f3 = f2 * f;
+        const cr = (a, b, c, d) =>
+            0.5 * ((2 * b) + (-a + c) * f + (2 * a - 5 * b + 4 * c - d) * f2
+                   + (-a + 3 * b - 3 * c + d) * f3);
+        out.push([cr(p0[0], p1[0], p2[0], p3[0]),
+                  cr(p0[1], p1[1], p2[1], p3[1]),
+                  cr(p0[2], p1[2], p2[2], p3[2])]);
+    }
+    return out;
+}
+
+function primTubePath(pathPts, r, seg, wall, taperTo) {
+    const pts = (pathPts || []).map(p => [p[0] || 0, p[1] || 0, p[2] || 0]);
+    if (pts.length < 2) return primCyl(r, 1, seg, 1, 'y');
+    seg = Math.max(6, Math.min(48, seg | 0 || 12));
+    const ringSeg = Math.max(5, Math.min(24, Math.round(seg * 0.6)));
+    const samples = Math.max(pts.length * 4, Math.min(96, pts.length * 8));
+    const curve = _catmullPath(pts, samples);
+    const N = curve.length;
+
+    function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+    function norm(v) {
+        const l = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) || 1;
+        return [v[0] / l, v[1] / l, v[2] / l];
+    }
+    function cross(a, b) {
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0]];
+    }
+    function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+    // Tangenti
+    const T = [];
+    for (let i = 0; i < N; i++) {
+        const a = curve[Math.max(0, i - 1)];
+        const b = curve[Math.min(N - 1, i + 1)];
+        T.push(norm(sub(b, a)));
+    }
+    // Prima normale: un asse qualunque non parallelo alla tangente.
+    let ref = Math.abs(T[0][1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    let Ncur = norm(cross(ref, T[0]));
+    let Bcur = cross(T[0], Ncur);
+    const frames = [{ n: Ncur, b: Bcur }];
+    for (let i = 1; i < N; i++) {
+        // Trasporto parallelo: si proietta la normale precedente sul piano
+        // perpendicolare alla nuova tangente. Senza, la sezione si capovolge
+        // dove la curva diventa verticale.
+        const t = T[i];
+        let nn = sub(frames[i - 1].n, [t[0] * dot(frames[i - 1].n, t),
+                                      t[1] * dot(frames[i - 1].n, t),
+                                      t[2] * dot(frames[i - 1].n, t)]);
+        nn = norm(nn);
+        frames.push({ n: nn, b: cross(t, nn) });
+    }
+
+    const pos = [];
+    const idx = [];
+    const rings = [];
+    for (let i = 0; i < N; i++) {
+        const tt = N > 1 ? i / (N - 1) : 0;
+        const rr = r * (1 + ((taperTo == null ? 1 : taperTo) - 1) * tt);
+        const base = (pos.length / 3) | 0;
+        for (let k = 0; k < ringSeg; k++) {
+            const a = (k / ringSeg) * Math.PI * 2;
+            const ca = Math.cos(a), sa = Math.sin(a);
+            const f = frames[i];
+            pos.push(curve[i][0] + (f.n[0] * ca + f.b[0] * sa) * rr,
+                     curve[i][1] + (f.n[1] * ca + f.b[1] * sa) * rr,
+                     curve[i][2] + (f.n[2] * ca + f.b[2] * sa) * rr);
+        }
+        rings.push(base);
+    }
+    for (let i = 0; i < N - 1; i++) {
+        for (let k = 0; k < ringSeg; k++) {
+            const k2 = (k + 1) % ringSeg;
+            const a = rings[i] + k, b = rings[i] + k2;
+            const c = rings[i + 1] + k, d = rings[i + 1] + k2;
+            idx.push(a, c, b, b, c, d);
+        }
+    }
+    // Tappi: un tubo aperto ai capi si vede da dentro.
+    for (const [ri, flip] of [[0, true], [N - 1, false]]) {
+        const ci = (pos.length / 3) | 0;
+        pos.push(curve[ri][0], curve[ri][1], curve[ri][2]);
+        for (let k = 0; k < ringSeg; k++) {
+            const k2 = (k + 1) % ringSeg;
+            if (flip) idx.push(ci, rings[ri] + k, rings[ri] + k2);
+            else idx.push(ci, rings[ri] + k2, rings[ri] + k);
+        }
+    }
+    return meshCreate(pos, idx);
 }
 
 // =======================================================================

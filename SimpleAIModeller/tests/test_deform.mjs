@@ -21,7 +21,7 @@ const code = files.map(f => fs.readFileSync(path.join(LIB, f), 'utf8')).join('\n
   + ' primLoft2, meshTaper, meshShear, meshTwist, meshBend, meshWarp, meshSquash,'
   + ' applyDeformers, buildSpec, primBuild, validateAll, partMetrics, measuredFor,'
   + ' primLathe2, vesselProfile, smoothProfile, VESSEL_PROFILES,'
-  + ' componentReport, autoRepair, offsetField };';
+  + ' componentReport, autoRepair, offsetField, primTubePath };';
 const sandbox = { console, Math, JSON, Float32Array, Uint32Array, Uint8Array, Map, Set, Object, Array };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
@@ -379,6 +379,37 @@ ok(S.offsetField('(a+b)/2', 0.02) === '((a+b)/2)+0.02',
    'espressione conservata: ' + S.offsetField('(a+b)/2', 0.02));
 ok(S.offsetField('h', -0.03) === '(h)-0.03', 'delta negativo');
 ok(S.offsetField('h', 0) === 'h', 'delta nullo non tocca niente');
+
+console.log('[20] tubo lungo un percorso (era accettato e IGNORATO)');
+const ansaPath = [[0.10, 0.30, 0], [0.15, 0.286, 0], [0.168, 0.245, 0],
+                  [0.152, 0.208, 0], [0.108, 0.196, 0]];
+const ansa = S.primTubePath(ansaPath, 0.013, 14);
+ok(!S.meshIsEmpty(ansa), 'ansa costruita');
+ok(S.meshIsClosed(ansa), 'ansa CHIUSA (tappi ai capi)');
+const ab = S.meshBounds(ansa);
+// La curva va da x=0.10 a x=0.168: l'ingombro deve rispecchiarla, non essere
+// quello di un tubo retto.
+ok(ab.min[0] > 0.08 && ab.max[0] < 0.19,
+   'segue la curva su X (' + ab.min[0].toFixed(3) + '..' + ab.max[0].toFixed(3) + ')');
+ok(ab.size[1] > 0.09 && ab.size[1] < 0.14,
+   'e su Y (' + ab.size[1].toFixed(3) + ')');
+ok(ab.size[2] < 0.03, 'resta piatta su Z come il percorso');
+// Un tubo RETTO con lo stesso raggio non ha lo stesso ingombro: la prova che il
+// percorso conta davvero.
+const retto = S.primBuild({ p: 'tube', r: 0.013, len: 0.115, axis: 'y' }, 14, 2);
+ok(S.meshBounds(retto).size[0] < 0.03,
+   'il tubo retto resta sottile su X (contro-prova)');
+// Dal nodo, con `path`, si passa dal percorso.
+const daNodo = S.primBuild({ p: 'tube', r: 0.013, path: ansaPath }, 14, 2);
+ok(Math.abs(S.meshBounds(daNodo).size[0] - ab.size[0]) < 1e-6,
+   'primBuild usa il percorso quando c e');
+let finiteA = true;
+for (let i = 0; i < ansa.pos.length; i++) if (!isFinite(ansa.pos[i])) finiteA = false;
+ok(finiteA, 'nessun NaN nel trasporto delle terne');
+// Percorso verticale: e il caso in cui una terna fissa si capovolge.
+const vert = S.primTubePath([[0, 0, 0], [0, 0.1, 0], [0, 0.2, 0]], 0.01, 12);
+ok(S.meshIsClosed(vert) && !S.meshIsEmpty(vert),
+   'percorso verticale senza capovolgimenti');
 
 console.log();
 console.log('PASS ' + pass + '  FAIL ' + fail);

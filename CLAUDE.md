@@ -830,6 +830,47 @@ DEFAULT (spunta "Costruzione a pezzi").
 - La validazione di un pezzo riusa `normalize_spec` come mini-spec. Un secondo
   validatore per i pezzi sarebbe un secondo validatore che divergono.
 
+### La STRATEGIA di costruzione — la decisione che conta piu' di tutte
+Difetto riportato: un vaso usciva come una **pila di dischi torniti**. La causa
+non era il prompt, era la DECOMPOSIZIONE. Un vaso e' UNA superficie di
+rivoluzione — un profilo, uno spin, una parete, un labbro, un solo oggetto — e
+tagliarlo in cinque segmenti costruiti da cinque chiamate indipendenti non poteva
+dare altro. La catena di segmenti e' giusta per una spada (pomolo, impugnatura,
+guardia e lama SONO solidi distinti) e sbagliata per un vaso.
+
+`plan["strategy"]` vale `revolve` / `chain` / `shell` / `limbs`, dichiarata
+dall'architetto e **indovinata** (`_infer_strategy`) se manca: prima dal nome
+dell'oggetto (`_REVOLVE_HINTS`), poi dalla geometria — se ogni segmento ha
+larghezza e profondita' quasi uguali, l'oggetto e' tondo per costruzione.
+
+In `revolve` `plan_tasks` produce **UN compito per tutto il corpo**, e i segmenti
+della catena diventano le **stazioni del profilo** (i diametri a quelle quote).
+Gli extras si dividono: quelli concentrici e larghi restano al corpo come
+modanature del profilo, quelli che sporgono (anse, becchi, piedini) sono compiti
+a se', perche' non sono solidi di rivoluzione. Un vaso passa da 6 compiti a 2.
+
+### `tube` con `path`: la sezione trascinata lungo una curva
+Terza della famiglia "accettato e ignorato", dopo `bevel` su `box` e su `extr`.
+Il sintomo: un'ansa chiesta come tubo piegato usciva come una **lamella piatta**,
+perche' si cadeva sul tubo retto e poi la si piegava con `bendA`.
+`primTubePath` trascina la sezione lungo una Catmull-Rom con **trasporto
+parallelo** delle terne: con un "su" fisso la sezione si capovolge dove la curva
+diventa verticale e il tubo si strozza. Quattro punti bastano per un'ansa vera.
+E' il primitivo di anse, manici, becchi, cavi, corrimano, tubature, tentacoli.
+
+### Il mestiere nei prompt
+`prompt-part.txt` apre spiegando **come ragiona un modellatore**: si scegle il
+METODO in base alla forma (tondo -> tornio, scatolato -> box+booleane, sezione
+variabile -> loft), la silhouette viene prima dei dettagli, e ci sono gli errori
+da principiante che l'audit rifiuta (impilare cilindri per fare una forma tonda,
+pezzi che si sfiorano, anelli appiccicati addosso invece di modanature nel
+profilo). Per i corpi torniti c'e' la ricetta del profilo — piede, gola, ventre al
+35-50% dell'altezza, rientro, collo al 40-60% del diametro massimo, labbro
+svasato — con un profilo di riferimento a 12 punti.
+`prompt-plan.txt` chiede la strategia come PRIMA decisione, e impone proporzioni
+credibili (un vaso e' alto 1.5-2.5 volte il diametro massimo) e **al massimo 4
+materiali**: piu' di quattro fanno sembrare l'asset un collage.
+
 - Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
   skinning vero restano fuori.
 
