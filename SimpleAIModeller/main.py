@@ -161,8 +161,12 @@ def build_asset_prompt(request, cat="prop", style="lowpoly", detail=2,
     brief_lines = [
         "Categoria: %s (%s)" % (cat, CAT_LABELS.get(cat, cat)),
         "Stile: %s (%s)" % (style, STYLE_LABELS.get(style, style)),
-        "Dettaglio: %d (%s) — budget nodi: %d, segmenti: %d"
-        % (detail, DETAIL_LABELS[detail], level["nodes"], level["seg"]),
+        "Dettaglio: %d (%s) — budget nodi: %d, segmenti tondi: %d. USA il budget: "
+        "servono almeno %d pezzi visibili, altrimenti l'audit rifiuta l'asset "
+        "con `underDetailed`."
+        % (detail, DETAIL_LABELS[detail], level["nodes"], level["seg"],
+           int(level["nodes"] * (0.22 if detail == 3 else
+                                 0.14 if detail == 2 else 0.0))),
         "Appoggiato a terra (y=0): %s" % ("si" if ground else "no (volante)"),
     ]
     if plan_obj:
@@ -233,9 +237,12 @@ def build_plan_prompt(request, cat="prop", style="lowpoly", detail=2,
     detail = max(0, min(3, int(detail if detail is not None else 2)))
     brief = [
         "Categoria: %s (%s)" % (cat, CAT_LABELS.get(cat, cat)),
-        "Dettaglio richiesto: %d (%s) — da %d a %d segmenti sono appropriati."
+        "Dettaglio richiesto: %d (%s) — da %d a %d segmenti portanti, e da %d a %d "
+        "extras (i sottodettagli: avvolgimenti, collari, scanalature, terminali)."
         % (detail, DETAIL_LABELS[detail],
-           4 if detail < 2 else 5, 6 if detail < 2 else 9),
+           4 if detail < 2 else 5, 6 if detail < 2 else 9,
+           0 if detail == 0 else (2 if detail == 1 else (4 if detail == 2 else 8)),
+           3 if detail == 0 else (5 if detail == 1 else (8 if detail == 2 else 16))),
         "Appoggiato a terra: %s" % ("si" if ground else "no (volante)"),
     ]
     if size:

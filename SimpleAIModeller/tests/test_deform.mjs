@@ -129,8 +129,13 @@ ok(built.parts.length === 5, '5 parti (got ' + built.parts.length + ')');
 const sb = built.bounds;
 ok(Math.abs(sb.size[1] - 1.02) < 0.02, 'alta ~1.02 m (got ' + sb.size[1].toFixed(4) + ')');
 const defects = S.validateAll(spada, built, { hasPlan: true });
-const highs = defects.filter(d => d.sev === 'high');
-ok(highs.length === 0, 'nessun difetto grave (' + highs.map(d => d.code).join(',') + ')');
+// L'intento di questo check e' "la GEOMETRIA e' sana", non "l'asset e' ricco":
+// `underDetailed` e `unshaped` sono giudizi di qualita' e vengono provati a
+// parte in [10] e [11] (questa spada ha 5 pezzi su un budget di 200, quindi li'
+// deve proprio scattare).
+const QUALITY = ['underDetailed', 'unshaped'];
+const highs = defects.filter(d => d.sev === 'high' && QUALITY.indexOf(d.code) < 0);
+ok(highs.length === 0, 'nessun difetto geometrico grave (' + highs.map(d => d.code).join(',') + ')');
 
 console.log('[8] misure per parte e nodi bloccati');
 const pm = S.partMetrics(built);
@@ -144,6 +149,79 @@ spadaLocked.nodes[0].locked = true;
 const meas = S.measuredFor(S.buildSpec(spadaLocked), spadaLocked);
 ok(meas.locked.length === 1 && meas.locked[0] === 'pomolo',
    'i nodi bloccati viaggiano nell\'audit');
+
+console.log('[9] bevel su extr (era la stessa insidia del box)');
+const exNo = S.primBuild({ p: 'extr', prof: 'rect', len: 1, s: [0.4, 0.4, 0.4] }, 16, 2);
+const exYes = S.primBuild({ p: 'extr', prof: 'rect', len: 1, s: [0.4, 0.4, 0.4], bevel: 0.06 }, 16, 2);
+ok(S.meshTriCount(exYes) > S.meshTriCount(exNo), 'bevel su extr cambia la geometria');
+ok(Math.abs(S.meshVolume(exYes)) < Math.abs(S.meshVolume(exNo)), 'smusso: volume minore');
+const exb = S.meshBounds(exYes);
+ok(Math.abs(exb.size[1] - 1) < 1e-6, 'lunghezza invariata');
+ok(Math.abs(exb.size[0] - 0.4) < 1e-6, 'larghezza massima invariata');
+// lo smusso deve restringere SOLO alle estremita'
+let wTop = 0, wMid = 0;
+for (let i = 0; i < exYes.pos.length; i += 3) {
+    const y = exYes.pos[i + 1];
+    if (y > 0.499) wTop = Math.max(wTop, Math.abs(exYes.pos[i]));
+    if (Math.abs(y) < 0.01) wMid = Math.max(wMid, Math.abs(exYes.pos[i]));
+}
+ok(wTop < 0.2 - 1e-6, 'in cima e ristretto (' + wTop.toFixed(4) + ' < 0.2)');
+ok(Math.abs(wMid - 0.2) < 1e-6 || wMid === 0, 'in mezzo resta pieno');
+ok(S.meshIsClosed(exYes), 'extr smussata CHIUSA');
+
+// profilo non circolare: lo smusso deve avere spessore uniforme, non scalato
+const lNo = S.primBuild({ p: 'extr', prof: 'l', len: 1, s: [0.5, 0.5, 0.5] }, 16, 2);
+const lYes = S.primBuild({ p: 'extr', prof: 'l', len: 1, s: [0.5, 0.5, 0.5], bevel: 0.05 }, 16, 2);
+ok(S.meshTriCount(lYes) > S.meshTriCount(lNo), 'smusso anche su profilo a L');
+let finiteL = true;
+for (let i = 0; i < lYes.pos.length; i++) if (!isFinite(lYes.pos[i])) finiteL = false;
+ok(finiteL, 'profilo a L senza NaN');
+
+console.log('[10] il dettaglio richiesto viene MISURATO, non solo chiesto');
+// La spada di [7] ha 5 pezzi: a dettaglio 3 il budget e' 200, quindi e' povera.
+const dPoor = S.validateAll(spada, built, { hasPlan: true });
+ok(dPoor.some(x => x.code === 'underDetailed'),
+   'dettaglio 3 con 5 pezzi -> underDetailed (' + dPoor.map(x => x.code).join(',') + ')');
+ok(dPoor.filter(x => x.code === 'underDetailed')[0].sev === 'high',
+   'a dettaglio 3 conta come grave, quindi entra nel ciclo di correzione');
+// A dettaglio basso la poverta' e' voluta.
+const lowDetail = JSON.parse(JSON.stringify(spada));
+lowDetail.detail = 1;
+const dLow = S.validateAll(lowDetail, S.buildSpec(lowDetail), { hasPlan: true });
+ok(!dLow.some(x => x.code === 'underDetailed'),
+   'a dettaglio 1 nessuna pretesa di sottodettagli');
+// Con abbastanza pezzi il difetto sparisce: la guardia ha denti.
+const rich = JSON.parse(JSON.stringify(spada));
+for (let i = 0; i < 45; i++) {
+    rich.nodes.push({ n: 'anello_' + i, p: 'torus', r: 0.019, r2: 0.003,
+                      at: [0, 0.07 + i * 0.002, 0], mat: 'acciaio' });
+}
+const dRich = S.validateAll(rich, S.buildSpec(rich), { hasPlan: true });
+ok(!dRich.some(x => x.code === 'underDetailed'),
+   'con 50 pezzi il difetto sparisce (' + dRich.map(x => x.code).join(',') + ')');
+
+console.log('[11] primitive lisce senza forma');
+const bricks = {
+    id: 'mattoni', cat: 'prop', style: 'lowpoly', detail: 2, ground: true,
+    size: [1, 1, 1], params: {}, mats: { m: { col: '#888888' } },
+    nodes: [
+        { n: 'a', p: 'box', s: [1, 0.2, 1], at: [0, 0.1, 0], mat: 'm' },
+        { n: 'b', p: 'box', s: [0.8, 0.2, 0.8], at: [0, 0.3, 0], mat: 'm' },
+        { n: 'c', p: 'cyl', r: 0.2, len: 0.4, at: [0, 0.6, 0], mat: 'm' },
+        { n: 'd', p: 'box', s: [0.3, 0.2, 0.3], at: [0, 0.9, 0], mat: 'm' },
+    ],
+};
+const dBricks = S.validateAll(bricks, S.buildSpec(bricks), { hasPlan: true });
+ok(dBricks.some(x => x.code === 'unshaped'), 'quattro primitive nude -> unshaped');
+// Bastano i deformatori per farlo tacere: non serve cambiare le misure.
+const shaped = JSON.parse(JSON.stringify(bricks));
+shaped.nodes[0].bevel = 0.02;
+shaped.nodes[1].bevel = 0.02;
+shaped.nodes[2].taperTo = 0.7;
+shaped.nodes[3].bevel = 0.01;
+const dShaped = S.validateAll(shaped, S.buildSpec(shaped), { hasPlan: true });
+ok(!dShaped.some(x => x.code === 'unshaped'),
+   'con bevel e taper il difetto sparisce');
 
 console.log();
 console.log('PASS ' + pass + '  FAIL ' + fail);

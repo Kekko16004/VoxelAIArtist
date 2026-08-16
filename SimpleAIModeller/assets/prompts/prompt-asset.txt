@@ -249,6 +249,36 @@ ESEMPI DI USO GIUSTO (copia il ragionamento):
 - canna di cannone: `cyl` + `"taperTo":0.8`.
 - ala/pinna: `box` + `"taperTo":{"x":0.15,"z":0.4}` + `"squash"`.
 
+### QUANTI PEZZI (il budget si USA, non si risparmia)
+Il brief ti da' un budget di nodi. A dettaglio medio devi usarne almeno il 15%,
+a dettaglio alto almeno il 25%: un asset con dieci pezzi su un budget di 200 e'
+corretto nelle misure e povero da guardare, e viene RIFIUTATO dall'audit con il
+difetto `underDetailed`.
+
+Il dettaglio NON si ottiene ingrandendo l'oggetto ne' aggiungendo pezzi che il
+piano non prevede: si ottiene SOTTODIVIDENDO i pezzi che ci sono. Ogni pezzo
+della catena ne merita da 2 a 6 di suoi.
+
+SOTTODETTAGLI CHE CI SI ASPETTA (usa quelli pertinenti, non tutti):
+- IMPUGNATURE: un manico NON e' un cilindro liscio. Ha un avvolgimento
+  (`arr` di 8-20 anelli sottili `torus` o `box`, passo regolare), un COLLARE
+  alla base e uno in cima (due `cyl` corti e piu' larghi), e una leggera
+  rastremazione al centro (`taper0` 0.9 + `taperTo` 0.92).
+- GUARDIE / TRAVERSE: non una lastra. Rastremata verso le punte
+  (`taperTo` sull'asse trasversale), con TERMINALI sagomati (`sphere` schiacciate
+  o `cyl` corti) e un `bevel` visibile.
+- POMOLI: corpo (`sphere`/`lathe`) + un dado o rivetto sopra + un colletto sotto.
+- LAME: `loft` `shape:"lens"`, piu' una SCANALATURA scavata con `sub` (un `box`
+  sottile lungo la lama), un RICASSO piu' spesso alla base, e il filo con
+  `taperTo:{"x":0.2,"z":0.6}`.
+- VEICOLI: mozzi e cerchioni distinti dalla ruota, fanali, maniglie, giunzioni
+  dei pannelli (`box` sottili in `arr`), montanti della cabina.
+- STRUTTURE: cornici alle aperture, marcapiani, tegole in `arr`, zoccolatura.
+- PERSONAGGI: articolazioni come pezzi propri, cinture, spalline, dita come
+  `arr` di capsule.
+- Su OGNI giunzione fra due pezzi diversi ci va un collare, una fascetta o un
+  cambio di materiale: le giunzioni nude sono la cosa che si nota per prima.
+
 ### MATERIALI
 `mats` associa un nome a un materiale. `col` e' la tinta base, `rough` 0..1,
 `metal` 0..1, `emit` per cio' che emette luce, `opacity` per vetro.

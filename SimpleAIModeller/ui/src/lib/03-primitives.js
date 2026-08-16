@@ -323,33 +323,60 @@ function _profilePoints(prof, sides, s) {
     return pts;
 }
 
-function primExtr(prof, len, sides, s, axis) {
+function primExtr(prof, len, sides, s, axis, bevel) {
     const pts = _profilePoints(prof, sides, s);
     if (pts.length < 3) return primBox(s ? s[0] : 1, len, s ? s[1] : 1);
     const half = len * 0.5;
     const n = pts.length;
-    const pos = [];
-    // anello basso + anello alto
-    for (let i = 0; i < n; i++) pos.push(pts[i][0], -half, pts[i][1]);
-    for (let i = 0; i < n; i++) pos.push(pts[i][0], half, pts[i][1]);
-    const idx = [];
-    for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        const a = i, b = j, c = i + n, d = j + n;
-        idx.push(a, b, c, b, d, c);
-    }
-    // coperchi: fan dal baricentro
+
+    // Baricentro: serve sia ai coperchi sia allo smusso, che sposta ogni punto
+    // VERSO il baricentro invece di scalare il profilo. Su un profilo non
+    // circolare (una L, una croce) scalare sposterebbe i lati di quantita'
+    // diverse e lo smusso risulterebbe di spessore variabile.
     let cx = 0, cy = 0;
     for (const p of pts) { cx += p[0]; cy += p[1]; }
     cx /= n; cy /= n;
+
+    const b = Math.max(0, Math.min(bevel || 0, half * 0.49));
+    function inset(p, d) {
+        const dx = cx - p[0], dy = cy - p[1];
+        const l = Math.sqrt(dx * dx + dy * dy);
+        if (l < 1e-9) return [p[0], p[1]];
+        const k = Math.min(d, l * 0.9) / l;
+        return [p[0] + dx * k, p[1] + dy * k];
+    }
+
+    // Anelli: con smusso sono quattro (inset, pieno, pieno, inset), senza due.
+    const rings = b > 1e-6
+        ? [{ y: -half, d: b }, { y: -half + b, d: 0 },
+           { y: half - b, d: 0 }, { y: half, d: b }]
+        : [{ y: -half, d: 0 }, { y: half, d: 0 }];
+
+    const pos = [];
+    for (const r of rings) {
+        for (let i = 0; i < n; i++) {
+            const q = r.d > 0 ? inset(pts[i], r.d) : pts[i];
+            pos.push(q[0], r.y, q[1]);
+        }
+    }
+    const idx = [];
+    for (let ring = 0; ring < rings.length - 1; ring++) {
+        const a0 = ring * n, b0 = (ring + 1) * n;
+        for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            idx.push(a0 + i, a0 + j, b0 + i, a0 + j, b0 + j, b0 + i);
+        }
+    }
+    // Coperchi sul primo e ultimo anello.
+    const lastRing = (rings.length - 1) * n;
     const botC = (pos.length / 3) | 0;
-    pos.push(cx, -half, cy);
+    pos.push(rings[0].d > 0 ? cx : cx, -half, rings[0].d > 0 ? cy : cy);
     const topC = botC + 1;
     pos.push(cx, half, cy);
     for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
         idx.push(botC, j, i);
-        idx.push(topC, i + n, j + n);
+        idx.push(topC, lastRing + i, lastRing + j);
     }
     let m = meshCreate(pos, idx);
     if (axis === 'x') meshRotate(m, 0, 0, -90);
@@ -639,7 +666,7 @@ function primBuild(node, seg, bevelSeg) {
         case 'extr':   return primExtr(node.prof || 'rect',
                                        node.len != null ? node.len : s[1],
                                        node.sides || seg,
-                                       s, axis);
+                                       s, axis, node.bevel);
         case 'lathe':  return primLathe(node.prof, node.sides || seg, node.arc, axis);
         case 'loft':   return primLoft2(node.secs, node.shape || 'ellipse', seg, axis,
                                         node.closed !== false);

@@ -74,8 +74,14 @@ Rispondi SOLO con un JSON dentro un blocco markdown (```json ... ```).
    - una mano regge un manico di sezione 0.03-0.04 m: piu' grosso non si impugna
 8. NESSUN segmento puo' essere piu' lungo della metà del totale, tranne il corpo
    principale (la lama di una spada, il telaio di un'auto, il tronco di un albero).
-9. Da 4 a 9 segmenti in `chain`. Da 0 a 8 `extras`. Se ti servono piu' pezzi,
-   sono `extras`, non segmenti.
+9. Da 4 a 9 segmenti in `chain`. Gli `extras` scalano col dettaglio richiesto:
+   a dettaglio basso 0-3, a medio 4-8, ad ALTO 8-16. Un piano ad alto dettaglio
+   con due extras produce un asset povero, e chi costruisce non ha da dove
+   prendere i sottodettagli.
+   Gli extras sono le cose che rendono l'oggetto credibile: l'avvolgimento di un
+   manico, i collari alle giunzioni, la scanalatura di una lama, il ricasso, i
+   terminali della guardia, i rivetti, le cornici, i mozzi delle ruote.
+   Se ti servono piu' di 9 pezzi PORTANTI, sono extras, non segmenti.
 10. `materials`: da 2 a 5 voci, ognuna con i nomi dei pezzi su cui va. Ogni pezzo
     di `chain` e `extras` deve comparire in esattamente un materiale.
 

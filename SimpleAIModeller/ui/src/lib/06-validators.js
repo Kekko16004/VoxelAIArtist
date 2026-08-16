@@ -389,6 +389,64 @@ function validateLogic(spec) {
     return d;
 }
 
+/**
+ * Dettaglio effettivo contro il livello richiesto.
+ *
+ * A `detail: 3` il budget e' 200 nodi e il generatore ne usa dieci: il
+ * risultato e' corretto nelle misure e povero da guardare (un manico che e' un
+ * cilindro liscio, una guardia che e' una lastra). Chiedere "piu' dettaglio"
+ * nel prompt non basta, perche' non c'e' niente che lo verifichi — quindi lo si
+ * MISURA, e il difetto entra nel ciclo di correzione come tutti gli altri.
+ *
+ * Si contano i nodi VISIBILI: gli utensili delle booleane non sono dettaglio
+ * che si vede, e contarli premierebbe chi scava buchi invece di modellare.
+ */
+function validateDetail(spec, built) {
+    const d = [];
+    const detail = Math.max(0, Math.min(3, spec.detail | 0));
+    if (detail < 2) return d;                 // a bozza/basso la poverta' e' voluta
+    const budget = DETAIL_LEVELS[detail].nodes;
+    const visible = (built.parts || []).length;
+    const want = Math.floor(budget * (detail === 3 ? 0.22 : 0.14));
+    if (visible >= want) return d;
+    d.push(defect('underDetailed', detail === 3 ? 'high' : 'medium', '',
+        'Solo ' + visible + ' pezzi visibili per un dettaglio ' + detail
+        + ': il budget e\' ' + budget + ', ne servono almeno ' + want + '.',
+        'Aggiungere sottodettagli sui pezzi che ci sono: avvolgimento del manico '
+        + 'con arr, collari alle giunzioni, terminali sagomati, scanalature con '
+        + 'sub, rivetti, smussi. NON ingrandire l\'oggetto e non aggiungere '
+        + 'pezzi che il piano non prevede.'));
+    return d;
+}
+
+/**
+ * Pezzi "nudi": primitive lisce senza nessun deformatore ne' raccordo.
+ * Un cilindro liscio come manico e una scatola a spigolo vivo come guardia sono
+ * cio' che fa sembrare un asset un assemblaggio di mattoni. Non e' un errore
+ * geometrico, quindi resta un avviso — ma e' l'avviso che porta il ciclo di
+ * correzione a dare forma ai pezzi invece di spostarli.
+ */
+function validateShaping(spec, built) {
+    const d = [];
+    const detail = Math.max(0, Math.min(3, spec.detail | 0));
+    if (detail < 2) return d;
+    const nodes = (spec.nodes || []).filter(n => !n.op && !n.hidden);
+    if (!nodes.length) return d;
+    const plainPrims = ['box', 'cyl', 'plane'];
+    const shaped = (n) => !!(n.bevel || n.taperTo || n.taper0 || n.squash
+        || n.shear || n.twist || n.bendA || n.warp || n.mir || n.arr
+        || (n.p === 'loft' && n.shape));
+    const plain = nodes.filter(n => plainPrims.indexOf(n.p) >= 0 && !shaped(n));
+    if (plain.length >= Math.max(3, Math.ceil(nodes.length * 0.6))) {
+        d.push(defect('unshaped', 'medium', plain.slice(0, 3).map(n => n.n).join(','),
+            plain.length + ' pezzi su ' + nodes.length
+            + ' sono primitive lisce senza raccordi ne\' rastremature.',
+            'Dare forma: bevel sugli spigoli, taperTo dove il pezzo si stringe, '
+            + 'shape:"lens" per le lame, arr per gli avvolgimenti ripetuti.'));
+    }
+    return d;
+}
+
 function validateAll(spec, built, opts) {
     opts = opts || {};
     let defects = []
@@ -399,7 +457,9 @@ function validateAll(spec, built, opts) {
         .concat(validateLimbs(spec, built))
         .concat(validateCabin(spec, built))
         .concat(validateDegenerates(spec, built))
-        .concat(validateLogic(spec));
+        .concat(validateLogic(spec))
+        .concat(validateDetail(spec, built))
+        .concat(validateShaping(spec, built));
     // Con un PIANO l'ingombro non si giudica qui: l'audit lo confronta pezzo per
     // pezzo con numeri verificati, e un secondo giudizio piu' grezzo sullo stesso
     // fatto produrrebbe due difetti per una causa sola.
