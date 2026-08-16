@@ -129,5 +129,7 @@
   "status.imported": "Imported {name}.",
   "status.reference": "Reference {name} loaded ({size} m).",
   "status.refCleared": "Reference removed.",
-  "err.unsupportedFile": "Unsupported format: {name}. Use .json, .glb, .gltf or .obj."
+  "err.unsupportedFile": "Unsupported format: {name}. Use .json, .glb, .gltf or .obj.",
+  "status.fixWorse": "Fix discarded: it made things worse (score {score} vs {best}). Kept the best result.",
+  "status.patchWorse": "Patch applied ({applied} ops) but defects went up ({defects}). Ctrl+Z to undo."
 }

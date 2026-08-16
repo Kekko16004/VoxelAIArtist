@@ -203,25 +203,140 @@ function validateSymmetry(spec, built) {
     return d;
 }
 
+/**
+ * Chi e' attaccato a chi, e di quanto e' staccato chi non lo e'.
+ *
+ * "2 componenti connesse" non e' un'istruzione: non dice quale pezzo e' staccato
+ * ne' di quanto, quindi il correttore tira a indovinare e spesso peggiora. Qui si
+ * etichettano le celle occupate, si assegna ogni PARTE alla componente in cui
+ * cade, e per le parti isolate si misura la distanza dal corpo principale.
+ */
+function componentReport(built) {
+    const merged = built.merged;
+    const parts = built.parts || [];
+    if (meshIsEmpty(merged) || !parts.length) {
+        return { main: null, isolated: [], components: 0 };
+    }
+    const vox = voxelizeBounds(merged, 26);
+    const { grid, nx, ny, nz, cell, bounds } = vox;
+
+    // Etichettatura a 26 vicini, con la dimensione di ogni componente.
+    const label = new Int32Array(grid.length).fill(-1);
+    const sizes = [];
+    const stack = [];
+    for (let i = 0; i < grid.length; i++) {
+        if (!grid[i] || label[i] >= 0) continue;
+        const id = sizes.length;
+        let count = 0;
+        stack.push(i);
+        label[i] = id;
+        while (stack.length) {
+            const cur = stack.pop();
+            count++;
+            const x = cur % nx;
+            const y = ((cur / nx) | 0) % ny;
+            const z = (cur / (nx * ny)) | 0;
+            for (let dz = -1; dz <= 1; dz++) {
+                const zz = z + dz; if (zz < 0 || zz >= nz) continue;
+                for (let dy = -1; dy <= 1; dy++) {
+                    const yy = y + dy; if (yy < 0 || yy >= ny) continue;
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const xx = x + dx; if (xx < 0 || xx >= nx) continue;
+                        if (!dx && !dy && !dz) continue;
+                        const n = xx + yy * nx + zz * nx * ny;
+                        if (grid[n] && label[n] < 0) { label[n] = id; stack.push(n); }
+                    }
+                }
+            }
+        }
+        sizes.push(count);
+    }
+    if (sizes.length <= 1) {
+        return { main: null, isolated: [], components: sizes.length };
+    }
+
+    // Componente dominante = la piu' grande.
+    let mainId = 0;
+    for (let i = 1; i < sizes.length; i++) if (sizes[i] > sizes[mainId]) mainId = i;
+
+    function cellOf(x, y, z) {
+        const ix = Math.min(nx - 1, Math.max(0, ((x - bounds.min[0]) / cell) | 0));
+        const iy = Math.min(ny - 1, Math.max(0, ((y - bounds.min[1]) / cell) | 0));
+        const iz = Math.min(nz - 1, Math.max(0, ((z - bounds.min[2]) / cell) | 0));
+        return ix + iy * nx + iz * nx * ny;
+    }
+
+    const info = [];
+    for (const part of parts) {
+        const counts = {};
+        const p = part.pos;
+        for (let i = 0; i < p.length; i += 3) {
+            const l = label[cellOf(p[i], p[i + 1], p[i + 2])];
+            if (l >= 0) counts[l] = (counts[l] || 0) + 1;
+        }
+        let best = -1, bestN = 0;
+        for (const k of Object.keys(counts)) {
+            if (counts[k] > bestN) { bestN = counts[k]; best = parseInt(k, 10); }
+        }
+        info.push({ name: part.name, comp: best, bounds: meshBounds(part),
+                    mesh: part });
+    }
+
+    const mainParts = info.filter(i => i.comp === mainId);
+    const isolated = [];
+    for (const it of info) {
+        if (it.comp === mainId) continue;
+        // Distanza fra scatole: economica e sufficiente per dire "di quanto".
+        let best = null;
+        for (const mp of mainParts) {
+            const d = [0, 1, 2].map(ax => Math.max(
+                0, Math.max(it.bounds.min[ax] - mp.bounds.max[ax],
+                            mp.bounds.min[ax] - it.bounds.max[ax])));
+            const dist = Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+            if (!best || dist < best.dist) best = { dist: dist, to: mp.name, delta: d, mp: mp };
+        }
+        if (best) {
+            const size = it.bounds.size;
+            isolated.push({
+                name: it.name, gap: best.dist, nearest: best.to,
+                delta: best.delta,
+                // Asse su cui la separazione e' maggiore: e' quello da chiudere.
+                axis: best.delta.indexOf(Math.max.apply(null, best.delta)),
+                size: size,
+                relative: best.dist / Math.max(1e-6, Math.max(size[0], size[1], size[2])),
+                towards: best.mp.bounds.center,
+                from: it.bounds.center,
+            });
+        }
+    }
+    return { main: mainId, isolated: isolated, components: sizes.length,
+             sizes: sizes };
+}
+
 function validateComponents(spec, built) {
     const d = [];
     if (meshIsEmpty(built.merged)) return d;
-    const vox = voxelizeBounds(built.merged, 26);
-    const sizes = countComponents(vox);
-    if (sizes.length > 1) {
-        const main = sizes[0] || 1;
-        const scraps = sizes.slice(1).filter(s => s / main < 0.02);
-        const big = sizes.slice(1).filter(s => s / main >= 0.02);
-        if (big.length) {
-            d.push(defect('detachedParts', 'high', '',
-                (big.length + 1) + ' componenti connesse distinte: parti staccate o fluttuanti.',
-                'Collegare le parti al corpo principale: ogni pezzo deve toccare un vicino.'));
-        }
-        if (scraps.length > 2) {
-            d.push(defect('scraps', 'low', '',
-                scraps.length + ' frammenti sotto il 2% del volume principale.',
-                'Eliminare i nodi spuri o unirli al corpo.'));
-        }
+    const rep = componentReport(built);
+    if (rep.components <= 1 || !rep.isolated.length) return d;
+
+    const total = (rep.sizes || []).reduce((a, b) => a + b, 0) || 1;
+    const mainSize = (rep.sizes || [])[rep.main] || 1;
+    for (const iso of rep.isolated) {
+        const tiny = (iso.size[0] * iso.size[1] * iso.size[2]) < 1e-7;
+        d.push(defect('detachedParts', tiny ? 'medium' : 'high', iso.name,
+            'Il pezzo "' + iso.name + '" e\' STACCATO: dista '
+            + (iso.gap * 1000).toFixed(1) + ' mm dal pezzo piu\' vicino ("'
+            + iso.nearest + '") sull\'asse ' + 'XYZ'[iso.axis] + '.',
+            'Spostare "' + iso.name + '" di ' + (iso.gap * 1000).toFixed(1)
+            + ' mm verso "' + iso.nearest + '" lungo ' + 'XYZ'[iso.axis]
+            + ', oppure allungarlo fino a toccarlo. I pezzi di un asset devono '
+            + 'compenetrarsi di poco, non sfiorarsi: meglio 1-2 mm di sovrapposizione.'));
+    }
+    if (rep.isolated.length > 3) {
+        d.push(defect('exploded', 'high', '',
+            rep.components + ' gruppi separati: l\'asset e\' esploso in pezzi.',
+            'Rifare le posizioni dalla catena del piano: ogni segmento comincia '
+            + 'dove finisce il precedente, quindi i pezzi si toccano per costruzione.'));
     }
     return d;
 }
@@ -533,6 +648,15 @@ function metricsOf(spec, built) {
     };
 }
 
+/** Somma un delta a un campo che puo' essere numero o espressione, senza
+ *  scollegare il nodo dalla catena del piano. */
+function offsetField(cur, delta) {
+    if (Math.abs(delta) < 1e-9) return cur;
+    if (typeof cur === 'number') return Math.round((cur + delta) * 100000) / 100000;
+    const d = Math.round(delta * 100000) / 100000;
+    return '(' + String(cur) + ')' + (d >= 0 ? '+' : '') + d;
+}
+
 /** Auto-riparazione solo dell'inequivocabile. Ritorna {spec, repairs}. */
 function autoRepair(spec, built) {
     const repairs = [];
@@ -559,6 +683,51 @@ function autoRepair(spec, built) {
                 if (typeof out.params[k] === 'number') out.params[k] *= mean;
             }
             repairs.push('uniformScale:' + mean.toFixed(3));
+        }
+    }
+
+    // AGGANCIO dei pezzi quasi attaccati.
+    //
+    // "Le parti non si toccano" e' il difetto visivo piu' frequente, ed e'
+    // MECCANICO: se un pezzo dista pochi millimetri dal corpo, avvicinarlo e'
+    // l'unica cosa sensata da fare e non serve chiederlo a un modello. Farlo
+    // qui risparmia un giro di correzione — e i giri di correzione sono anche
+    // le occasioni in cui il modello peggiora il resto.
+    //
+    // Si aggancia solo l'INEQUIVOCABILE: distanza piccola rispetto al pezzo, e
+    // spostamento su UN asse solo (quello della separazione maggiore). Un pezzo
+    // lontano e' una scelta di composizione o un errore vero, e va detto, non
+    // trascinato di nascosto.
+    if (built.parts && built.parts.length > 1) {
+        const rep = componentReport(built);
+        const byName = {};
+        for (const n of out.nodes || []) byName[n.n] = n;
+        const assetMax = Math.max(built.bounds.size[0], built.bounds.size[1],
+                                  built.bounds.size[2], 1e-6);
+        for (const iso of rep.isolated) {
+            const node = byName[iso.name];
+            if (!node || node.locked) continue;
+            const ax = iso.axis;
+            const gap = iso.delta[ax];
+            if (gap <= 1e-6) continue;
+            // La soglia si misura sull'INGOMBRO DELL'ASSET, non sul pezzo: una
+            // pila di dischi separati ognuno di quanto e' alto lui va agganciata
+            // (relativa al pezzo darebbe 1.0 e resterebbe fuori), mentre un
+            // pezzo a mezzo asset di distanza e' un errore vero o una scelta di
+            // composizione, e va DETTO invece di trascinato di nascosto.
+            // Il secondo termine impedisce di trascinare un dettaglio minuscolo
+            // per mezzo metro solo perche' l'asset e' grande.
+            const pieceMax = Math.max(iso.size[0], iso.size[1], iso.size[2], 1e-6);
+            const limit = Math.min(assetMax * 0.25, pieceMax * 3);
+            if (gap > limit) continue;
+            // Verso: dal pezzo isolato al vicino, piu' 1 mm di sovrapposizione
+            // (due superfici che si sfiorano lasciano una cucitura visibile).
+            const dir = iso.towards[ax] > iso.from[ax] ? 1 : -1;
+            const move = dir * (gap + 0.001);
+            const at = Array.isArray(node.at) ? node.at.slice() : [0, 0, 0];
+            at[ax] = offsetField(at[ax], move);
+            node.at = at;
+            repairs.push('snap:' + iso.name + ':' + (move * 1000).toFixed(1) + 'mm');
         }
     }
 

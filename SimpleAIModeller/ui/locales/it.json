@@ -129,5 +129,7 @@
   "status.imported": "Importato {name}.",
   "status.reference": "Riferimento {name} caricato ({size} m).",
   "status.refCleared": "Riferimento rimosso.",
-  "err.unsupportedFile": "Formato non gestito: {name}. Usa .json, .glb, .gltf o .obj."
+  "err.unsupportedFile": "Formato non gestito: {name}. Usa .json, .glb, .gltf o .obj.",
+  "status.fixWorse": "Correzione scartata: peggiorava (punteggio {score} contro {best}). Tenuto il risultato migliore.",
+  "status.patchWorse": "Patch applicata ({applied} op) ma i difetti sono aumentati ({defects}). Ctrl+Z per annullare."
 }

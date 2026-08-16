@@ -20,7 +20,8 @@ const code = files.map(f => fs.readFileSync(path.join(LIB, f), 'utf8')).join('\n
   + ' meshArea, meshClone, primBox, primRoundBox, primCyl, primSphere, sectionPoints,'
   + ' primLoft2, meshTaper, meshShear, meshTwist, meshBend, meshWarp, meshSquash,'
   + ' applyDeformers, buildSpec, primBuild, validateAll, partMetrics, measuredFor,'
-  + ' primLathe2, vesselProfile, smoothProfile, VESSEL_PROFILES };';
+  + ' primLathe2, vesselProfile, smoothProfile, VESSEL_PROFILES,'
+  + ' componentReport, autoRepair, offsetField };';
 const sandbox = { console, Math, JSON, Float32Array, Uint32Array, Uint8Array, Map, Set, Object, Array };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
@@ -326,6 +327,58 @@ lineare.nodes[0].arr = { n: 4, step: [0.1, 0, 0] };
 const lbb = S.buildSpec(lineare).bounds;
 ok(lbb.size[0] > 0.29 && lbb.size[0] < 0.35,
    'array lineare: 4 copie a passo 0.1 (' + lbb.size[0].toFixed(3) + ')');
+
+console.log('[17] pezzi staccati: DIRE quale e di quanto');
+const staccato = {
+    id: 'staccato', cat: 'prop', style: 'lowpoly', detail: 1, ground: true,
+    size: [0.4, 0.4, 0.2], params: {}, mats: { m: { col: '#888888' } },
+    nodes: [
+        { n: 'corpo', p: 'box', s: [0.2, 0.2, 0.1], at: [0, 0.1, 0], mat: 'm' },
+        { n: 'appendice', p: 'box', s: [0.06, 0.06, 0.06], at: [0.19, 0.1, 0], mat: 'm' },
+    ],
+};
+const bs = S.buildSpec(staccato);
+const rep = S.componentReport(bs);
+ok(rep.components === 2, 'due componenti (' + rep.components + ')');
+ok(rep.isolated.length === 1, 'una parte isolata');
+ok(rep.isolated[0].name === 'appendice', 'nominata: ' + rep.isolated[0].name);
+ok(rep.isolated[0].nearest === 'corpo', 'sa da chi e staccata');
+ok(rep.isolated[0].axis === 0, 'sa su quale asse (X)');
+ok(rep.isolated[0].gap > 0.02 && rep.isolated[0].gap < 0.08,
+   'misura il distacco: ' + (rep.isolated[0].gap * 1000).toFixed(1) + ' mm');
+const dSt = S.validateAll(staccato, bs, { hasPlan: true, expectedParts: 2 });
+const det = dSt.filter(x => x.code === 'detachedParts')[0];
+ok(det && det.where === 'appendice', 'il difetto punta il nodo giusto');
+ok(det && det.what.indexOf('mm') > 0, 'il difetto contiene i millimetri');
+
+console.log('[18] aggancio automatico, senza AI');
+const fixed = S.autoRepair(staccato, bs);
+ok(fixed.repairs.some(r => r.indexOf('snap:appendice') === 0),
+   'agganciato: ' + fixed.repairs.join(','));
+const bs2 = S.buildSpec(fixed.spec);
+const rep2 = S.componentReport(bs2);
+ok(rep2.components === 1 || rep2.isolated.length === 0,
+   'dopo l aggancio e un pezzo solo (' + rep2.components + ')');
+// Un pezzo LONTANO non si trascina di nascosto: resta un difetto da segnalare.
+const lontano = JSON.parse(JSON.stringify(staccato));
+lontano.nodes[1].at = [0.9, 0.1, 0];
+const bl = S.buildSpec(lontano);
+const fl = S.autoRepair(lontano, bl);
+ok(!fl.repairs.some(r => r.indexOf('snap:') === 0),
+   'un pezzo lontano NON viene spostato in silenzio');
+// Un nodo bloccato a mano non si tocca.
+const bloccato = JSON.parse(JSON.stringify(staccato));
+bloccato.nodes[1].locked = true;
+const fb2 = S.autoRepair(bloccato, S.buildSpec(bloccato));
+ok(!fb2.repairs.some(r => r.indexOf('snap:') === 0),
+   'un nodo locked non viene agganciato');
+
+console.log('[19] offsetField non scollega dalla catena del piano');
+ok(S.offsetField(0.5, 0.1) === 0.6, 'numero + numero');
+ok(S.offsetField('(a+b)/2', 0.02) === '((a+b)/2)+0.02',
+   'espressione conservata: ' + S.offsetField('(a+b)/2', 0.02));
+ok(S.offsetField('h', -0.03) === '(h)-0.03', 'delta negativo');
+ok(S.offsetField('h', 0) === 'h', 'delta nullo non tocca niente');
 
 console.log();
 console.log('PASS ' + pass + '  FAIL ' + fail);

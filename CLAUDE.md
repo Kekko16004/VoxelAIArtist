@@ -762,6 +762,39 @@ una quota da riempire.** Stessa logica per `validateSize`: senza un `size`
 dichiarato non c'e' bersaglio, e resta solo il controllo di plausibilita'
 assoluta (un oggetto di 2 mm o di 60 m e' sbagliato comunque).
 
+### Il ratchet TIENE IL MIGLIORE, non l'ultimo
+Difetto riportato dall'utente: *"al primo passaggio lo aveva fatto unito, poi ha
+deciso di staccarlo"*. Il ciclo adottava sempre il risultato della patch, quindi
+un asset corretto al primo colpo poteva essere PEGGIORATO dal giro di correzione
+— e il peggioramento restava. Un ratchet che torna indietro non e' un ratchet.
+
+- `defectScore` pesa i difetti (high 10, medium 3, low 1). Contare i soli gravi
+  non basta: una patch che ne risolve uno e introduce due medi lascerebbe il
+  conteggio dei gravi invariato e passerebbe per innocua.
+- `fixRound` NON tocca `appState`: ritorna lo stato prodotto, e il chiamante
+  decide. Ogni giro parte dal MIGLIORE visto, non dall'ultimo.
+- Se un giro peggiora o non cambia niente, si scarta e si smette: insistere da
+  una base peggiore allontana. Alla fine si adotta il migliore (`adoptState`).
+- Una patch chiesta a mano si adotta comunque (e' una richiesta esplicita), ma
+  se peggiora lo dice e `pushHistory` garantisce che Ctrl+Z la annulli.
+
+### `detachedParts` dice QUALE pezzo e DI QUANTO
+"2 componenti connesse" non e' un'istruzione: il correttore tirava a indovinare e
+spesso peggiorava. `componentReport` etichetta le celle occupate, assegna ogni
+PARTE alla sua componente, e per le parti isolate misura la distanza dal pezzo
+piu' vicino, su quale asse, e verso chi. Il difetto diventa "il pezzo X dista
+42 mm da Y sull'asse Z", che una patch puo' eseguire.
+
+E il caso facile non costa una chiamata AI: `autoRepair` **aggancia** i pezzi
+quasi attaccati (`snap:`), aggiungendo 1 mm di sovrapposizione — due superfici
+che si sfiorano lasciano una cucitura visibile. La soglia si misura
+sull'**ingombro dell'asset** (25%, con un tetto di 3x il pezzo), non sul pezzo:
+una pila di dischi separati ognuno di quanto e' alto lui va agganciata, mentre un
+pezzo a mezzo asset di distanza va DETTO invece di trascinato di nascosto. Un
+nodo `locked` non si tocca mai. Lo spostamento passa da `offsetField`, che somma
+il delta all'espressione invece di sostituirla, cosi' il nodo resta legato alla
+catena del piano.
+
 - Fase 1 = core di generazione + visore + editor. Gauntlet Loop multi-agente e
   skinning vero restano fuori.
 

@@ -221,11 +221,29 @@ function countHigh(defects) {
     return (defects || []).filter(d => d.sev === 'high').length;
 }
 
-/** Un giro di correzione: patch AI guidata dai difetti, poi ricostruzione e
- *  riaudit. Ritorna i nuovi difetti, o null se la patch e' fallita. */
-async function fixRound(defects, humanText) {
+/**
+ * Punteggio di uno stato: piu' basso e' meglio.
+ *
+ * Serve al ratchet per sapere se un giro ha MIGLIORATO. Contare solo i difetti
+ * gravi non basta: una patch che ne risolve uno e ne introduce due di media
+ * gravita' lascerebbe il conteggio dei gravi invariato e passerebbe per
+ * innocua, mentre l'asset e' peggiorato.
+ */
+function defectScore(defects) {
+    const w = { high: 10, medium: 3, low: 1 };
+    let s = 0;
+    for (const d of (defects || [])) s += (w[d.sev] || 3);
+    return s;
+}
+
+/**
+ * Un giro di correzione: patch AI guidata dai difetti, poi ricostruzione,
+ * auto-riparazione e riaudit. NON tocca appState: ritorna lo stato prodotto,
+ * e sta al chiamante decidere se tenerlo.
+ */
+async function fixRound(baseSpec, defects, humanText) {
     const data = await apiPost('/api/asset/patch', {
-        spec: appState.spec,
+        spec: baseSpec,
         plan: appState.plan,
         defects: defects,
         request: humanText || '',
@@ -238,13 +256,18 @@ async function fixRound(defects, humanText) {
         spec = ar.spec;
         built = showSpec(spec);
     }
-    appState.spec = spec;
-    appState.built = built;
     const local = validateAll(spec, built, validateOpts());
     const audit = await auditAgainstPlan(spec, built);
     const merged = mergeDefects([audit, local]);
-    showSpecInUi(spec, built, merged);
-    return { defects: merged, applied: data.applied || 0 };
+    return { spec: spec, built: built, defects: merged,
+             applied: data.applied || 0, repairs: ar.repairs };
+}
+
+/** Rende visibile e corrente uno stato prodotto da un giro. */
+function adoptState(st) {
+    appState.spec = st.spec;
+    appState.built = showSpec(st.spec);
+    showSpecInUi(st.spec, appState.built, st.defects);
 }
 
 async function doGenerate() {
@@ -286,27 +309,41 @@ async function doGenerate() {
         let defects = mergeDefects([audit, local]);
         showSpecInUi(spec, built, defects);
 
-        // RATCHET aritmetico: finche' ci sono difetti gravi e i giri restano,
-        // si corregge. La condizione di uscita non e' "il modello dice ok" ma
-        // "i numeri tornano", che e' l'unica che non si puo' allucinare.
+        // RATCHET: si TIENE IL MIGLIORE, non l'ultimo.
+        //
+        // Un ratchet che torna indietro non e' un ratchet. Prima si adottava
+        // sempre il risultato della patch, e capitava che un asset corretto al
+        // primo colpo venisse PEGGIORATO dal giro di correzione — pezzi uniti
+        // che si staccavano — e quel peggioramento restava. Ora ogni giro si
+        // confronta col migliore visto, e alla fine si adotta quello.
+        let best = { spec: spec, defects: defects, score: defectScore(defects) };
         while (form.autofix && countHigh(defects) > 0 && appState.rounds < MAX_FIX_ROUNDS) {
             appState.rounds++;
             setBusy(true, t('status.fixing', {
                 round: appState.rounds, max: MAX_FIX_ROUNDS,
                 n: countHigh(defects),
             }));
-            const before = countHigh(defects);
             let res;
             try {
-                res = await fixRound(defects, '');
+                res = await fixRound(best.spec, best.defects, '');
             } catch (e) {
                 console.warn('[fix]', e);
                 break;
             }
-            defects = res.defects;
-            // Se un giro non migliora niente, insistere spreca chiamate.
-            if (countHigh(defects) >= before) break;
+            const score = defectScore(res.defects);
+            if (score < best.score) {
+                best = { spec: res.spec, defects: res.defects, score: score };
+                defects = res.defects;
+                if (countHigh(defects) === 0) break;
+            } else {
+                // Il giro ha peggiorato (o non ha cambiato niente): si SCARTA e
+                // si smette. Insistere da una base peggiore allontana.
+                setStatus(t('status.fixWorse', { score: score, best: best.score }), 'warn');
+                break;
+            }
         }
+        adoptState(best);
+        defects = best.defects;
 
         // Critica visiva opzionale, DOPO che i numeri tornano: giudicare
         // l'estetica di un modello con le misure sbagliate e' tempo perso.
@@ -404,11 +441,24 @@ async function doPatch(humanText, defects) {
     if (!appState.spec) return;
     setBusy(true, t('status.patching'));
     try {
-        const res = await fixRound(defects || appState.defects, humanText || '');
-        setStatus(t('status.patched', {
-            applied: res.applied,
-            defects: res.defects.length,
-        }), countHigh(res.defects) ? 'warn' : 'ok');
+        const before = defectScore(appState.defects);
+        const res = await fixRound(appState.spec, defects || appState.defects,
+                                   humanText || '');
+        const after = defectScore(res.defects);
+        // Una correzione chiesta a mano si adotta comunque: e' una richiesta
+        // esplicita, non un giro automatico. Ma se ha peggiorato si dice, e
+        // l'undo e' a un tasto (Ctrl+Z).
+        pushHistory();
+        adoptState(res);
+        if (after > before) {
+            setStatus(t('status.patchWorse', { applied: res.applied,
+                                               defects: res.defects.length }), 'warn');
+        } else {
+            setStatus(t('status.patched', {
+                applied: res.applied,
+                defects: res.defects.length,
+            }), countHigh(res.defects) ? 'warn' : 'ok');
+        }
     } catch (e) {
         console.error(e);
         setStatus(t('err.patch', { msg: e.message || e }), 'error');
