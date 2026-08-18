@@ -236,24 +236,19 @@
                 // Vertical stations (fractions of height). Arm/leg joints line up on a single
                 // vertical so every limb is dead straight in the rest pose (no bent elbows).
                 const hipsY = minY + 0.44 * H;
-                const spineY = minY + 0.57 * H;
-                const chestY = minY + 0.66 * H;
-                const shldY = minY + 0.80 * H;
-                const neckY = minY + 0.84 * H;
-                const headY = minY + 0.88 * H;
+                const spineY = minY + 0.53 * H;
+                const chestY = minY + 0.64 * H;
+                const shldY = minY + 0.74 * H;
+                const neckY = minY + 0.75 * H;
+                const headY = minY + 0.79 * H;
                 const headTopY = minY + 0.97 * H;
                 const elbowY = minY + 0.66 * H;
                 const wristY = minY + 0.52 * H;
                 const handY = minY + 0.45 * H;
-                const kneeY = minY + 0.28 * H;
-                const ankleY = minY + 0.09 * H;
+                const kneeY = minY + 0.26 * H;
+                const ankleY = minY + 0.11 * H;
 
                 const bones = [];
-                // `helper: true` marca le ossa-punta (headTip / handTip / toeTip): esistono
-                // SOLO perche' Blender orienti correttamente le foglie della catena. Non sono
-                // selezionabili nella UI e NON ricevono voxel in bindVoxels: prima un
-                // handTip_R poteva rubarsi le dita, producendo un osso che deforma la mesh
-                // ma che nessuna clip anima (mano che resta indietro nell'export).
                 const add = (name, parent, head, tail, helper) => {
                     const bd = { name, parent, head, tail };
                     if (helper) bd.helper = true;
@@ -261,11 +256,6 @@
                     return bones.length - 1;
                 };
 
-                // Spine chain: hips → spine → chest → neck → head → headTip.
-                // Each bone's head is the next one's tail, and every leaf ends in a small tip
-                // bone so Blender orients them correctly (no "bones pointing up").
-                // `upperChest` e' stato fuso in `chest`: nessuna clip lo animava e in pratica
-                // era solo una riga in piu' nella lista ossa.
                 const hips = add('hips', -1, [cx, hipsY, cz], [cx, spineY, cz]);
                 const spine = add('spine', hips, [cx, spineY, cz], [cx, chestY, cz]);
                 const chest = add('chest', spine, [cx, chestY, cz], [cx, neckY, cz]);
@@ -273,22 +263,8 @@
                 const head = add('head', neck, [cx, headY, cz], [cx, headTopY, cz]);
                 add('headTip', head, [cx, headTopY, cz], [cx, maxY, cz], true);
 
-                // Arms in T-pose (horizontal). The whole arm is measured from the REAL
-                // geometry so every bone stays inside the voxels: the shoulder sits at the
-                // torso edge (so it's a proper pivot, not buried mid-arm), and the chain
-                // reaches out to the actual fingertip instead of guessing from body height.
-
-                // Torso edge just below the arms → where the shoulder attaches to the body.
-                // ATTENZIONE: in T-pose le braccia stanno DENTRO questa fascia verticale,
-                // quindi il massimo/minimo X grezzo qui e' la PUNTA DEL DITO, non il
-                // costato: lo shoulder finiva sul polso e upperArm/forearm/hand cadevano
-                // FUORI dal modello (misurato sul Tecnico_del_Video: torsoMaxR=105 su un
-                // modello che arriva a x=108). Le braccia sono righe strette e larghissime,
-                // il torso righe larghe e continue: prendiamo quindi la larghezza MEDIANA
-                // delle righe della fascia e scartiamo le righe che la sfondano (le
-                // braccia), cosi' il bordo misurato e' davvero quello del busto.
                 const torsoBandLo = minY + 0.55 * H, torsoBandHi = minY + 0.68 * H;
-                const rowSpan = new Map();   // y -> [minX, maxX]
+                const rowSpan = new Map();
                 voxels.forEach(v => {
                     if (v.y < torsoBandLo || v.y > torsoBandHi) return;
                     const r = rowSpan.get(v.y);
@@ -300,14 +276,11 @@
                 const medW = widths.length ? widths[Math.floor(widths.length / 2)] : 0;
                 let torsoMaxR = cx, torsoMinL = cx;
                 spans.forEach(r => {
-                    // Riga "con le braccia": molto piu' larga della mediana → non e' torso.
                     if (medW > 0 && (r[1] - r[0]) > medW * 1.6) return;
                     if (r[1] > torsoMaxR) torsoMaxR = r[1];
                     if (r[0] < torsoMinL) torsoMinL = r[0];
                 });
 
-                // Outermost arm voxel (fingertip) + the arm's real vertical center, from the
-                // side voxels in the arm band.
                 let armOuterR = torsoMaxR, armOuterL = torsoMinL, armYsum = 0, armYn = 0;
                 voxels.forEach(v => {
                     if (v.y >= armBandLo && v.y <= armBandHi) {
@@ -317,16 +290,13 @@
                 });
                 const armY = armYn ? armYsum / armYn : (shldY - 0.08 * H);
 
-                // Shoulder roots at the torso edge; the arm proper spans root → fingertip,
-                // split upperArm / forearm / hand, with the leaf tip landing on the fingertip.
                 const shRX = torsoMaxR, shLX = torsoMinL;
                 const reachR = Math.max(armOuterR - shRX, 0.18 * W);
                 const reachL = Math.max(shLX - armOuterL, 0.18 * W);
-                const fU = 0.42, fF = 0.34, fH = 0.18;   // upperArm / forearm / hand fractions
+                const fU = 0.375, fF = 0.375, fH = 0.19;
                 const rE = shRX + reachR * fU, rW = rE + reachR * fF, rH = rW + reachR * fH, rT = armOuterR;
                 const lE = shLX - reachL * fU, lW = lE - reachL * fF, lH = lW - reachL * fH, lT = armOuterL;
 
-                // Collarbone (shoulder) slants from chest center down to the arm root.
                 const shoR = add('shoulder_R', chest, [cx, shldY, cz], [shRX, armY, cz]);
                 const uaR = add('upperArm_R', shoR, [shRX, armY, cz], [rE, armY, cz]);
                 const faR = add('forearm_R', uaR, [rE, armY, cz], [rW, armY, cz]);
@@ -339,12 +309,6 @@
                 const haL = add('hand_L', faL, [lW, armY, cz], [lH, armY, cz]);
                 add('handTip_L', haL, [lH, armY, cz], [lT, armY, cz], true);
 
-                // Legs: upperLeg → lowerLeg → foot → toeTip, attaccate DIRETTAMENTE a hips.
-                // Le vecchie `pelvis_L/R` erano stub laterali di lunghezza quasi nulla
-                // all'altezza dell'inguine: impossibili da cliccare, non animate da nessuna
-                // clip, e in bindVoxels si rubavano i voxel del cavallo (da cui lo strappo
-                // in quella zona). SkeletonHelper disegna comunque la linea hips→coscia,
-                // quindi il bacino resta visibile senza essere un osso selezionabile.
                 const ulR = add('upperLeg_R', hips, [legXR, hipsY, cz], [legXR, kneeY, cz]);
                 const llR = add('lowerLeg_R', ulR, [legXR, kneeY, cz], [legXR, ankleY, ankleZ]);
                 const ftR = add('foot_R', llR, [legXR, ankleY, ankleZ], [legXR, minY, toeZ]);
@@ -355,7 +319,113 @@
                 const ftL = add('foot_L', llL, [legXL, ankleY, ankleZ], [legXL, minY, toeZ]);
                 add('toeTip_L', ftL, [legXL, minY, toeZ], [legXL, minY, toeTipZ], true);
 
-                return { bones, pose: {}, posePos: {}, binding: defaultBindingFor(voxels), type: 'humanoid' };
+                const defaultPose = {
+                    hips: [0, 0, 0],
+                    spine: [0.08726646259971649, 0, 0],
+                    chest: [0.17453292519943295, 0, 0],
+                    head: [-0.08726646259971649, 0, 0],
+                    upperLeg_R: [0, 0, -0.007504915783575617],
+                    lowerLeg_R: [-0.1804670446562137, 0, 0],
+                    foot_R: [0, 0.2617993877991494, 0],
+                    upperLeg_L: [0, 0, -0.04974188368183839],
+                    lowerLeg_L: [-0.1169370598836201, 0, 0],
+                    foot_L: [0, -0.2617993877991494, 0],
+                    upperArm_R: [-2.845632641629237, -1.118885906249436, -0.11442588799980974],
+                    forearm_R: [0.2617993877991494, 0, 0],
+                    upperArm_L: [-0.17453292519943292, -0.3490658503988659, 0.30141836181942067],
+                    forearm_L: [-1.9198621771937625, 1.1627383476786222, -3.141592653589793],
+                    neck: [0, 0, 0],
+                    shoulder_R: [0, 0, 0],
+                    hand_R: [0, 0, 0],
+                    shoulder_L: [0, 0, 0],
+                    hand_L: [0, 0, 0]
+                };
+
+                const defaultPosePos = {
+                    hips: [0, 0.05, 0],
+                    upperArm_L: [0, 0, 0],
+                    upperArm_R: [0, 0, 0],
+                    spine: [0, 0, 0],
+                    chest: [0, 0, 0],
+                    head: [0, 0, 0],
+                    upperLeg_R: [0, 0, 0],
+                    lowerLeg_R: [0, 0, 0],
+                    foot_R: [0, 0, 0],
+                    upperLeg_L: [0, 0, 0],
+                    lowerLeg_L: [0, 0, 0],
+                    foot_L: [0, 0, 0],
+                    forearm_R: [0, 0, 0],
+                    forearm_L: [0, 0, 0],
+                    neck: [0, 0, 0],
+                    shoulder_R: [0, 0, 0],
+                    hand_R: [0, 0, 0],
+                    shoulder_L: [0, 0, 0],
+                    hand_L: [0, 0, 0]
+                };
+
+                const defaultCustomAnims = [
+                    {
+                        name: "NaturalWalk",
+                        duration: 1,
+                        loop: true,
+                        tracks: [
+                            { bone: "hips", keys: [{ t: 0, pos: [0, -0.04, 0], rot: [0, 5, 2] }, { t: 0.25, pos: [0, 0.08, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, -0.04, 0], rot: [0, -5, -2] }, { t: 0.75, pos: [0, 0.08, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, -0.04, 0], rot: [0, 5, 2] }] },
+                            { bone: "spine", keys: [{ t: 0, pos: [0, 0, 0], rot: [2, -4, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [2, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [2, 4, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [2, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [2, -4, 0] }] },
+                            { bone: "chest", keys: [{ t: 0, pos: [0, 0, 0], rot: [0, -3, -1] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [0, 3, 1] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [0, -3, -1] }] },
+                            { bone: "head", keys: [{ t: 0, pos: [0, 0, 0], rot: [-2, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [1, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [-2, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [1, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [-2, 0, 0] }] },
+                            { bone: "upperLeg_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [30, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [-30, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [10, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [30, 0, 0] }] },
+                            { bone: "lowerLeg_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [-5, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [-15, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [-10, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [-60, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [-5, 0, 0] }] },
+                            { bone: "foot_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [-15, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [25, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [-5, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [-15, 0, 0] }] },
+                            { bone: "upperLeg_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [-30, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [10, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [30, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [-30, 0, 0] }] },
+                            { bone: "lowerLeg_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [-10, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [-60, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [-5, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [-15, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [-10, 0, 0] }] },
+                            { bone: "foot_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [25, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [-5, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [-15, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [25, 0, 0] }] },
+                            { bone: "upperArm_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [-30, 0, -78] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, -78] }, { t: 0.5, pos: [0, 0, 0], rot: [30, 0, -78] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, -78] }, { t: 1, pos: [0, 0, 0], rot: [-30, 0, -78] }] },
+                            { bone: "forearm_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [15, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [25, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [45, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [25, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [15, 0, 0] }] },
+                            { bone: "upperArm_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [30, 0, 78] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 78] }, { t: 0.5, pos: [0, 0, 0], rot: [-30, 0, 78] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 78] }, { t: 1, pos: [0, 0, 0], rot: [30, 0, 78] }] },
+                            { bone: "forearm_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [45, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [25, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [15, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [25, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [45, 0, 0] }] },
+                            { bone: "neck", keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                            { bone: "shoulder_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                            { bone: "hand_R", keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                            { bone: "shoulder_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [0, 0, 0] }] },
+                            { bone: "hand_L", keys: [{ t: 0, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.25, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.5, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 0.75, pos: [0, 0, 0], rot: [0, 0, 0] }, { t: 1, pos: [0, 0, 0], rot: [0, 0, 0] }] }
+                        ]
+                    },
+                    {
+                        name: "Dux Salute",
+                        duration: 2,
+                        loop: true,
+                        tracks: [
+                            { bone: "hips", keys: [{ t: 0, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, 0], pos: [0, 0.05, 0] }, { t: 2, rot: [0, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "spine", keys: [{ t: 0, rot: [5, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [5, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [5, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "chest", keys: [{ t: 0, rot: [10, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [10, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [10, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "head", keys: [{ t: 0, rot: [-5, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [-5, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [-5, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "upperArm_R", keys: [{ t: 0, rot: [-2.22, -51.81, -53.97], pos: [0, 0, 0] }, { t: 1, rot: [-89.55, -66.74, 65.32], pos: [0, 0, 0] }, { t: 2, rot: [-2.22, -51.81, -53.97], pos: [0, 0, 0] }] },
+                            { bone: "forearm_R", keys: [{ t: 0, rot: [15, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [15, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [15, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "upperArm_L", keys: [{ t: 0, rot: [-10, -20, 68.41], pos: [0, 0, 0] }, { t: 1, rot: [-10, -20, 17.27], pos: [0, 0, 0] }, { t: 2, rot: [-10, -20, 68.41], pos: [0, 0, 0] }] },
+                            { bone: "forearm_L", keys: [{ t: 0, rot: [70, 20, 0], pos: [0, 0, 0] }, { t: 1, rot: [-110, 66.62, -180], pos: [0, 0, 0] }, { t: 2, rot: [70, 20, 0], pos: [0, 0, 0] }] },
+                            { bone: "upperLeg_R", keys: [{ t: 0, rot: [0, 0, -0.43], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, -0.43], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, -0.43], pos: [0, 0, 0] }] },
+                            { bone: "upperLeg_L", keys: [{ t: 0, rot: [0, 0, -2.85], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, -2.85], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, -2.85], pos: [0, 0, 0] }] },
+                            { bone: "foot_R", keys: [{ t: 0, rot: [0, 15, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 15, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, 15, 0], pos: [0, 0, 0] }] },
+                            { bone: "foot_L", keys: [{ t: 0, rot: [0, -15, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, -15, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, -15, 0], pos: [0, 0, 0] }] },
+                            { bone: "neck", keys: [{ t: 0, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "shoulder_R", keys: [{ t: 0, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "hand_R", keys: [{ t: 0, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "shoulder_L", keys: [{ t: 0, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "hand_L", keys: [{ t: 0, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [0, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [0, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "lowerLeg_R", keys: [{ t: 0, rot: [-10.34, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [-10.34, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [-10.34, 0, 0], pos: [0, 0, 0] }] },
+                            { bone: "lowerLeg_L", keys: [{ t: 0, rot: [-6.7, 0, 0], pos: [0, 0, 0] }, { t: 1, rot: [-6.7, 0, 0], pos: [0, 0, 0] }, { t: 2, rot: [-6.7, 0, 0], pos: [0, 0, 0] }] }
+                        ]
+                    }
+                ];
+
+                return {
+                    bones,
+                    pose: Object.assign({}, defaultPose),
+                    posePos: Object.assign({}, defaultPosePos),
+                    customAnims: JSON.parse(JSON.stringify(defaultCustomAnims)),
+                    binding: defaultBindingFor(voxels),
+                    type: 'humanoid'
+                };
             }
 
             // Modalita' di legatura predefinita per un rig appena creato.

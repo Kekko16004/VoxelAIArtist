@@ -223,22 +223,18 @@ def build_humanoid_skeleton(voxels):
     # una sola verticale, cosi' a riposo ogni arto e' DRITTO (niente gomiti
     # piegati che poi la posa non riesce a raddrizzare).
     hips_y = min_y + 0.44 * H
-    spine_y = min_y + 0.57 * H
-    chest_y = min_y + 0.66 * H
-    shld_y = min_y + 0.80 * H
-    neck_y = min_y + 0.84 * H
-    head_y = min_y + 0.88 * H
+    spine_y = min_y + 0.53 * H
+    chest_y = min_y + 0.64 * H
+    shld_y = min_y + 0.74 * H
+    neck_y = min_y + 0.75 * H
+    head_y = min_y + 0.79 * H
     head_top_y = min_y + 0.97 * H
-    knee_y = min_y + 0.28 * H
-    ankle_y = min_y + 0.09 * H
+    knee_y = min_y + 0.26 * H
+    ankle_y = min_y + 0.11 * H
 
     bones = []
 
     def add(name, parent, head, tail, helper=False):
-        # `helper` marca le ossa-punta (headTip / handTip / toeTip): esistono SOLO
-        # perche' Blender orienti le foglie della catena. Non ricevono voxel: prima
-        # un handTip_R si rubava le dita, e nessuna clip lo animava (mano che resta
-        # indietro nell'export).
         bd = {"name": name, "parent": parent, "head": list(head), "tail": list(tail)}
         if helper:
             bd["helper"] = True
@@ -252,13 +248,6 @@ def build_humanoid_skeleton(voxels):
     head = add("head", neck, [cx, head_y, cz], [cx, head_top_y, cz])
     add("headTip", head, [cx, head_top_y, cz], [cx, max_y, cz], True)
 
-    # Bordo del torso appena sotto le braccia -> dove la spalla si attacca.
-    # ATTENZIONE: in T-pose le braccia stanno DENTRO questa fascia, quindi il
-    # massimo X grezzo qui e' la PUNTA DEL DITO, non il costato (misurato sul
-    # Tecnico_del_Video: torsoMaxR=105 su un modello che arriva a x=108, con
-    # shoulder finito sul polso). Le braccia sono righe strette e larghissime, il
-    # torso righe larghe e continue: si prende la larghezza MEDIANA delle righe e
-    # si scartano quelle che la sfondano.
     torso_band_lo, torso_band_hi = min_y + 0.55 * H, min_y + 0.68 * H
     row_span = {}
     for v in voxels:
@@ -284,7 +273,6 @@ def build_humanoid_skeleton(voxels):
         if r[0] < torso_min_l:
             torso_min_l = r[0]
 
-    # Voxel piu' esterno del braccio (punta del dito) + centro verticale vero.
     arm_outer_r, arm_outer_l = torso_max_r, torso_min_l
     arm_y_sum = arm_y_n = 0
     for v in voxels:
@@ -304,7 +292,7 @@ def build_humanoid_skeleton(voxels):
     sh_rx, sh_lx = torso_max_r, torso_min_l
     reach_r = max(arm_outer_r - sh_rx, 0.18 * W)
     reach_l = max(sh_lx - arm_outer_l, 0.18 * W)
-    f_u, f_f, f_h = 0.42, 0.34, 0.18
+    f_u, f_f, f_h = 0.375, 0.375, 0.19
     r_e = sh_rx + reach_r * f_u
     r_w = r_e + reach_r * f_f
     r_h = r_w + reach_r * f_h
@@ -324,9 +312,6 @@ def build_humanoid_skeleton(voxels):
     ha_l = add("hand_L", fa_l, [l_w, arm_y, cz], [l_h, arm_y, cz])
     add("handTip_L", ha_l, [l_h, arm_y, cz], [arm_outer_l, arm_y, cz], True)
 
-    # Gambe attaccate DIRETTAMENTE a hips. Le vecchie `pelvis_L/R` erano stub di
-    # lunghezza quasi nulla all'inguine: impossibili da cliccare, non animate da
-    # nessuna clip, e in legatura si rubavano i voxel del cavallo.
     ul_r = add("upperLeg_R", hips, [leg_xr, hips_y, cz], [leg_xr, knee_y, cz])
     ll_r = add("lowerLeg_R", ul_r, [leg_xr, knee_y, cz], [leg_xr, ankle_y, ankle_z])
     ft_r = add("foot_R", ll_r, [leg_xr, ankle_y, ankle_z], [leg_xr, min_y, toe_z])
@@ -337,7 +322,107 @@ def build_humanoid_skeleton(voxels):
     ft_l = add("foot_L", ll_l, [leg_xl, ankle_y, ankle_z], [leg_xl, min_y, toe_z])
     add("toeTip_L", ft_l, [leg_xl, min_y, toe_z], [leg_xl, min_y, toe_tip_z], True)
 
-    return {"bones": bones, "pose": {}, "posePos": {},
+    default_pose = {
+        "hips": [0, 0, 0],
+        "spine": [0.08726646259971649, 0, 0],
+        "chest": [0.17453292519943295, 0, 0],
+        "head": [-0.08726646259971649, 0, 0],
+        "upperLeg_R": [0, 0, -0.007504915783575617],
+        "lowerLeg_R": [-0.1804670446562137, 0, 0],
+        "foot_R": [0, 0.2617993877991494, 0],
+        "upperLeg_L": [0, 0, -0.04974188368183839],
+        "lowerLeg_L": [-0.1169370598836201, 0, 0],
+        "foot_L": [0, -0.2617993877991494, 0],
+        "upperArm_R": [-2.845632641629237, -1.118885906249436, -0.11442588799980974],
+        "forearm_R": [0.2617993877991494, 0, 0],
+        "upperArm_L": [-0.17453292519943292, -0.3490658503988659, 0.30141836181942067],
+        "forearm_L": [-1.9198621771937625, 1.1627383476786222, -3.141592653589793],
+        "neck": [0, 0, 0],
+        "shoulder_R": [0, 0, 0],
+        "hand_R": [0, 0, 0],
+        "shoulder_L": [0, 0, 0],
+        "hand_L": [0, 0, 0]
+    }
+
+    default_pose_pos = {
+        "hips": [0, 0.05, 0],
+        "upperArm_L": [0, 0, 0],
+        "upperArm_R": [0, 0, 0],
+        "spine": [0, 0, 0],
+        "chest": [0, 0, 0],
+        "head": [0, 0, 0],
+        "upperLeg_R": [0, 0, 0],
+        "lowerLeg_R": [0, 0, 0],
+        "foot_R": [0, 0, 0],
+        "upperLeg_L": [0, 0, 0],
+        "lowerLeg_L": [0, 0, 0],
+        "foot_L": [0, 0, 0],
+        "forearm_R": [0, 0, 0],
+        "forearm_L": [0, 0, 0],
+        "neck": [0, 0, 0],
+        "shoulder_R": [0, 0, 0],
+        "hand_R": [0, 0, 0],
+        "shoulder_L": [0, 0, 0],
+        "hand_L": [0, 0, 0]
+    }
+
+    default_custom_anims = [
+        {
+            "name": "NaturalWalk",
+            "duration": 1,
+            "loop": True,
+            "tracks": [
+                {"bone": "hips", "keys": [{"t": 0, "pos": [0, -0.04, 0], "rot": [0, 5, 2]}, {"t": 0.25, "pos": [0, 0.08, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, -0.04, 0], "rot": [0, -5, -2]}, {"t": 0.75, "pos": [0, 0.08, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, -0.04, 0], "rot": [0, 5, 2]}]},
+                {"bone": "spine", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [2, -4, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [2, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [2, 4, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [2, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [2, -4, 0]}]},
+                {"bone": "chest", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [0, -3, -1]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [0, 3, 1]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [0, -3, -1]}]},
+                {"bone": "head", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [-2, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [1, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [-2, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [1, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [-2, 0, 0]}]},
+                {"bone": "upperLeg_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [30, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [-30, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [10, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [30, 0, 0]}]},
+                {"bone": "lowerLeg_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [-5, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [-15, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [-10, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [-60, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [-5, 0, 0]}]},
+                {"bone": "foot_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [-15, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [25, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [-5, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [-15, 0, 0]}]},
+                {"bone": "upperLeg_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [-30, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [10, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [30, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [-30, 0, 0]}]},
+                {"bone": "lowerLeg_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [-10, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [-60, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [-5, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [-15, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [-10, 0, 0]}]},
+                {"bone": "foot_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [25, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [-5, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [-15, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [25, 0, 0]}]},
+                {"bone": "upperArm_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [-30, 0, -78]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, -78]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [30, 0, -78]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, -78]}, {"t": 1, "pos": [0, 0, 0], "rot": [-30, 0, -78]}]},
+                {"bone": "forearm_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [15, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [25, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [45, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [25, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [15, 0, 0]}]},
+                {"bone": "upperArm_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [30, 0, 78]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 78]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [-30, 0, 78]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 78]}, {"t": 1, "pos": [0, 0, 0], "rot": [30, 0, 78]}]},
+                {"bone": "forearm_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [45, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [25, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [15, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [25, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [45, 0, 0]}]},
+                {"bone": "neck", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [0, 0, 0]}]},
+                {"bone": "shoulder_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [0, 0, 0]}]},
+                {"bone": "hand_R", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [0, 0, 0]}]},
+                {"bone": "shoulder_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [0, 0, 0]}]},
+                {"bone": "hand_L", "keys": [{"t": 0, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.25, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.5, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 0.75, "pos": [0, 0, 0], "rot": [0, 0, 0]}, {"t": 1, "pos": [0, 0, 0], "rot": [0, 0, 0]}]}
+            ]
+        },
+        {
+            "name": "Dux Salute",
+            "duration": 2,
+            "loop": True,
+            "tracks": [
+                {"bone": "hips", "keys": [{"t": 0, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, 0], "pos": [0, 0.05, 0]}, {"t": 2, "rot": [0, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "spine", "keys": [{"t": 0, "rot": [5, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [5, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [5, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "chest", "keys": [{"t": 0, "rot": [10, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [10, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [10, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "head", "keys": [{"t": 0, "rot": [-5, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [-5, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [-5, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "upperArm_R", "keys": [{"t": 0, "rot": [-2.22, -51.81, -53.97], "pos": [0, 0, 0]}, {"t": 1, "rot": [-89.55, -66.74, 65.32], "pos": [0, 0, 0]}, {"t": 2, "rot": [-2.22, -51.81, -53.97], "pos": [0, 0, 0]}]},
+                {"bone": "forearm_R", "keys": [{"t": 0, "rot": [15, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [15, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [15, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "upperArm_L", "keys": [{"t": 0, "rot": [-10, -20, 68.41], "pos": [0, 0, 0]}, {"t": 1, "rot": [-10, -20, 17.27], "pos": [0, 0, 0]}, {"t": 2, "rot": [-10, -20, 68.41], "pos": [0, 0, 0]}]},
+                {"bone": "forearm_L", "keys": [{"t": 0, "rot": [70, 20, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [-110, 66.62, -180], "pos": [0, 0, 0]}, {"t": 2, "rot": [70, 20, 0], "pos": [0, 0, 0]}]},
+                {"bone": "upperLeg_R", "keys": [{"t": 0, "rot": [0, 0, -0.43], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, -0.43], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, -0.43], "pos": [0, 0, 0]}]},
+                {"bone": "upperLeg_L", "keys": [{"t": 0, "rot": [0, 0, -2.85], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, -2.85], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, -2.85], "pos": [0, 0, 0]}]},
+                {"bone": "foot_R", "keys": [{"t": 0, "rot": [0, 15, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 15, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 15, 0], "pos": [0, 0, 0]}]},
+                {"bone": "foot_L", "keys": [{"t": 0, "rot": [0, -15, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, -15, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, -15, 0], "pos": [0, 0, 0]}]},
+                {"bone": "neck", "keys": [{"t": 0, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "shoulder_R", "keys": [{"t": 0, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "hand_R", "keys": [{"t": 0, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "shoulder_L", "keys": [{"t": 0, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "hand_L", "keys": [{"t": 0, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [0, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [0, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "lowerLeg_R", "keys": [{"t": 0, "rot": [-10.34, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [-10.34, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [-10.34, 0, 0], "pos": [0, 0, 0]}]},
+                {"bone": "lowerLeg_L", "keys": [{"t": 0, "rot": [-6.7, 0, 0], "pos": [0, 0, 0]}, {"t": 1, "rot": [-6.7, 0, 0], "pos": [0, 0, 0]}, {"t": 2, "rot": [-6.7, 0, 0], "pos": [0, 0, 0]}]}
+            ]
+        }
+    ]
+
+    return {"bones": bones, "pose": default_pose, "posePos": default_pose_pos,
+            "customAnims": default_custom_anims,
             "binding": default_binding_for(voxels), "type": "humanoid"}
 
 

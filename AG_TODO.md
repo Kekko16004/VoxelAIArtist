@@ -77,13 +77,7 @@
 - [x] fix autosave format unwrap for old/nested saves (100%)
 - [x] fix folder picker native dialog & VoxelAI autosave folder (100%)
 - [x] fix SSE POST 405 error & auto-save JSON on GLB export (100%)
-
-
-
-
-
-
-
+- [x] default humanoid rig tpose stations pose customAnims (100%)
 
 
 
