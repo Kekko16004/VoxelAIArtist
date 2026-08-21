@@ -1119,7 +1119,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, DELETE')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', '*')
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -1469,7 +1469,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_DELETE(self):
-        if self.path == '/api/settings/cookies':
+        if self.path.split('?')[0].rstrip('/') in ('/api/settings/cookies', '/cookies'):
             p = app_settings.get_cookies_path()
             if os.path.exists(p):
                 os.remove(p)
@@ -1721,7 +1721,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": str(e)})
             return
 
-        if self.path == '/api/settings/cookies':
+        if self.path.split('?')[0].rstrip('/') in ('/api/settings/cookies', '/cookies'):
             # Stessa insidia di /api/generate: header assente -> int(None) ->
             # TypeError non catturato -> nessuna risposta al client.
             try:

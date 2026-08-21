@@ -15,6 +15,7 @@ muore a fine richiesta HTTP e la sessione sparisce).
 from __future__ import annotations
 
 import json
+import os
 import sys
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from . import compat
 import mcp.types as types
 
 _mounted = False
@@ -38,7 +40,7 @@ def _cors(resp):
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = (
         "Authorization, Content-Type, Accept, Mcp-Session-Id, "
-        "MCP-Protocol-Version, Last-Event-ID"
+        "MCP-Protocol-Version, Last-Event-ID, *"
     )
     resp.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
     return resp
@@ -299,10 +301,48 @@ def mount(mcp):
             },
         }))
 
+    async def on_cookies(request: Request) -> Response:
+        if request.method == "OPTIONS":
+            return _cors(Response())
+        if request.method == "DELETE":
+            try:
+                p = compat.settings_module().get_cookies_path()
+                if os.path.exists(p):
+                    os.remove(p)
+                return _cors(JSONResponse({"ok": True}))
+            except Exception as e:
+                return _cors(JSONResponse({"error": str(e)}, status_code=500))
+        if request.method == "GET":
+            try:
+                has = compat.settings_module().has_cookies()
+                return _cors(JSONResponse({"ok": True, "has_cookies": has}))
+            except Exception as e:
+                return _cors(JSONResponse({"error": str(e)}, status_code=500))
+        if request.method == "POST":
+            try:
+                data = await request.json()
+                compat.settings_module().save_cookies(data)
+                return _cors(JSONResponse({"ok": True}))
+            except Exception as e:
+                return _cors(JSONResponse({"error": str(e)}, status_code=500))
+        return _cors(Response(status_code=405))
+
     for path, name in (("/mcp", "voxelai_mcp"), ("/mcp/", "voxelai_mcp_slash")):
         mcp._custom_starlette_routes.append(Route(
             path,
             endpoint=on_mcp,
+            methods=["GET", "POST", "DELETE", "OPTIONS"],
+            name=name,
+        ))
+    for path, name in (
+        ("/cookies", "voxelai_cookies"),
+        ("/cookies/", "voxelai_cookies_slash"),
+        ("/api/settings/cookies", "voxelai_api_cookies"),
+        ("/api/settings/cookies/", "voxelai_api_cookies_slash"),
+    ):
+        mcp._custom_starlette_routes.append(Route(
+            path,
+            endpoint=on_cookies,
             methods=["GET", "POST", "DELETE", "OPTIONS"],
             name=name,
         ))
