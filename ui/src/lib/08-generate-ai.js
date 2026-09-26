@@ -8,8 +8,8 @@
             // Catalogo del provider ATTIVO. Non e' piu' una lista Gemini fissa:
             // con una chiave Grok qui devono comparire i modelli xAI.
             const geminiModels = [
-                { val: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
-                { val: "gemini-3.5-flash", label: "Gemini 3.5 Flash" }
+                { val: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+                { val: "gemini-3.1-pro", label: "Gemini 3.1 Pro" }
             ];
             let aiModelCatalog = geminiModels.map(m => ({ id: m.val, label: m.label }));
 
@@ -270,6 +270,12 @@
                             loadSceneFromParsed(data);
                         }
                         buildModel();
+                        const isHumanoid = (toggleHumanoid && toggleHumanoid.checked) ||
+                            (data && ((data.voxels && data.voxels.some(v => v.part && /^(testa|head|torso|braccio|arm|gamba|leg)/i.test(v.part))) ||
+                                      (data.parts && Object.keys(data.parts).some(p => /^(testa|head|torso|braccio|arm|gamba|leg)/i.test(p)))));
+                        if (isHumanoid && typeof autoRigActiveModel === 'function') {
+                            autoRigActiveModel('humanoid', false);
+                        }
                     })
                     .catch(err => {
                         alert(t('generate.errFailed', { msg: err.message }));

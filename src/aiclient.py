@@ -168,6 +168,86 @@ def _interactive_backoff():
     return waits
 
 
+# Gemini (e altri chat) a volte rispondono in prosa invece che in JSON:
+# "Non posso assisterti, poiche' sono solo un modello linguistico...".
+# Non e' un errore HTTP, quindi il retry di rete non lo vede. E' un fallimento
+# di FORMATO: la scena resta vuota. La cura misurata (PixelAIEditor) e' inquadrare
+# il compito come compilatore di dati, e ritentare UNA volta con un nudge se
+# la risposta e' un rifiuto o non contiene JSON. Un jailbreak (DAN) non va
+# aggiunto: peggiora il filtro e non produce ops.
+_REFUSAL_HINTS = (
+    "non posso assisterti",
+    "non posso aiutarti",
+    "sono solo un modello",
+    "sono un modello linguistico",
+    "non ho la capacita",
+    "i'm just a language model",
+    "i am just a language model",
+    "i'm only a language model",
+    "as a language model",
+    "as an ai language model",
+    "cannot assist",
+    "can't assist",
+    "i cannot help with that",
+    "i'm unable to",
+    "i am unable to",
+    "i can't help with",
+)
+
+_JSON_RETRY_NUDGE = (
+    "\n\nOUTPUT JSON ONLY. No prose, no refusal. A ```json block with "
+    "metadata, palette and ops. You are a voxel compiler, not a chatbot."
+)
+
+
+def _fold_ascii(text):
+    out = []
+    for ch in str(text).lower():
+        out.append({
+            "à": "a", "á": "a", "â": "a", "ä": "a",
+            "è": "e", "é": "e", "ê": "e",
+            "ì": "i", "í": "i",
+            "ò": "o", "ó": "o", "ô": "o",
+            "ù": "u", "ú": "u",
+        }.get(ch, ch))
+    return "".join(out)
+
+
+def looks_like_refusal(text):
+    """True se la risposta e' un rifiuto in prosa, non un JSON di ops."""
+    if text is None:
+        return True
+    s = str(text).strip()
+    if not s:
+        return True
+    low = _fold_ascii(s)
+    return any(h in low for h in _REFUSAL_HINTS)
+
+
+def _looks_like_json_payload(text):
+    s = str(text or "")
+    if "```json" in s.lower() or "```JSON" in s:
+        return True
+    return "{" in s and ("ops" in s or "voxels" in s or "palette" in s)
+
+
+def ai_json_text_retrying(final_prompt, model=None, sleep=None, provider=None,
+                          images=None):
+    """Come `ai_answer_text_retrying`, piu' UN ritento se la risposta e' un rifiuto.
+
+    Il ritento di rete (quota/5xx) resta in `ai_answer_text_retrying`. Questo
+    copre il caso in cui il provider 200-ok ma parla invece di compilare.
+    """
+    answer = ai_answer_text_retrying(final_prompt, model, sleep=sleep,
+                                     provider=provider, images=images)
+    if looks_like_refusal(answer) or not _looks_like_json_payload(answer):
+        print("[ai] risposta non-JSON o rifiuto, ritento una volta")
+        answer = ai_answer_text_retrying(
+            str(final_prompt) + _JSON_RETRY_NUDGE, model, sleep=sleep,
+            provider=provider, images=images)
+    return answer
+
+
 def ai_answer_text_retrying(final_prompt, model=None, sleep=None, provider=None,
                             images=None):
     """Come `ai_answer_text` ma ritenta gli errori transitori col backoff.

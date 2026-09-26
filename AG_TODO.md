@@ -78,6 +78,7 @@
 - [x] fix folder picker native dialog & VoxelAI autosave folder (100%)
 - [x] support /cookies alias and wildcard CORS in main.py (100%)
 - [x] add /cookies and /api/settings/cookies route to mcp_server streamable (100%)
+- [x] auto rig part-aware scheletro da parti voxel & auto trigger genera umanoide (100%)
 
 
 

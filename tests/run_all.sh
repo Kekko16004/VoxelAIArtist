@@ -362,6 +362,11 @@ run "Server PixelAIEditor: prompt 2D, /api/texture, cartelle" python3 tests/test
 #       codici non li ha.
 run "Provider AI: registro, dispatch, mascheramento" python3 tests/test_providers.py
 
+# 4z. Generazione: il prompt e' un compilatore JSON (non una chat) e un rifiuto
+#     in prosa ("sono solo un modello linguistico") costa UN ritento, non un
+#     jailbreak. Senza, Gemini 3.8 Flash risponde in chat e la scena resta vuota.
+run "Generazione: compilatore JSON e ritento sul rifiuto" python3 tests/test_generate_compiler.py
+
 # 5. La build rigenera ui/index.html e il bundle e' sintatticamente valido.
 run "Build UI e sintassi bundle" bash -c '
   node ui/build.mjs >/dev/null || exit 1

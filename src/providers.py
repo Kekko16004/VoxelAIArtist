@@ -134,8 +134,8 @@ ANTHROPIC_MODELS = ("claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5")
 # Stessa cosa per Gemini a cookie: il selettore della UI legge QUESTA lista
 # quando il provider attivo e' Gemini, non un array hardcoded nel frontend.
 GEMINI_MODELS = (
+    {"id": "gemini-3.8-flash", "label": "Gemini 3.8 Flash"},
     {"id": "gemini-3.1-pro", "label": "Gemini 3.1 Pro"},
-    {"id": "gemini-3.5-flash", "label": "Gemini 3.5 Flash"},
 )
 
 # Endpoint /v1/models restituisce anche embedding, TTS, immagini: non stanno

@@ -57,6 +57,9 @@
             function applyI18n(root) {
                 root = root || document;
                 root.querySelectorAll('[data-i18n]').forEach(el => {
+                    // Nome modello / status bar: testo VIVO. Riscriverli qui
+                    // azzera "Spada Pixel Art" in "Nessuno" al cambio lingua.
+                    if (el.id === 'modelName' || el.id === 'statusName') return;
                     const k = el.getAttribute('data-i18n');
                     if (k in i18nDict) el.textContent = i18nDict[k];
                     else if (i18nCache.it && k in i18nCache.it) el.textContent = i18nCache.it[k];
@@ -117,6 +120,7 @@
                     // Stesso motivo per l'elenco dei provider AI (26-settings-modal.js):
                     // righe costruite da JS, nate prima dei dizionari.
                     if (typeof window.renderProviderList === 'function') { try { window.renderProviderList(); } catch (e) {} }
+                    if (typeof updateStatusBar === 'function') { try { updateStatusBar(); } catch (e) {} }
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
                     if (sel && sel.value !== code) sel.value = code;

@@ -41,6 +41,7 @@
                 gridSizeEdit.value = `${gSize[0]},${gSize[1]},${gSize[2]}`;
                 voxelCountEl.textContent = voxels.length;
                 visibleCountEl.textContent = visibleVoxels.length;
+                if (typeof updateStatusBar === 'function') updateStatusBar();
 
                 // Palette: usa la funzione condivisa con il renderer incrementale
                 // (28-incremental.js) invece di duplicarne il codice, cosi' le due

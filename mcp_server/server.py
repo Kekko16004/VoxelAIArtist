@@ -556,9 +556,21 @@ def voxel_generate(prompt: str, document: str = "", grid: int = 0,
                           name=name or None,
                           label="Genera: %s" % prompt[:40])
     parts = sorted({p for o in added for p in o.parts()})
+    is_humanoid = bool(humanoid) or any(
+        p.lower().strip() in ("testa", "head", "torso", "bacino", "braccio_r", "braccio_l", "gamba_r", "gamba_l")
+        for p in parts
+    )
+    if is_humanoid:
+        for o in added:
+            try:
+                rig.auto_rig(o, "humanoid")
+            except Exception:
+                pass
     out = "Generato: " + ", ".join(_describe(doc, o) for o in added)
     if parts:
         out += "\nParti nominate: %s." % ", ".join(parts)
+    if is_humanoid and any(o.rig for o in added):
+        out += "\nAuto-rig applicato con successo."
     return out
 
 

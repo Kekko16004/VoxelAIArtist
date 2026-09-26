@@ -57,10 +57,14 @@
                 editHint.textContent = hintsByTool()[tool];
                 clearPreview();
                 renderer.domElement.style.cursor = tool === 'view' ? 'grab' : 'crosshair';
+                if (typeof updateStatusBar === 'function') updateStatusBar();
             }
 
             Object.entries(toolButtons).forEach(([name, btn]) => {
-                btn.addEventListener('click', () => setTool(name));
+                btn.addEventListener('click', () => {
+                    setTool(name);
+                    if (name !== 'view' && typeof switchTab === 'function') switchTab('draw');
+                });
             });
 
             // Tab switching: show one panel at a time. Leaving the Disegna tab drops
@@ -70,7 +74,8 @@
             function switchTab(name) {
                 tabBar.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
                 tabPanels.forEach(p => p.classList.toggle('active', p.dataset.panel === name));
-                if (name !== 'draw' && currentTool !== 'view') setTool('view');
+                if (typeof updateStatusBar === 'function') updateStatusBar();
+                if (name === 'rig' && currentTool !== 'view') setTool('view');
                 // The rig preview replaces the normal voxel view; only show it on the Rig
                 // tab. Leaving the tab restores the standard InstancedMesh rendering (the
                 // rig data stays in memory, so returning re-shows it).

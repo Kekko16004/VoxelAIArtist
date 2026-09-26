@@ -8,7 +8,7 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 
     <!-- Three.js, OrbitControls & GLTFExporter (for rigged .glb export) -->
@@ -33,7 +33,7 @@
         /*
          * ============================================================
          *  TEMA — Design tokens (CSS custom properties)
-         *  Default = tema SCURO (glassmorphism). Il tema CHIARO è un
+         *  Default = tema SCURO millwork (noce + ottone). Il tema CHIARO è un
          *  override completo attivato da  <html data-theme="light">.
          *  Cambio tema: document.documentElement.setAttribute('data-theme','light'|'dark')
          *  (vedi applyTheme() / KEYMAP nel <script> in fondo al file).
@@ -41,82 +41,89 @@
          *  niente colori hardcoded sparsi nel CSS.
          * ============================================================ */
         :root {
-            /* Sfondo & superfici */
-            --bg-gradient: linear-gradient(135deg, #09070f 0%, #120d24 50%, #05030b 100%);
-            --glass-bg: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.07);
-            --glass-border-focus: rgba(71, 85, 105, 0.5);
+            /* Sfondo & superfici — pannelli opachi (MagicaVoxel / Blockbench), non vetro */
+            --bg-gradient: #15140F;
+            --glass-bg: #24221E;
+            --glass-border: #0C0B09;
+            --glass-border-focus: rgba(232, 163, 23, 0.55);
+            --border-inner: #3A3730;
             /* Superfici di input / inset (barre, campi, contenitori interni) */
-            --input-bg: rgba(0, 0, 0, 0.3);
-            --input-bg-strong: rgba(0, 0, 0, 0.5);
-            --inset-bg: rgba(0, 0, 0, 0.25);
-            --overlay-scrim: rgba(10, 10, 12, 0.6);
+            --input-bg: #12110E;
+            --input-bg-strong: #1A1916;
+            --inset-bg: #1A1916;
+            --overlay-scrim: rgba(12, 11, 9, 0.72);
             /* Fondo per HUD/badge SOPRA il canvas 3D: opaco, SENZA backdrop-filter.
                Un blur sopra il canvas WebGL costringe Chromium a ricampionare ogni
                frame durante rotazione/disegno -> flicker. Vedi .canvas-hud. */
-            --hud-bg: rgba(18, 15, 30, 0.92);
+            --hud-bg: #15140F;
             /* Stati hover / attivi / tracce */
-            --hover-bg: rgba(255, 255, 255, 0.05);
-            --hover-bg-strong: rgba(255, 255, 255, 0.1);
-            --track-bg: rgba(255, 255, 255, 0.1);
-            --thumb-color: #ffffff;
-            --swatch-border: rgba(255, 255, 255, 0.2);
-            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-            --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+            --hover-bg: rgba(232, 228, 220, 0.05);
+            --hover-bg-strong: rgba(232, 228, 220, 0.10);
+            --track-bg: #3A3730;
+            --thumb-color: #E8E4DC;
+            --swatch-border: #0C0B09;
+            --scrollbar-thumb: rgba(232, 228, 220, 0.18);
+            --scrollbar-thumb-hover: rgba(232, 228, 220, 0.32);
             /* Testo */
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
-            --text-muted: #9ca3af;
-            --text-on-accent: #ffffff;
-            /* Accenti — grafite neutro (look professionale, monocromo) */
-            --accent-primary: #475569;
-            --accent-secondary: #64748b;
-            --accent-deep: #334155;
-            --accent-cyan: #0ea5e9;
-            --accent-soft: rgba(71, 85, 105, 0.25);
-            --accent-glow: rgba(71, 85, 105, 0.35);
-            --danger: #ef4444;
-            /* Ombre */
-            --shadow-panel: 10px 0 30px rgba(0, 0, 0, 0.5);
-            --shadow-soft: 0 4px 10px rgba(0, 0, 0, 0.3);
-            /* Raggi — estetica "voxel": spigoli netti, quasi squadrati */
-            --radius-sm: 0px;
+            --text-primary: #E8E4DC;
+            --text-secondary: #9A9488;
+            --text-muted: #6F6A60;
+            --text-on-accent: #1A1406;
+            /* Accenti — ottone da banco da falegnameria (non grafite SaaS) */
+            --accent-primary: #E8A317;
+            --accent-secondary: #F0B84A;
+            --accent-deep: #B07A0C;
+            --accent-cyan: #5BA8A0;
+            --accent-soft: rgba(232, 163, 23, 0.22);
+            --accent-glow: rgba(232, 163, 23, 0.35);
+            --danger: #C94A3A;
+            /* Ombre: inset chiaro + drop scuro, due piani */
+            --shadow-panel: inset 0 1px 0 #3A3730, 8px 0 18px rgba(0, 0, 0, 0.45);
+            --shadow-soft: 0 6px 16px rgba(0, 0, 0, 0.45);
+            /* Raggi — 2px, lingua DCC (Blockbench / MagicaVoxel), non rounded-xl */
+            --radius-sm: 2px;
             --radius-md: 2px;
-            --radius-lg: 3px;
+            --radius-lg: 2px;
             --radius-pill: 999px;
             /* Layout */
-            --sidebar-width: 340px;
-            --rightpanel-width: 340px;
-            --topbar-height: 46px;
+            --sidebar-width: 300px;
+            --rightpanel-width: 280px;
+            --topbar-height: 36px;
+            --statusbar-height: 24px;
             /* Tipografia (customizzabile da Impostazioni) */
-            --ui-font: 'Plus Jakarta Sans', sans-serif;
+            --ui-font: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+            --ui-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
             --ui-font-size: 13px;
+            --move-in: 160ms;
+            --move-out: 120ms;
+            --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
         /* ===== TEMA CHIARO ===== leggibile e ad alto contrasto, non un semplice invert */
         :root[data-theme="light"] {
-            --bg-gradient: linear-gradient(135deg, #eef1f8 0%, #e4e8f2 50%, #f5f6fb 100%);
-            --glass-bg: rgba(255, 255, 255, 0.6);
-            --glass-border: rgba(15, 23, 42, 0.12);
-            --glass-border-focus: rgba(71, 85, 105, 0.5);
-            --input-bg: rgba(255, 255, 255, 0.75);
-            --input-bg-strong: #ffffff;
-            --inset-bg: rgba(15, 23, 42, 0.05);
-            --overlay-scrim: rgba(226, 230, 240, 0.7);
-            --hud-bg: rgba(245, 246, 251, 0.94);
-            --hover-bg: rgba(15, 23, 42, 0.05);
-            --hover-bg-strong: rgba(15, 23, 42, 0.1);
-            --track-bg: rgba(15, 23, 42, 0.14);
-            --thumb-color: #ffffff;
-            --swatch-border: rgba(15, 23, 42, 0.2);
-            --scrollbar-thumb: rgba(15, 23, 42, 0.2);
-            --scrollbar-thumb-hover: rgba(15, 23, 42, 0.35);
-            --text-primary: #1e293b;
-            --text-secondary: #5b6472;
-            --text-muted: #64748b;
-            --text-on-accent: #ffffff;
-            --shadow-panel: 6px 0 24px rgba(15, 23, 42, 0.12);
-            --shadow-soft: 0 4px 10px rgba(15, 23, 42, 0.12);
+            --bg-gradient: #EDE6D8;
+            --glass-bg: #F4EEE4;
+            --glass-border: #C9BFAE;
+            --glass-border-focus: rgba(176, 122, 12, 0.55);
+            --border-inner: #E8DFD0;
+            --input-bg: #FFFBF4;
+            --input-bg-strong: #FFFBF4;
+            --inset-bg: #E8DFD0;
+            --overlay-scrim: rgba(42, 36, 28, 0.45);
+            --hud-bg: #EDE6D8;
+            --hover-bg: rgba(42, 36, 28, 0.05);
+            --hover-bg-strong: rgba(42, 36, 28, 0.10);
+            --track-bg: #D9D0C0;
+            --thumb-color: #FFFBF4;
+            --swatch-border: #C9BFAE;
+            --scrollbar-thumb: rgba(42, 36, 28, 0.22);
+            --scrollbar-thumb-hover: rgba(42, 36, 28, 0.38);
+            --text-primary: #2A241C;
+            --text-secondary: #6B6358;
+            --text-muted: #8A8174;
+            --text-on-accent: #1A1406;
+            --shadow-panel: inset 0 1px 0 #FFFBF4, 6px 0 18px rgba(42, 36, 28, 0.10);
+            --shadow-soft: 0 6px 16px rgba(42, 36, 28, 0.12);
         }
 
         * {
@@ -145,16 +152,39 @@
             overflow: hidden;
         }
 
+        /* Status bar — Blockbench: info viva in basso, IBM Plex Mono */
+        .statusbar {
+            height: var(--statusbar-height);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 10px;
+            background: var(--input-bg);
+            border-top: 1px solid var(--glass-border);
+            box-shadow: inset 0 1px 0 var(--border-inner);
+            font-family: var(--ui-font-mono);
+            font-size: 10px;
+            color: var(--text-secondary);
+            z-index: 25;
+        }
+        .statusbar b { color: var(--text-primary); font-weight: 600; }
+        .statusbar .sb-sep {
+            width: 1px; height: 12px; background: var(--border-inner); flex-shrink: 0;
+        }
+        .statusbar .sb-flex { flex: 1; }
+
         /* ===== Barra superiore (File / Import / Export / Impostazioni) ===== */
         .topbar {
             height: var(--topbar-height);
             flex-shrink: 0;
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 0 12px;
-            background: var(--inset-bg);
+            gap: 2px;
+            padding: 0 8px;
+            background: var(--glass-bg);
             border-bottom: 1px solid var(--glass-border);
+            box-shadow: inset 0 -1px 0 var(--border-inner);
             z-index: 30;
         }
 
@@ -162,23 +192,27 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            font-weight: 700;
-            font-size: 13px;
-            margin-right: 8px;
+            font-family: var(--ui-font-mono);
+            font-weight: 600;
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-right: 10px;
             white-space: nowrap;
         }
 
         .topbar .topbar-brand .logo-icon {
-            width: 24px;
-            height: 24px;
+            width: 20px;
+            height: 20px;
             border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            font-size: 14px;
+            font-weight: 700;
+            font-size: 12px;
             color: var(--text-on-accent);
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            background: var(--accent-primary);
+            border: 1px solid var(--accent-deep);
         }
 
         .topbar-spacer { flex: 1; }
@@ -192,16 +226,16 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 7px 12px;
+            padding: 4px 8px;
             border: 1px solid transparent;
             border-radius: var(--radius-sm);
             background: transparent;
             color: var(--text-secondary);
             font-family: inherit;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: color var(--move-in) var(--ease), background var(--move-in) var(--ease);
             white-space: nowrap;
         }
 
@@ -225,10 +259,8 @@
             gap: 2px;
             border-radius: var(--radius-md);
             background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+            box-shadow: inset 0 1px 0 var(--border-inner), var(--shadow-soft);
             z-index: 50;
         }
 
@@ -304,9 +336,7 @@
             overflow-y: auto;
             border-left: 1px solid var(--glass-border);
             background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: -8px 0 30px rgba(0, 0, 0, 0.35);
+            box-shadow: inset 1px 0 0 var(--border-inner), -6px 0 18px rgba(0, 0, 0, 0.35);
             z-index: 10;
         }
 
@@ -358,12 +388,11 @@
         #rightResizer:hover,
         #rightResizer.dragging { background: var(--accent-soft); }
 
-        /* Glassmorphism utility */
+        /* Superficie pannello: opaca, doppio bordo (chiaro interno / scuro esterno) */
         .glass {
             background: var(--glass-bg);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid var(--glass-border);
+            box-shadow: inset 0 0 0 1px var(--border-inner);
             border-radius: var(--radius-lg);
         }
 
@@ -383,11 +412,12 @@
         /* Sidebar Layout */
         .sidebar {
             width: var(--sidebar-width);
+            flex-shrink: 0;
             height: 100%;
-            padding: 20px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 12px;
             z-index: 10;
             box-shadow: var(--shadow-panel);
             border-right: 1px solid var(--glass-border);
@@ -395,37 +425,98 @@
             /* tab content scrolls, header/footer stay put */
         }
 
-        /* Tab bar */
-        .tab-bar {
-            display: flex;
-            gap: 4px;
-            padding: 4px;
-            border-radius: var(--radius-md);
-            background: var(--inset-bg);
-            border: 1px solid var(--glass-border);
-        }
-
-        .tab-btn {
-            flex: 1;
+        /* MagicaVoxel rail: colonna icone a sinistra del workspace */
+        .tool-rail {
+            width: 44px;
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
-            padding: 10px 6px;
-            border: none;
-            border-radius: var(--radius-sm);
+            padding: 8px 6px;
+            background: var(--glass-bg);
+            border-right: 1px solid var(--glass-border);
+            box-shadow: inset -1px 0 0 var(--border-inner);
+            z-index: 11;
+        }
+        .tool-rail .rail-sep {
+            width: 24px;
+            height: 1px;
+            background: var(--border-inner);
+            margin: 4px 0;
+        }
+        .tool-rail .tab-bar {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 0;
+            margin: 0;
+            border: 0;
             background: transparent;
+            height: auto;
+            width: 100%;
+        }
+        .tool-rail .tab-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            flex: 0 0 32px;
+            justify-content: center;
+            border: 1px solid var(--border-inner);
+            background: var(--inset-bg);
+            color: var(--text-secondary);
+        }
+        .tool-rail .tab-btn span { display: none; }
+        .tool-rail .tab-btn.active {
+            background: var(--accent-primary);
+            border-color: var(--accent-deep);
+            color: var(--text-on-accent);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+        }
+        .tool-rail .tool-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            gap: 0;
+        }
+        .tool-rail .tool-btn span { display: none; }
+        .tool-rail .tool-btn svg { width: 16px; height: 16px; }
+
+        /* Mode tabs — icone nella rail MagicaVoxel */
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            padding: 0;
+            margin: 0;
+            border-radius: 0;
+            background: transparent;
+            border: 0;
+            height: auto;
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 0;
+            padding: 0;
+            height: 32px;
+            border: 1px solid var(--border-inner);
+            border-radius: var(--radius-sm);
+            background: var(--inset-bg);
             color: var(--text-secondary);
             font-family: inherit;
             font-size: 11px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: color var(--move-in) var(--ease), background var(--move-in) var(--ease);
         }
 
         .tab-btn svg {
-            width: 18px;
-            height: 18px;
+            width: 13px;
+            height: 13px;
             stroke: currentColor;
             fill: none;
             stroke-width: 2;
@@ -440,9 +531,11 @@
 
         .tab-btn.active {
             color: var(--text-on-accent);
-            background: linear-gradient(135deg, var(--accent-glow), var(--accent-soft));
-            box-shadow: 0 2px 10px var(--accent-soft);
+            background: var(--accent-primary);
+            border-color: var(--accent-deep);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
         }
+        .tool-rail .tab-btn svg { width: 16px; height: 16px; }
 
         /* Scrollable area that holds the active tab's panels */
         .tab-content {
@@ -577,7 +670,8 @@
         .logo-icon {
             width: 32px;
             height: 32px;
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            background: var(--accent-primary);
+            border: 1px solid var(--accent-deep);
             border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
@@ -585,27 +679,24 @@
             font-weight: 700;
             font-size: 18px;
             color: var(--text-on-accent);
-            box-shadow: 0 0 15px var(--accent-glow);
         }
 
         .logo-text {
             font-size: 20px;
             font-weight: 700;
             letter-spacing: -0.5px;
-            background: linear-gradient(to right, var(--text-primary), var(--accent-primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-primary);
         }
 
-        /* Titoli di sezione: taglio "tech/voxel" — monospace, maiuscolo, spaziato */
+        /* Titoli di sezione: taglio DCC — IBM Plex Mono, maiuscolo, spaziato */
         .section-title {
-            font-family: 'Plus Jakarta Sans', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
-            font-size: 11px;
-            font-weight: 700;
+            font-family: var(--ui-font-mono);
+            font-size: 10px;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 0.12em;
             color: var(--text-secondary);
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -613,11 +704,10 @@
 
         .section-title::before {
             content: "";
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             background: var(--accent-primary);
-            border-radius: 1px;
-            box-shadow: 0 0 8px var(--accent-glow);
+            border-radius: 0;
             flex-shrink: 0;
         }
 
@@ -976,26 +1066,26 @@
 
         /* Color Palette Swatches */
         .palette-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            max-height: 120px;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 3px;
+            max-height: 160px;
             overflow-y: auto;
-            padding: 4px;
+            padding: 2px;
         }
 
         .swatch {
-            width: 24px;
-            height: 24px;
-            border-radius: var(--radius-sm);
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 0;
             border: 1px solid var(--swatch-border);
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: outline var(--move-in) var(--ease);
         }
 
         .swatch:hover {
-            transform: scale(1.15) translateY(-2px);
-            box-shadow: var(--shadow-soft);
+            outline: 1px solid var(--accent-primary);
+            outline-offset: -1px;
         }
 
         /* Scheda di un materiale. image-rendering: pixelated perche' una texture
@@ -1492,10 +1582,10 @@
         }
 
         .tool-btn.active {
-            background: linear-gradient(135deg, var(--accent-soft), var(--accent-glow));
-            border-color: var(--glass-border-focus);
+            background: var(--accent-primary);
+            border-color: var(--accent-deep);
             color: var(--text-on-accent);
-            box-shadow: 0 0 12px var(--accent-soft);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
         }
 
         .color-row {
@@ -1586,9 +1676,9 @@
         }
 
         .seg-btn.active {
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-deep));
+            background: var(--accent-primary);
             color: var(--text-on-accent);
-            box-shadow: 0 2px 10px var(--accent-glow);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
         }
 
         /* ===== MULTIGENERAZIONE / ASSET PACK ===== */
@@ -1795,7 +1885,7 @@
             height: 100%;
             width: 0%;
             border-radius: 2px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-deep));
+            background: var(--accent-primary);
             transition: width 0.4s ease;
         }
 
@@ -1899,18 +1989,19 @@
         }
 
         .btn:active {
-            transform: translateY(0) scale(0.98);
+            transform: none;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-deep));
+            background: var(--accent-primary);
             color: var(--text-on-accent);
-            box-shadow: 0 4px 15px rgba(71, 85, 105, 0.3);
+            border: 1px solid var(--accent-deep);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
         }
 
         .btn-primary:hover {
-            box-shadow: 0 6px 20px rgba(71, 85, 105, 0.5);
-            transform: translateY(-1px);
+            background: var(--accent-secondary);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
         }
 
         .btn-secondary {
@@ -1921,14 +2012,13 @@
 
         .btn-secondary:hover {
             background: var(--hover-bg-strong);
-            transform: translateY(-1px);
         }
 
         /* Canvas Container */
         .canvas-container {
-            flex-grow: 1;
+            flex: 1 1 0;
             height: 100%;
-            min-width: 0;
+            min-width: 280px;
             position: relative;
         }
 
@@ -1951,8 +2041,6 @@
             display: flex;
             flex-direction: column;
             background: var(--glass-bg);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
             border-top: 1px solid var(--glass-border);
             color: var(--text-primary);
             font-size: 11.5px;
@@ -2002,9 +2090,9 @@
         .tl-btn:hover:not(:disabled) { background: var(--hover-bg); }
         .tl-btn:disabled { opacity: 0.4; cursor: default; }
         .tl-btn.active {
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-deep));
+            background: var(--accent-primary);
             color: var(--text-on-accent);
-            border-color: transparent;
+            border-color: var(--accent-deep);
         }
 
         .tl-label { color: var(--text-secondary); font-size: 11px; }
@@ -2155,7 +2243,7 @@
         .tl-rowlabel.tl-summary:hover { background: transparent; }
         .tl-rowlabel.tl-rowlabel-sel {
             color: var(--text-on-accent);
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-deep));
+            background: var(--accent-primary);
             font-weight: 700;
         }
 
@@ -2228,9 +2316,9 @@
         }
 
         .gizmo-btn.active {
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-primary));
+            background: var(--accent-primary);
             color: var(--text-on-accent);
-            border-color: transparent;
+            border-color: var(--accent-deep);
         }
 
         /* Floating Tooltip */
@@ -2294,8 +2382,7 @@
             justify-content: center;
             z-index: 10;
             background: var(--overlay-scrim);
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
+            transition: opacity var(--move-in) var(--ease);
         }
 
         .loader-content {
@@ -2311,7 +2398,7 @@
             height: 50px;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px auto;
-            box-shadow: 0 0 15px rgba(71, 85, 105, 0.2);
+            box-shadow: none;
         }
 
         .loader-text {
@@ -2323,7 +2410,7 @@
 
         .loader-subtext {
             font-size: 13px;
-            color: rgba(255, 255, 255, 0.5);
+            color: var(--text-secondary);
         }
 
         /* --- Adattività finestra (T4) ---------------------------------------
@@ -2336,7 +2423,7 @@
         @media (max-width: 900px) {
             :root { --sidebar-width: 280px; }
             .sidebar { padding: 14px; gap: 12px; }
-            .tab-btn { font-size: 10px; padding: 8px 4px; }
+            .tab-btn { font-size: 10px; padding: 0 8px; }
         }
         @media (max-width: 720px) {
             :root { --sidebar-width: 240px; }
@@ -2499,18 +2586,17 @@
 
     <div class="workspace">
 
-    <!-- Sidebar Control Panel: SOLO strumenti (Genera / Disegna / Rig) -->
-    <div class="sidebar glass">
-        <!-- Tab bar -->
+    <!-- MagicaVoxel rail: mode + pennelli sempre visibili, viewport al centro -->
+    <nav class="tool-rail" id="toolRail" data-i18n-title="tools.railLabel" title="Strumenti">
         <div class="tab-bar" id="tabBar">
-            <button class="tab-btn active" data-tab="generate">
+            <button class="tab-btn active" data-tab="generate" data-i18n-title="tabs.generate" title="Genera">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3v18M3 12h18" />
                     <path d="M5 5l3 3M19 5l-3 3M5 19l3-3M19 19l-3-3" />
                 </svg>
                 <span data-i18n="tabs.generate">Genera</span>
             </button>
-            <button class="tab-btn" data-tab="draw">
+            <button class="tab-btn" data-tab="draw" data-i18n-title="tabs.draw" title="Disegna">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 19l7-7 3 3-7 7-3-3z" />
                     <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
@@ -2519,7 +2605,7 @@
                 </svg>
                 <span data-i18n="tabs.draw">Disegna</span>
             </button>
-            <button class="tab-btn" data-tab="rig">
+            <button class="tab-btn" data-tab="rig" data-i18n-title="tabs.rig" title="Rig">
                 <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="4" r="2" />
                     <circle cx="12" cy="20" r="2" />
@@ -2530,7 +2616,46 @@
                 <span data-i18n="tabs.rig">Rig</span>
             </button>
         </div>
+        <div class="rail-sep"></div>
+        <button class="tool-btn active" id="toolView" data-tool="view"
+            title="Solo visualizzazione (nessuna modifica)" data-i18n-title="tools.viewTitle">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span data-i18n="tabs.view">Vista</span>
+        </button>
+        <button class="tool-btn" id="toolPlace" data-tool="place"
+            title="Aggiungi voxel (clic sinistro)" data-i18n-title="tools.placeTitle">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span data-i18n="tools.place">Aggiungi</span>
+        </button>
+        <button class="tool-btn" id="toolDraw" data-tool="draw"
+            title="Disegna: ricolora i voxel col colore attivo (tieni premuto e trascina)" data-i18n-title="tools.drawTitle">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                <path d="M2 2l7.586 7.586" />
+                <circle cx="11" cy="11" r="2" />
+            </svg>
+            <span data-i18n="tabs.draw">Disegna</span>
+        </button>
+        <button class="tool-btn" id="toolPick" data-tool="pick"
+            title="Contagocce: preleva il colore di un voxel" data-i18n-title="tools.pickTitle">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 22l4-1 12-12-3-3L3 18l-1 4z" />
+                <path d="M15 5l3 3" />
+                <path d="M18 2l4 4-3 3-4-4z" />
+            </svg>
+            <span data-i18n="tools.pick">Contagocce</span>
+        </button>
+    </nav>
 
+    <!-- Sidebar Control Panel: SOLO strumenti (Genera / Disegna / Rig) -->
+    <div class="sidebar glass">
         <!-- Scrollable tab content -->
         <div class="tab-content">
             <!-- ===== TAB: GENERA ===== -->
@@ -2957,49 +3082,7 @@
                 <div>
                     <div class="section-title" data-i18n="tools.sectionTitle">Strumenti di Modifica</div>
                     <div class="controls-group glass" style="padding: 16px;">
-                        <div class="tool-grid">
-                            <button class="tool-btn active" id="toolView" data-tool="view"
-                                title="Solo visualizzazione (nessuna modifica)" data-i18n-title="tools.viewTitle">
-                                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                </svg>
-                                <span data-i18n="tabs.view">Vista</span>
-                            </button>
-                            <button class="tool-btn" id="toolPlace" data-tool="place"
-                                title="Aggiungi voxel (clic sinistro)" data-i18n-title="tools.placeTitle">
-                                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                <span data-i18n="tools.place">Aggiungi</span>
-                            </button>
-
-                            <button class="tool-btn" id="toolDraw" data-tool="draw"
-                                title="Disegna: ricolora i voxel col colore attivo (tieni premuto e trascina)" data-i18n-title="tools.drawTitle">
-                                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                                    <path d="M2 2l7.586 7.586" />
-                                    <circle cx="11" cy="11" r="2" />
-                                </svg>
-                                <span data-i18n="tabs.draw">Disegna</span>
-                            </button>
-                            <button class="tool-btn" id="toolPick" data-tool="pick"
-                                title="Contagocce: preleva il colore di un voxel" data-i18n-title="tools.pickTitle">
-                                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M2 22l4-1 12-12-3-3L3 18l-1 4z" />
-                                    <path d="M15 5l3 3" />
-                                    <path d="M18 2l4 4-3 3-4-4z" />
-                                </svg>
-                                <span data-i18n="tools.pick">Contagocce</span>
-                            </button>
-                        </div>
-                        <div class="btn-group" style="margin-top:8px; grid-template-columns:1fr 1fr;">
+                        <div class="btn-group" style="margin-top:0; grid-template-columns:1fr 1fr;">
                             <button class="btn btn-secondary" id="clearAllBtn" style="padding:4px; font-size:11px;"
                                 title="Rimuove tutti i voxel" data-i18n-title="tools.clearAllTitle" data-i18n="tools.clearAll">Svuota Tutto</button>
                             <button class="btn btn-secondary" id="fillFloorBtn" style="padding:4px; font-size:11px;"
@@ -3011,8 +3094,8 @@
                                 <span id="activeMaterialName"
                                     style="font-size:11px; color:var(--accent-primary); max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
                                 <span id="activeColorHex"
-                                    style="font-size:12px; color:var(--text-secondary); font-variant-numeric:tabular-nums;">#6366F1</span>
-                                <input type="color" id="activeColor" value="#6366f1" class="color-input"
+                                    style="font-size:12px; color:var(--text-secondary); font-variant-numeric:tabular-nums;">#E8A317</span>
+                                <input type="color" id="activeColor" value="#E8A317" class="color-input"
                                     title="Scegli il colore da posare" data-i18n-title="tools.activeColorTitle">
                             </div>
                         </div>
@@ -4086,6 +4169,21 @@
 
     </div><!-- /.workspace -->
 
+    <!-- Status bar (Blockbench): mode, nome, voxel, griglia — dati veri, non placeholder -->
+    <div class="statusbar" id="statusBar" data-i18n-title="status.barTitle" title="Stato del modello">
+        <span id="statusMode" data-i18n="tabs.generate">Genera</span>
+        <span class="sb-sep"></span>
+        <span id="statusName" data-i18n="info.nameNone">Nessuno</span>
+        <span class="sb-sep"></span>
+        <span><span data-i18n="info.totalVoxels">Voxel Totali</span> <b id="statusVoxelCount">0</b></span>
+        <span class="sb-sep"></span>
+        <span><span data-i18n="info.visibleVoxels">Voxel Visibili</span> <b id="statusVisibleCount">0</b></span>
+        <span class="sb-sep"></span>
+        <span id="statusGrid">64x64x64</span>
+        <span class="sb-flex"></span>
+        <span id="statusTool" data-i18n="tabs.view">Vista</span>
+    </div>
+
     <!-- ===== Modale Importazione GLB ===== -->
     <div id="importOverlay" style="display:none; position:fixed; inset:0; z-index:90; align-items:center; justify-content:center; background:var(--overlay-scrim); flex-direction:column; gap:16px;">
         <div class="glass" style="width:min(400px, 90%); padding:24px; border-radius:var(--radius-lg); text-align:center; display:flex; flex-direction:column; gap:16px;">
@@ -4258,14 +4356,14 @@
                             <label data-i18n="settings.accent">Colore accento</label>
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <div id="accentPresets" style="display:flex; gap:6px;">
+                                    <button type="button" class="accent-swatch" data-accent="#E8A317" title="Ottone" data-i18n-title="settings.accentBrass" style="background:#E8A317;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#5BA8A0" title="Patina" data-i18n-title="settings.accentPatina" style="background:#5BA8A0;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#C94A3A" title="Cotto" data-i18n-title="settings.accentClay" style="background:#C94A3A;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#6B8E4E" title="Muschio" data-i18n-title="settings.accentMoss" style="background:#6B8E4E;"></button>
+                                    <button type="button" class="accent-swatch" data-accent="#8B5A3C" title="Noce" data-i18n-title="settings.accentWalnut" style="background:#8B5A3C;"></button>
                                     <button type="button" class="accent-swatch" data-accent="#475569" title="Grafite" data-i18n-title="settings.accentGraphite" style="background:#475569;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#6366f1" title="Indaco" data-i18n-title="settings.accentIndigo" style="background:#6366f1;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#0ea5e9" title="Azzurro" data-i18n-title="settings.accentSky" style="background:#0ea5e9;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#10b981" title="Verde" data-i18n-title="settings.accentGreen" style="background:#10b981;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#f59e0b" title="Ambra" data-i18n-title="settings.accentAmber" style="background:#f59e0b;"></button>
-                                    <button type="button" class="accent-swatch" data-accent="#ec4899" title="Magenta" data-i18n-title="settings.accentMagenta" style="background:#ec4899;"></button>
                                 </div>
-                                <input type="color" id="accentColorInput" value="#475569" title="Colore personalizzato" data-i18n-title="settings.accentCustom" style="width:32px; height:28px; padding:2px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--input-bg); cursor:pointer;">
+                                <input type="color" id="accentColorInput" value="#E8A317" title="Colore personalizzato" data-i18n-title="settings.accentCustom" style="width:32px; height:28px; padding:2px; border:1px solid var(--glass-border); border-radius:var(--radius-sm); background:var(--input-bg); cursor:pointer;">
                             </div>
                         </div>
                         <div class="control-row">
@@ -4275,6 +4373,7 @@
                         <div class="control-row">
                             <label data-i18n="settings.font">Carattere</label>
                             <select id="fontSelect" class="field-strong" style="padding:6px; font-size:12px; width:180px;">
+                                <option value="'IBM Plex Sans', 'Segoe UI', sans-serif" data-i18n="settings.fontPlex">IBM Plex Sans</option>
                                 <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans</option>
                                 <option value="system-ui, sans-serif" data-i18n="settings.fontSystem">Sistema</option>
                                 <option value="'Segoe UI', Tahoma, sans-serif">Segoe UI</option>
@@ -4499,7 +4598,7 @@
             // durante rotazione/disegno questo lampeggia. Uno sfondo di scena opaco
             // elimina la ricomposizione per-frame. Il colore viene poi allineato al
             // tema chiaro/scuro da applySceneBackground() (vedi 17-theme.js).
-            scene.background = new THREE.Color(0x0b0913);
+            scene.background = new THREE.Color(0x15140F);
             const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
             camera.position.set(20, 20, 20);
 
@@ -4931,6 +5030,28 @@
             const visibleCountEl = document.getElementById('visibleCount');
             const paletteEl = document.getElementById('palette');
 
+            function updateStatusBar() {
+                const modeEl = document.getElementById('statusMode');
+                const nameEl = document.getElementById('statusName');
+                const voxEl = document.getElementById('statusVoxelCount');
+                const visEl = document.getElementById('statusVisibleCount');
+                const gridEl = document.getElementById('statusGrid');
+                const toolEl = document.getElementById('statusTool');
+                const activeTab = document.querySelector('.tab-btn.active');
+                const tab = activeTab ? activeTab.dataset.tab : 'generate';
+                const tabKey = tab === 'draw' ? 'tabs.draw' : (tab === 'rig' ? 'tabs.rig' : 'tabs.generate');
+                if (modeEl) modeEl.textContent = t(tabKey);
+                const liveName = (currentModelData && currentModelData.metadata && currentModelData.metadata.name)
+                    || (modelNameEl && modelNameEl.textContent)
+                    || t('info.nameNone');
+                if (nameEl) nameEl.textContent = liveName;
+                if (voxEl) voxEl.textContent = (voxelCountEl && voxelCountEl.textContent) || '0';
+                if (visEl) visEl.textContent = (visibleCountEl && visibleCountEl.textContent) || '0';
+                if (gridEl && gridSizeEdit) gridEl.textContent = String(gridSizeEdit.value || '').replace(/,/g, 'x');
+                const toolKeys = { view: 'tabs.view', place: 'tools.place', draw: 'tools.draw', pick: 'tools.pick', remove: 'tools.remove' };
+                if (toolEl) toolEl.textContent = t(toolKeys[currentTool] || 'tabs.view');
+            }
+
             applyGridBtn.addEventListener('click', () => {
                 if (!currentModelData) return;
                 const parts = gridSizeEdit.value.split(',').map(n => parseInt(n.trim()));
@@ -5221,7 +5342,9 @@
 
             window.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
-                const newWidth = Math.max(280, Math.min(window.innerWidth - 50, e.clientX));
+                const rail = document.getElementById('toolRail');
+                const railW = rail ? rail.getBoundingClientRect().width : 0;
+                const newWidth = Math.max(280, Math.min(window.innerWidth - 50, e.clientX - railW));
                 document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
                 resizeCanvas();
             });
@@ -5949,15 +6072,15 @@
                 sceneObjects.forEach(obj => {
                     const isActive = obj.id === activeObjectId;
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px;' +
-                        (isActive ? 'background:rgba(71,85,105,0.28); border:1px solid var(--accent-primary, #475569);'
-                                  : 'background:rgba(255,255,255,0.04); border:1px solid transparent;');
+                    row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:2px; cursor:pointer; font-size:12px;' +
+                        (isActive ? 'background:var(--accent-soft); border:1px solid var(--accent-primary); color:var(--accent-primary);'
+                                  : 'background:transparent; border:1px solid transparent;');
 
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = selectedObjectIds.indexOf(obj.id) !== -1;
                     chk.title = t('objects.selectForMerge');
-                    chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary,#475569);';
+                    chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary);';
                     chk.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         const i = selectedObjectIds.indexOf(obj.id);
@@ -6007,8 +6130,8 @@
                             const isPartSel = isActive && activePartName === partName;
                             const hiddenParts = obj._hiddenParts || {};
                             const partHidden = !!hiddenParts[partName];
-                            partRow.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 8px 4px 28px; cursor:pointer; font-size:11px; border-radius:6px;' +
-                                (isPartSel ? 'background:rgba(71,85,105,0.4); border:1px solid var(--accent-primary,#475569);'
+                            partRow.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 8px 4px 28px; cursor:pointer; font-size:11px; border-radius:2px;' +
+                                (isPartSel ? 'background:var(--accent-soft); border:1px solid var(--accent-primary);'
                                            : 'background:transparent; border:1px solid transparent;');
 
                             const partEye = document.createElement('span');
@@ -6364,6 +6487,7 @@
                 gridSizeEdit.value = `${gSize[0]},${gSize[1]},${gSize[2]}`;
                 voxelCountEl.textContent = voxels.length;
                 visibleCountEl.textContent = visibleVoxels.length;
+                if (typeof updateStatusBar === 'function') updateStatusBar();
 
                 // Palette: usa la funzione condivisa con il renderer incrementale
                 // (28-incremental.js) invece di duplicarne il codice, cosi' le due
@@ -7240,8 +7364,8 @@
             // Catalogo del provider ATTIVO. Non e' piu' una lista Gemini fissa:
             // con una chiave Grok qui devono comparire i modelli xAI.
             const geminiModels = [
-                { val: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
-                { val: "gemini-3.5-flash", label: "Gemini 3.5 Flash" }
+                { val: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+                { val: "gemini-3.1-pro", label: "Gemini 3.1 Pro" }
             ];
             let aiModelCatalog = geminiModels.map(m => ({ id: m.val, label: m.label }));
 
@@ -7502,6 +7626,12 @@
                             loadSceneFromParsed(data);
                         }
                         buildModel();
+                        const isHumanoid = (toggleHumanoid && toggleHumanoid.checked) ||
+                            (data && ((data.voxels && data.voxels.some(v => v.part && /^(testa|head|torso|braccio|arm|gamba|leg)/i.test(v.part))) ||
+                                      (data.parts && Object.keys(data.parts).some(p => /^(testa|head|torso|braccio|arm|gamba|leg)/i.test(p)))));
+                        if (isHumanoid && typeof autoRigActiveModel === 'function') {
+                            autoRigActiveModel('humanoid', false);
+                        }
                     })
                     .catch(err => {
                         alert(t('generate.errFailed', { msg: err.message }));
@@ -7547,7 +7677,7 @@
             // 'pick' (eyedropper). Left click performs the tool's action; a live preview
             // shows a green ghost cube for placement and a red outline for removal.
             let currentTool = 'view';
-            let activeColorHex = '#6366F1';
+            let activeColorHex = '#E8A317';
             let symmetryAxis = 'none';  // 'none' | 'x' | 'y' | 'z' — mirror edits across model center
             const raycaster = new THREE.Raycaster();
             const pointer = new THREE.Vector2();
@@ -7917,10 +8047,14 @@
                 editHint.textContent = hintsByTool()[tool];
                 clearPreview();
                 renderer.domElement.style.cursor = tool === 'view' ? 'grab' : 'crosshair';
+                if (typeof updateStatusBar === 'function') updateStatusBar();
             }
 
             Object.entries(toolButtons).forEach(([name, btn]) => {
-                btn.addEventListener('click', () => setTool(name));
+                btn.addEventListener('click', () => {
+                    setTool(name);
+                    if (name !== 'view' && typeof switchTab === 'function') switchTab('draw');
+                });
             });
 
             // Tab switching: show one panel at a time. Leaving the Disegna tab drops
@@ -7930,7 +8064,8 @@
             function switchTab(name) {
                 tabBar.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
                 tabPanels.forEach(p => p.classList.toggle('active', p.dataset.panel === name));
-                if (name !== 'draw' && currentTool !== 'view') setTool('view');
+                if (typeof updateStatusBar === 'function') updateStatusBar();
+                if (name === 'rig' && currentTool !== 'view') setTool('view');
                 // The rig preview replaces the normal voxel view; only show it on the Rig
                 // tab. Leaving the tab restores the standard InstancedMesh rendering (the
                 // rig data stays in memory, so returning re-shows it).
@@ -9180,15 +9315,72 @@
             }
 
             // --- Auto-skeleton ------------------------------------------------------
-            // Build a humanoid skeleton fitted to the voxel bounds, with a few measured
-            // refinements (leg split, arm reach). Falls back to a generic chain when the
-            // shape doesn't look humanoid enough.
+            const KNOWN_PART_BONES = {
+                testa: ['head', 'headTip', 'neck'], head: ['head', 'headTip', 'neck'], capo: ['head', 'headTip', 'neck'],
+                collo: ['neck', 'head', 'chest'], neck: ['neck', 'head', 'chest'],
+                torso: ['chest', 'spine', 'neck'], busto: ['chest', 'spine', 'neck'], chest: ['chest', 'spine', 'neck'], body: ['chest', 'spine', 'neck'],
+                bacino: ['hips', 'spine'], hips: ['hips', 'spine'], pelvis: ['hips', 'spine'], vita: ['hips', 'spine'],
+                braccio_r: ['upperArm_R', 'forearm_R', 'shoulder_R', 'hand_R', 'handTip_R'], arm_r: ['upperArm_R', 'forearm_R', 'shoulder_R', 'hand_R', 'handTip_R'], upperarm_r: ['upperArm_R', 'shoulder_R', 'forearm_R'], avambraccio_r: ['forearm_R', 'upperArm_R', 'hand_R'], forearm_r: ['forearm_R', 'upperArm_R', 'hand_R'], mano_r: ['hand_R', 'handTip_R', 'forearm_R'], hand_r: ['hand_R', 'handTip_R', 'forearm_R'], spalla_r: ['shoulder_R', 'chest', 'upperArm_R'], shoulder_r: ['shoulder_R', 'chest', 'upperArm_R'],
+                braccio_l: ['upperArm_L', 'forearm_L', 'shoulder_L', 'hand_L', 'handTip_L'], arm_l: ['upperArm_L', 'forearm_L', 'shoulder_L', 'hand_L', 'handTip_L'], upperarm_l: ['upperArm_L', 'shoulder_L', 'forearm_L'], avambraccio_l: ['forearm_L', 'upperArm_L', 'hand_L'], forearm_l: ['forearm_L', 'upperArm_L', 'hand_L'], mano_l: ['hand_L', 'handTip_L', 'forearm_L'], hand_l: ['hand_L', 'handTip_L', 'forearm_L'], spalla_l: ['shoulder_L', 'chest', 'upperArm_L'], shoulder_l: ['shoulder_L', 'chest', 'upperArm_L'],
+                gamba_r: ['upperLeg_R', 'lowerLeg_R', 'foot_R', 'toeTip_R'], leg_r: ['upperLeg_R', 'lowerLeg_R', 'foot_R', 'toeTip_R'], upperleg_r: ['upperLeg_R', 'lowerLeg_R'], coscia_r: ['upperLeg_R', 'lowerLeg_R'], lowerleg_r: ['lowerLeg_R', 'upperLeg_R', 'foot_R'], stinco_r: ['lowerLeg_R', 'upperLeg_R', 'foot_R'], piede_r: ['foot_R', 'toeTip_R', 'lowerLeg_R'], foot_r: ['foot_R', 'toeTip_R', 'lowerLeg_R'],
+                gamba_l: ['upperLeg_L', 'lowerLeg_L', 'foot_L', 'toeTip_L'], leg_l: ['upperLeg_L', 'lowerLeg_L', 'foot_L', 'toeTip_L'], upperleg_l: ['upperLeg_L', 'lowerLeg_L'], coscia_l: ['upperLeg_L', 'lowerLeg_L'], lowerleg_l: ['lowerLeg_L', 'upperLeg_L', 'foot_L'], stinco_l: ['lowerLeg_L', 'upperLeg_L', 'foot_L'], piede_l: ['foot_L', 'toeTip_L', 'lowerLeg_L'], foot_l: ['foot_L', 'toeTip_L', 'lowerLeg_L']
+            };
+
             function buildHumanoidSkeleton(voxels) {
                 const b = voxelBounds(voxels);
                 const H = b.h || 1, W = b.w || 1;
                 const cx = b.cx, cz = b.cz, minY = b.minY, maxY = b.maxY;
 
-                // Measure leg centers from the bottom 20% of layers (two X clusters).
+                let partMap = null;
+                for (let i = 0; i < voxels.length; i++) {
+                    const p = voxels[i].part;
+                    if (p) {
+                        if (!partMap) partMap = new Map();
+                        const key = p.toLowerCase();
+                        let pb = partMap.get(key);
+                        if (!pb) {
+                            pb = { minX: voxels[i].x, maxX: voxels[i].x, minY: voxels[i].y, maxY: voxels[i].y, minZ: voxels[i].z, maxZ: voxels[i].z, sumX: 0, sumY: 0, sumZ: 0, count: 0 };
+                            partMap.set(key, pb);
+                        }
+                        if (voxels[i].x < pb.minX) pb.minX = voxels[i].x;
+                        if (voxels[i].x > pb.maxX) pb.maxX = voxels[i].x;
+                        if (voxels[i].y < pb.minY) pb.minY = voxels[i].y;
+                        if (voxels[i].y > pb.maxY) pb.maxY = voxels[i].y;
+                        if (voxels[i].z < pb.minZ) pb.minZ = voxels[i].z;
+                        if (voxels[i].z > pb.maxZ) pb.maxZ = voxels[i].z;
+                        pb.sumX += voxels[i].x; pb.sumY += voxels[i].y; pb.sumZ += voxels[i].z;
+                        pb.count++;
+                    }
+                }
+                const getPb = (names) => {
+                    if (!partMap) return null;
+                    for (const n of names) {
+                        const pb = partMap.get(n.toLowerCase());
+                        if (pb && pb.count) {
+                            return {
+                                ...pb,
+                                cx: pb.sumX / pb.count,
+                                cy: pb.sumY / pb.count,
+                                cz: pb.sumZ / pb.count
+                            };
+                        }
+                    }
+                    return null;
+                };
+
+                const pHead = getPb(['testa', 'head', 'capo']);
+                const pNeck = getPb(['collo', 'neck']);
+                const pTorso = getPb(['torso', 'busto', 'chest', 'body']);
+                const pHips = getPb(['bacino', 'hips', 'pelvis', 'vita']);
+                const pLegR = getPb(['gamba_r', 'leg_r', 'upperleg_r', 'gamba_destra']);
+                const pLegL = getPb(['gamba_l', 'leg_l', 'upperleg_l', 'gamba_sinistra']);
+                const pFootR = getPb(['piede_r', 'foot_r', 'piede_destro']);
+                const pFootL = getPb(['piede_l', 'foot_l', 'piede_sinistro']);
+                const pArmR = getPb(['braccio_r', 'arm_r', 'upperarm_r', 'braccio_destro']);
+                const pArmL = getPb(['braccio_l', 'arm_l', 'upperarm_l', 'braccio_sinistro']);
+                const pHandR = getPb(['mano_r', 'hand_r', 'mano_destro', 'mano_destra']);
+                const pHandL = getPb(['mano_l', 'hand_l', 'mano_sinistro', 'mano_sinistra']);
+
                 const legBandTop = minY + 0.20 * H;
                 let lSum = 0, lN = 0, rSum = 0, rN = 0;
                 voxels.forEach(v => {
@@ -9197,17 +9389,13 @@
                         else if (v.x > cx) { rSum += v.x; rN++; }
                     }
                 });
-                const legXL = lN ? lSum / lN : cx - 0.20 * W;
-                const legXR = rN ? rSum / rN : cx + 0.20 * W;
+                let legXL = lN ? lSum / lN : cx - 0.20 * W;
+                let legXR = rN ? rSum / rN : cx + 0.20 * W;
+                if (pLegL) legXL = pLegL.cx;
+                if (pLegR) legXR = pLegR.cx;
 
-                // Arm column X: the CENTER of the arm voxel mass on each side (not the
-                // widest extent, which catches shoulders/jacket and pushes the bone off the
-                // arm). We take the arms' vertical band and average X of the voxels that sit
-                // clearly out to each side of the torso, so the arm bone runs dead-straight
-                // down through the middle of the arm. Both upper- and lower-arm share this X,
-                // so the whole arm is one perfectly vertical line.
                 const armBandLo = minY + 0.45 * H, armBandHi = minY + 0.82 * H;
-                const sideGap = 0.18 * W;   // how far from center a voxel must be to count as "arm"
+                const sideGap = 0.18 * W;
                 let lxSum = 0, lxN = 0, rxSum = 0, rxN = 0;
                 voxels.forEach(v => {
                     if (v.y >= armBandLo && v.y <= armBandHi) {
@@ -9215,10 +9403,7 @@
                         else if (v.x >= cx + sideGap) { rxSum += v.x; rxN++; }
                     }
                 });
-                const armXL = lxN ? Math.round(lxSum / lxN) : Math.round(cx - 0.32 * W);
-                const armXR = rxN ? Math.round(rxSum / rxN) : Math.round(cx + 0.32 * W);
 
-                // Feet point forward: measure whether feet stick out more towards minZ or maxZ relative to cz.
                 const footBandTop = minY + 0.12 * H;
                 let footZmin = cz, footZmax = cz;
                 voxels.forEach(v => {
@@ -9227,18 +9412,11 @@
                         if (v.z > footZmax) footZmax = v.z;
                     }
                 });
-                // Il confronto va fatto sul CENTRO DEL PIEDE, non sul cz di tutto il corpo:
-                // capelli lunghi, zaini e visori spostano cz indietro e falsano il verso.
                 const footZmid = (footZmin + footZmax) / 2;
                 const distMin = Math.abs(footZmid - footZmin);
                 const distMax = Math.abs(footZmax - footZmid);
                 let facesNegZ = (distMin > distMax + 0.5);
                 if (Math.abs(distMin - distMax) <= 0.5) {
-                    // Piede simmetrico (scarponi a scatola): il piede non dice nulla, allora
-                    // lo chiediamo alla TESTA. Il viso e' piatto e la nuca/i capelli sporgono,
-                    // quindi la massa della testa sta dietro: se il baricentro in Z della
-                    // testa e' oltre la sua meta', la faccia guarda verso Z BASSO.
-                    // Misurato sul Tecnico_del_Video: testa z 25..38, mid 31.5, com 32.0.
                     let hzMin = Infinity, hzMax = -Infinity, hzSum = 0, hzN = 0;
                     const headBandLo = minY + 0.85 * H;
                     voxels.forEach(v => {
@@ -9252,24 +9430,57 @@
                         if (hzSum / hzN > hzMid + 0.15) facesNegZ = true;
                     }
                 }
+                if (pFootR || pFootL) {
+                    const pf = pFootR || pFootL;
+                    if (Math.abs(pf.cz - cz) > 0.3) {
+                        facesNegZ = pf.cz < cz;
+                    }
+                }
                 const ankleZ = cz;
                 const toeZ = facesNegZ ? footZmin : ((footZmax > cz) ? footZmax : cz + 0.15 * (b.d || 1));
                 const toeTipZ = facesNegZ ? (toeZ - 0.4) : (toeZ + 0.4);
 
-                // Vertical stations (fractions of height). Arm/leg joints line up on a single
-                // vertical so every limb is dead straight in the rest pose (no bent elbows).
-                const hipsY = minY + 0.44 * H;
-                const spineY = minY + 0.53 * H;
-                const chestY = minY + 0.64 * H;
-                const shldY = minY + 0.74 * H;
-                const neckY = minY + 0.75 * H;
-                const headY = minY + 0.79 * H;
-                const headTopY = minY + 0.97 * H;
-                const elbowY = minY + 0.66 * H;
-                const wristY = minY + 0.52 * H;
-                const handY = minY + 0.45 * H;
-                const kneeY = minY + 0.26 * H;
-                const ankleY = minY + 0.11 * H;
+                let hipsY = minY + 0.44 * H;
+                let spineY = minY + 0.53 * H;
+                let chestY = minY + 0.64 * H;
+                let shldY = minY + 0.74 * H;
+                let neckY = minY + 0.75 * H;
+                let headY = minY + 0.79 * H;
+                let headTopY = minY + 0.97 * H;
+                let kneeY = minY + 0.26 * H;
+                let ankleY = minY + 0.11 * H;
+
+                if (pHead) {
+                    headTopY = Math.max(pHead.maxY - 0.5, pHead.minY + 1);
+                    headY = pHead.minY;
+                }
+                if (pNeck) {
+                    neckY = pNeck.minY;
+                    headY = Math.max(headY, pNeck.maxY);
+                }
+                if (pTorso) {
+                    shldY = pTorso.maxY;
+                    neckY = Math.min(neckY, pTorso.maxY);
+                    chestY = (pTorso.minY + pTorso.maxY) / 2;
+                    spineY = pTorso.minY;
+                }
+                if (pHips) {
+                    hipsY = (pHips.minY + pHips.maxY) / 2;
+                    if (pTorso) {
+                        spineY = (pHips.maxY + pTorso.minY) / 2;
+                    } else {
+                        spineY = Math.max(spineY, pHips.maxY);
+                    }
+                }
+                if (pFootR || pFootL) {
+                    const pf = pFootR || pFootL;
+                    ankleY = pf.maxY;
+                }
+                if (pLegR || pLegL) {
+                    const pl = pLegR || pLegL;
+                    kneeY = (pl.minY + pl.maxY) / 2;
+                    if (kneeY <= ankleY) kneeY = ankleY + (hipsY - ankleY) * 0.5;
+                }
 
                 const bones = [];
                 const add = (name, parent, head, tail, helper) => {
@@ -9311,14 +9522,46 @@
                         else if (v.x <= cx - sideGap) { if (v.x < armOuterL) armOuterL = v.x; armYsum += v.y; armYn++; }
                     }
                 });
-                const armY = armYn ? armYsum / armYn : (shldY - 0.08 * H);
 
-                const shRX = torsoMaxR, shLX = torsoMinL;
-                const reachR = Math.max(armOuterR - shRX, 0.18 * W);
-                const reachL = Math.max(shLX - armOuterL, 0.18 * W);
-                const fU = 0.375, fF = 0.375, fH = 0.19;
-                const rE = shRX + reachR * fU, rW = rE + reachR * fF, rH = rW + reachR * fH, rT = armOuterR;
-                const lE = shLX - reachL * fU, lW = lE - reachL * fF, lH = lW - reachL * fH, lT = armOuterL;
+                if (pTorso) {
+                    torsoMaxR = Math.max(torsoMaxR, pTorso.maxX);
+                    torsoMinL = Math.min(torsoMinL, pTorso.minX);
+                }
+                let armY = armYn ? armYsum / armYn : (shldY - 0.08 * H);
+                if (pArmR || pArmL) {
+                    const pa = pArmR || pArmL;
+                    armY = pa.cy;
+                }
+
+                let shRX = torsoMaxR, shLX = torsoMinL;
+                if (pArmR) shRX = Math.min(pArmR.minX, torsoMaxR);
+                if (pArmL) shLX = Math.max(pArmL.maxX, torsoMinL);
+
+                let rE, rW, rH, rT;
+                if (pArmR) {
+                    rT = pHandR ? pHandR.maxX : (pArmR.maxX);
+                    const reachR = Math.max(rT - shRX, 0.18 * W);
+                    rW = pHandR ? pHandR.minX : (shRX + reachR * 0.75);
+                    rE = (shRX + rW) / 2;
+                    rH = pHandR ? pHandR.cx : (shRX + reachR * 0.90);
+                } else {
+                    const reachR = Math.max(armOuterR - shRX, 0.18 * W);
+                    const fU = 0.375, fF = 0.375, fH = 0.19;
+                    rE = shRX + reachR * fU; rW = rE + reachR * fF; rH = rW + reachR * fH; rT = armOuterR;
+                }
+
+                let lE, lW, lH, lT;
+                if (pArmL) {
+                    lT = pHandL ? pHandL.minX : (pArmL.minX);
+                    const reachL = Math.max(shLX - lT, 0.18 * W);
+                    lW = pHandL ? pHandL.maxX : (shLX - reachL * 0.75);
+                    lE = (shLX + lW) / 2;
+                    lH = pHandL ? pHandL.cx : (shLX - reachL * 0.90);
+                } else {
+                    const reachL = Math.max(shLX - armOuterL, 0.18 * W);
+                    const fU = 0.375, fF = 0.375, fH = 0.19;
+                    lE = shLX - reachL * fU; lW = lE - reachL * fF; lH = lW - reachL * fH; lT = armOuterL;
+                }
 
                 const shoR = add('shoulder_R', chest, [cx, shldY, cz], [shRX, armY, cz]);
                 const uaR = add('upperArm_R', shoR, [shRX, armY, cz], [rE, armY, cz]);
@@ -9796,8 +10039,19 @@
                     total.set(p, (total.get(p) || 0) + 1);
                 }
 
-                const allowed = new Map();           // parte -> Set(ossa ammesse)
+                const allowed = new Map();
                 tally.forEach((t, p) => {
+                    const knownNames = KNOWN_PART_BONES[p.toLowerCase()];
+                    if (knownNames) {
+                        const set = new Set();
+                        for (let j = 0; j < bones.length; j++) {
+                            if (knownNames.includes(bones[j].name)) set.add(j);
+                        }
+                        if (set.size > 0) {
+                            allowed.set(p, set);
+                            return;
+                        }
+                    }
                     const min = Math.max(1, Math.floor(total.get(p) * PART_BONE_SHARE));
                     const votes = j => t.get(j) || 0;
                     // Osso speculare (upperLeg_R <-> upperLeg_L). Serve a riconoscere le
@@ -12245,15 +12499,24 @@
                 });
             });
 
-            autoRigBtn.addEventListener('click', () => {
+            function autoRigActiveModel(preferredType, pushHist) {
                 const voxels = currentModelData.voxels || [];
-                if (!voxels.length) { rigHint.textContent = t('rig.hintNoVoxels'); return; }
-                pushHistory();
-                rig = rigType === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
+                if (!voxels.length) {
+                    if (typeof rigHint !== 'undefined' && rigHint) rigHint.textContent = t('rig.hintNoVoxels');
+                    return false;
+                }
+                if (pushHist && typeof pushHistory === 'function') pushHistory();
+                const type = preferredType || rigType || 'humanoid';
+                rig = type === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
                 selectedBoneIndex = -1;
                 stashRigToActiveObject();
                 applyRig();
-                if (rig.bones.length) selectBone(firstSelectableBone());
+                if (rig.bones.length && typeof selectBone === 'function') selectBone(firstSelectableBone());
+                return true;
+            }
+
+            autoRigBtn.addEventListener('click', () => {
+                autoRigActiveModel(rigType, true);
             });
 
             // "Mostra rig": ricostruisce l'anteprima dal rig gia' salvato sull'oggetto,
@@ -13259,7 +13522,7 @@
             function applySceneBackground(t) {
                 try {
                     if (typeof scene === 'undefined' || !scene) return;
-                    const hex = (t === 'light') ? 0xe8ecf5 : 0x0b0913;
+                    const hex = (t === 'light') ? 0xEDE6D8 : 0x15140F;
                     if (scene.background && scene.background.isColor) {
                         scene.background.setHex(hex);
                     } else {
@@ -13297,9 +13560,9 @@
              * l'intera UI resta coerente. I derivati sono schiariti/scuriti dal base
              * e le versioni "soft/glow/focus" sono lo stesso colore con alpha.
              * Persistenza come il tema: localStorage (ripristino sincrono, no flash)
-             * + savePref (backend). Default = grafite #475569. */
+             * + savePref (backend). Default = ottone #E8A317. */
             const ACCENT_KEY = 'voxelai-accent';
-            const ACCENT_DEFAULT = '#475569';
+            const ACCENT_DEFAULT = '#E8A317';
 
             function _hexToRgb(hex) {
                 let h = String(hex).trim().replace('#', '');
@@ -14713,11 +14976,11 @@
                     const st = document.createElement('style');
                     st.id = 'screensStyles';
                     st.textContent = [
-                        '#launcherOverlay{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:var(--overlay-scrim);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}',
+                        '#launcherOverlay{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:var(--overlay-scrim);}',
                         '#launcherOverlay.visible{display:flex;}',
-                        '.launcher-card{width:min(560px,92%);max-height:86%;display:flex;flex-direction:column;padding:26px;border-radius:var(--radius-lg);border:1px solid var(--glass-border);box-shadow:0 18px 60px rgba(0,0,0,0.5);}',
+                        '.launcher-card{width:min(560px,92%);max-height:86%;display:flex;flex-direction:column;padding:26px;border-radius:var(--radius-lg);border:1px solid var(--glass-border);box-shadow:inset 0 1px 0 var(--border-inner),var(--shadow-soft);}',
                         '.launcher-logo{display:flex;align-items:center;gap:12px;margin-bottom:6px;}',
-                        '.launcher-logo .lg-icon{width:40px;height:40px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:var(--text-on-accent);background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));}',
+                        '.launcher-logo .lg-icon{width:40px;height:40px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:var(--text-on-accent);background:var(--accent-primary);border:1px solid var(--accent-deep);}',
                         '.launcher-recent-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--glass-border);border-radius:var(--radius-md);margin-bottom:8px;cursor:pointer;transition:background .15s,border-color .15s;background:var(--input-bg);}',
                         '.launcher-recent-item:hover{background:var(--hover-bg-strong);border-color:var(--glass-border-focus);}',
                         '.launcher-recent-del{flex-shrink:0;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:var(--radius-sm);}',
@@ -15163,6 +15426,9 @@
             function applyI18n(root) {
                 root = root || document;
                 root.querySelectorAll('[data-i18n]').forEach(el => {
+                    // Nome modello / status bar: testo VIVO. Riscriverli qui
+                    // azzera "Spada Pixel Art" in "Nessuno" al cambio lingua.
+                    if (el.id === 'modelName' || el.id === 'statusName') return;
                     const k = el.getAttribute('data-i18n');
                     if (k in i18nDict) el.textContent = i18nDict[k];
                     else if (i18nCache.it && k in i18nCache.it) el.textContent = i18nCache.it[k];
@@ -15223,6 +15489,7 @@
                     // Stesso motivo per l'elenco dei provider AI (26-settings-modal.js):
                     // righe costruite da JS, nate prima dei dizionari.
                     if (typeof window.renderProviderList === 'function') { try { window.renderProviderList(); } catch (e) {} }
+                    if (typeof updateStatusBar === 'function') { try { updateStatusBar(); } catch (e) {} }
                     if (!opts.silent && typeof savePref === 'function') savePref('language', code);
                     const sel = document.getElementById('languageSelect');
                     if (sel && sel.value !== code) sel.value = code;
@@ -15900,7 +16167,7 @@
                 }
 
                 // Stato iniziale dal valore già applicato da initAccent() (17-theme.js).
-                let cur = '#475569';
+                let cur = '#E8A317';
                 try { cur = localStorage.getItem('voxelai-accent') || cur; } catch (e) { }
                 sync(cur);
 
@@ -17050,6 +17317,7 @@
 
                     voxelCountEl.textContent = currentModelData.voxels.length;
                     visibleCountEl.textContent = visibleColorByKey.size;
+                    if (typeof updateStatusBar === 'function') updateStatusBar();
                     const sig = computePaletteSignature();
                     if (sig !== paletteSignature) {
                         paletteSignature = sig;

@@ -145,19 +145,71 @@ def default_binding_for(voxels):
     return "smooth"
 
 
-def build_humanoid_skeleton(voxels):
-    """24 ossa adattate all'ingombro, con le rifiniture MISURATE.
+KNOWN_PART_BONES = {
+    "testa": ["head", "headTip", "neck"], "head": ["head", "headTip", "neck"], "capo": ["head", "headTip", "neck"],
+    "collo": ["neck", "head", "chest"], "neck": ["neck", "head", "chest"],
+    "torso": ["chest", "spine", "neck"], "busto": ["chest", "spine", "neck"], "chest": ["chest", "spine", "neck"], "body": ["chest", "spine", "neck"],
+    "bacino": ["hips", "spine"], "hips": ["hips", "spine"], "pelvis": ["hips", "spine"], "vita": ["hips", "spine"],
+    "braccio_r": ["upperArm_R", "forearm_R", "shoulder_R", "hand_R", "handTip_R"], "arm_r": ["upperArm_R", "forearm_R", "shoulder_R", "hand_R", "handTip_R"], "upperarm_r": ["upperArm_R", "shoulder_R", "forearm_R"], "avambraccio_r": ["forearm_R", "upperArm_R", "hand_R"], "forearm_r": ["forearm_R", "upperArm_R", "hand_R"], "mano_r": ["hand_R", "handTip_R", "forearm_R"], "hand_r": ["hand_R", "handTip_R", "forearm_R"], "spalla_r": ["shoulder_R", "chest", "upperArm_R"], "shoulder_r": ["shoulder_R", "chest", "upperArm_R"],
+    "braccio_l": ["upperArm_L", "forearm_L", "shoulder_L", "hand_L", "handTip_L"], "arm_l": ["upperArm_L", "forearm_L", "shoulder_L", "hand_L", "handTip_L"], "upperarm_l": ["upperArm_L", "shoulder_L", "forearm_L"], "avambraccio_l": ["forearm_L", "upperArm_L", "hand_L"], "forearm_l": ["forearm_L", "upperArm_L", "hand_L"], "mano_l": ["hand_L", "handTip_L", "forearm_L"], "hand_l": ["hand_L", "handTip_L", "forearm_L"], "spalla_l": ["shoulder_L", "chest", "upperArm_L"], "shoulder_l": ["shoulder_L", "chest", "upperArm_L"],
+    "gamba_r": ["upperLeg_R", "lowerLeg_R", "foot_R", "toeTip_R"], "leg_r": ["upperLeg_R", "lowerLeg_R", "foot_R", "toeTip_R"], "upperleg_r": ["upperLeg_R", "lowerLeg_R"], "coscia_r": ["upperLeg_R", "lowerLeg_R"], "lowerleg_r": ["lowerLeg_R", "upperLeg_R", "foot_R"], "stinco_r": ["lowerLeg_R", "upperLeg_R", "foot_R"], "piede_r": ["foot_R", "toeTip_R", "lowerLeg_R"], "foot_r": ["foot_R", "toeTip_R", "lowerLeg_R"],
+    "gamba_l": ["upperLeg_L", "lowerLeg_L", "foot_L", "toeTip_L"], "leg_l": ["upperLeg_L", "lowerLeg_L", "foot_L", "toeTip_L"], "upperleg_l": ["upperLeg_L", "lowerLeg_L"], "coscia_l": ["upperLeg_L", "lowerLeg_L"], "lowerleg_l": ["lowerLeg_L", "upperLeg_L", "foot_L"], "stinco_l": ["lowerLeg_L", "upperLeg_L", "foot_L"], "piede_l": ["foot_L", "toeTip_L", "lowerLeg_L"], "foot_l": ["foot_L", "toeTip_L", "lowerLeg_L"]
+}
 
-    Ogni frazione qui sotto e' stata tarata su modelli veri; i commenti dicono
-    quale difetto ha prodotto la versione ingenua, perche' il numero da solo non
-    lo racconta.
-    """
+
+def build_humanoid_skeleton(voxels):
     b = voxel_bounds(voxels)
     H = b["h"] or 1
     W = b["w"] or 1
     cx, cz, min_y, max_y = b["cx"], b["cz"], b["minY"], b["maxY"]
 
-    # Centri delle gambe dal 20% inferiore: due gruppi in X.
+    part_map = {}
+    for v in voxels:
+        p = v.get("part")
+        if p:
+            k = str(p).lower().strip()
+            if k not in part_map:
+                part_map[k] = {
+                    "minX": v["x"], "maxX": v["x"],
+                    "minY": v["y"], "maxY": v["y"],
+                    "minZ": v["z"], "maxZ": v["z"],
+                    "sumX": 0, "sumY": 0, "sumZ": 0, "count": 0
+                }
+            pb = part_map[k]
+            if v["x"] < pb["minX"]: pb["minX"] = v["x"]
+            if v["x"] > pb["maxX"]: pb["maxX"] = v["x"]
+            if v["y"] < pb["minY"]: pb["minY"] = v["y"]
+            if v["y"] > pb["maxY"]: pb["maxY"] = v["y"]
+            if v["z"] < pb["minZ"]: pb["minZ"] = v["z"]
+            if v["z"] > pb["maxZ"]: pb["maxZ"] = v["z"]
+            pb["sumX"] += v["x"]; pb["sumY"] += v["y"]; pb["sumZ"] += v["z"]
+            pb["count"] += 1
+
+    def get_pb(names):
+        for n in names:
+            pb = part_map.get(n.lower())
+            if pb and pb["count"]:
+                return {
+                    **pb,
+                    "cx": pb["sumX"] / pb["count"],
+                    "cy": pb["sumY"] / pb["count"],
+                    "cz": pb["sumZ"] / pb["count"]
+                }
+        return None
+
+    p_head = get_pb(["testa", "head", "capo"])
+    p_neck = get_pb(["collo", "neck"])
+    p_torso = get_pb(["torso", "busto", "chest", "body"])
+    p_hips = get_pb(["bacino", "hips", "pelvis", "vita"])
+    p_leg_r = get_pb(["gamba_r", "leg_r", "upperleg_r", "gamba_destra"])
+    p_leg_l = get_pb(["gamba_l", "leg_l", "upperleg_l", "gamba_sinistra"])
+    p_foot_r = get_pb(["piede_r", "foot_r", "piede_destro"])
+    p_foot_l = get_pb(["piede_l", "foot_l", "piede_sinistro"])
+    p_arm_r = get_pb(["braccio_r", "arm_r", "upperarm_r", "braccio_destro"])
+    p_arm_l = get_pb(["braccio_l", "arm_l", "upperarm_l", "braccio_sinistro"])
+    p_hand_r = get_pb(["mano_r", "hand_r", "mano_destro", "mano_destra"])
+    p_hand_l = get_pb(["mano_l", "hand_l", "mano_sinistro", "mano_sinistra"])
+
     leg_band_top = min_y + 0.20 * H
     l_sum = l_n = r_sum = r_n = 0
     for v in voxels:
@@ -170,16 +222,12 @@ def build_humanoid_skeleton(voxels):
                 r_n += 1
     leg_xl = (l_sum / l_n) if l_n else (cx - 0.20 * W)
     leg_xr = (r_sum / r_n) if r_n else (cx + 0.20 * W)
+    if p_leg_l: leg_xl = p_leg_l["cx"]
+    if p_leg_r: leg_xr = p_leg_r["cx"]
 
-    # Fascia verticale delle braccia. `side_gap` e' quanto un voxel deve stare
-    # fuori dal centro per contare come braccio e non come torso.
-    # La fascia e il distacco laterale servono piu' sotto, per misurare il vero
-    # estremo del braccio e la sua altezza media.
     arm_band_lo, arm_band_hi = min_y + 0.45 * H, min_y + 0.82 * H
     side_gap = 0.18 * W
 
-    # Verso dei piedi: il confronto va fatto sul CENTRO DEL PIEDE, non sul cz di
-    # tutto il corpo — capelli, zaini e visori spostano cz indietro.
     foot_band_top = min_y + 0.12 * H
     foot_zmin = foot_zmax = cz
     for v in voxels:
@@ -193,9 +241,6 @@ def build_humanoid_skeleton(voxels):
     dist_max = abs(foot_zmax - foot_zmid)
     faces_neg_z = dist_min > dist_max + 0.5
     if abs(dist_min - dist_max) <= 0.5:
-        # Piede a scatola: il piede non dice niente, lo chiediamo alla TESTA. Il
-        # viso e' piatto e la nuca sporge, quindi la massa sta dietro.
-        # Misurato sul Tecnico_del_Video: testa z 25..38, mid 31.5, com 32.0.
         head_band_lo = min_y + 0.85 * H
         hz_min, hz_max, hz_sum, hz_n = None, None, 0, 0
         for v in voxels:
@@ -210,6 +255,10 @@ def build_humanoid_skeleton(voxels):
             hz_mid = (hz_min + hz_max) / 2.0
             if hz_sum / hz_n > hz_mid + 0.15:
                 faces_neg_z = True
+    if p_foot_r or p_foot_l:
+        pf = p_foot_r or p_foot_l
+        if abs(pf["cz"] - cz) > 0.3:
+            faces_neg_z = pf["cz"] < cz
     ankle_z = cz
     if faces_neg_z:
         toe_z = foot_zmin
@@ -219,9 +268,6 @@ def build_humanoid_skeleton(voxels):
         toe_z = cz + 0.15 * (b["d"] or 1)
     toe_tip_z = (toe_z - 0.4) if faces_neg_z else (toe_z + 0.4)
 
-    # Stazioni verticali: le articolazioni di braccia e gambe sono allineate su
-    # una sola verticale, cosi' a riposo ogni arto e' DRITTO (niente gomiti
-    # piegati che poi la posa non riesce a raddrizzare).
     hips_y = min_y + 0.44 * H
     spine_y = min_y + 0.53 * H
     chest_y = min_y + 0.64 * H
@@ -231,6 +277,32 @@ def build_humanoid_skeleton(voxels):
     head_top_y = min_y + 0.97 * H
     knee_y = min_y + 0.26 * H
     ankle_y = min_y + 0.11 * H
+
+    if p_head:
+        head_top_y = max(p_head["maxY"] - 0.5, p_head["minY"] + 1)
+        head_y = p_head["minY"]
+    if p_neck:
+        neck_y = p_neck["minY"]
+        head_y = max(head_y, p_neck["maxY"])
+    if p_torso:
+        shld_y = p_torso["maxY"]
+        neck_y = min(neck_y, p_torso["maxY"])
+        chest_y = (p_torso["minY"] + p_torso["maxY"]) / 2.0
+        spine_y = p_torso["minY"]
+    if p_hips:
+        hips_y = (p_hips["minY"] + p_hips["maxY"]) / 2.0
+        if p_torso:
+            spine_y = (p_hips["maxY"] + p_torso["minY"]) / 2.0
+        else:
+            spine_y = max(spine_y, p_hips["maxY"])
+    if p_foot_r or p_foot_l:
+        pf = p_foot_r or p_foot_l
+        ankle_y = pf["maxY"]
+    if p_leg_r or p_leg_l:
+        pl = p_leg_r or p_leg_l
+        knee_y = (pl["minY"] + pl["maxY"]) / 2.0
+        if knee_y <= ankle_y:
+            knee_y = ankle_y + (hips_y - ankle_y) * 0.5
 
     bones = []
 
@@ -287,30 +359,58 @@ def build_humanoid_skeleton(voxels):
                     arm_outer_l = v["x"]
                 arm_y_sum += v["y"]
                 arm_y_n += 1
+
+    if p_torso:
+        torso_max_r = max(torso_max_r, p_torso["maxX"])
+        torso_min_l = min(torso_min_l, p_torso["minX"])
     arm_y = (arm_y_sum / arm_y_n) if arm_y_n else (shld_y - 0.08 * H)
+    if p_arm_r or p_arm_l:
+        pa = p_arm_r or p_arm_l
+        arm_y = pa["cy"]
 
     sh_rx, sh_lx = torso_max_r, torso_min_l
-    reach_r = max(arm_outer_r - sh_rx, 0.18 * W)
-    reach_l = max(sh_lx - arm_outer_l, 0.18 * W)
-    f_u, f_f, f_h = 0.375, 0.375, 0.19
-    r_e = sh_rx + reach_r * f_u
-    r_w = r_e + reach_r * f_f
-    r_h = r_w + reach_r * f_h
-    l_e = sh_lx - reach_l * f_u
-    l_w = l_e - reach_l * f_f
-    l_h = l_w - reach_l * f_h
+    if p_arm_r: sh_rx = min(p_arm_r["minX"], torso_max_r)
+    if p_arm_l: sh_lx = max(p_arm_l["maxX"], torso_min_l)
+
+    if p_arm_r:
+        r_t = p_hand_r["maxX"] if p_hand_r else p_arm_r["maxX"]
+        reach_r = max(r_t - sh_rx, 0.18 * W)
+        r_w = p_hand_r["minX"] if p_hand_r else (sh_rx + reach_r * 0.75)
+        r_e = (sh_rx + r_w) / 2.0
+        r_h = p_hand_r["cx"] if p_hand_r else (sh_rx + reach_r * 0.90)
+    else:
+        reach_r = max(arm_outer_r - sh_rx, 0.18 * W)
+        f_u, f_f, f_h = 0.375, 0.375, 0.19
+        r_e = sh_rx + reach_r * f_u
+        r_w = r_e + reach_r * f_f
+        r_h = r_w + reach_r * f_h
+        r_t = arm_outer_r
+
+    if p_arm_l:
+        l_t = p_hand_l["minX"] if p_hand_l else p_arm_l["minX"]
+        reach_l = max(sh_lx - l_t, 0.18 * W)
+        l_w = p_hand_l["maxX"] if p_hand_l else (sh_lx - reach_l * 0.75)
+        l_e = (sh_lx + l_w) / 2.0
+        l_h = p_hand_l["cx"] if p_hand_l else (sh_lx - reach_l * 0.90)
+    else:
+        reach_l = max(sh_lx - arm_outer_l, 0.18 * W)
+        f_u, f_f, f_h = 0.375, 0.375, 0.19
+        l_e = sh_lx - reach_l * f_u
+        l_w = l_e - reach_l * f_f
+        l_h = l_w - reach_l * f_h
+        l_t = arm_outer_l
 
     sho_r = add("shoulder_R", chest, [cx, shld_y, cz], [sh_rx, arm_y, cz])
     ua_r = add("upperArm_R", sho_r, [sh_rx, arm_y, cz], [r_e, arm_y, cz])
     fa_r = add("forearm_R", ua_r, [r_e, arm_y, cz], [r_w, arm_y, cz])
     ha_r = add("hand_R", fa_r, [r_w, arm_y, cz], [r_h, arm_y, cz])
-    add("handTip_R", ha_r, [r_h, arm_y, cz], [arm_outer_r, arm_y, cz], True)
+    add("handTip_R", ha_r, [r_h, arm_y, cz], [r_t, arm_y, cz], True)
 
     sho_l = add("shoulder_L", chest, [cx, shld_y, cz], [sh_lx, arm_y, cz])
     ua_l = add("upperArm_L", sho_l, [sh_lx, arm_y, cz], [l_e, arm_y, cz])
     fa_l = add("forearm_L", ua_l, [l_e, arm_y, cz], [l_w, arm_y, cz])
     ha_l = add("hand_L", fa_l, [l_w, arm_y, cz], [l_h, arm_y, cz])
-    add("handTip_L", ha_l, [l_h, arm_y, cz], [arm_outer_l, arm_y, cz], True)
+    add("handTip_L", ha_l, [l_h, arm_y, cz], [l_t, arm_y, cz], True)
 
     ul_r = add("upperLeg_R", hips, [leg_xr, hips_y, cz], [leg_xr, knee_y, cz])
     ll_r = add("lowerLeg_R", ul_r, [leg_xr, knee_y, cz], [leg_xr, ankle_y, ankle_z])
@@ -693,6 +793,12 @@ def restrict_to_parts(voxels, bones, primary, best_dist, ctx):
 
     allowed = {}
     for p, t in tally.items():
+        known = KNOWN_PART_BONES.get(str(p).lower().strip())
+        if known:
+            s = {by_name[kn] for kn in known if kn in by_name}
+            if s:
+                allowed[p] = s
+                continue
         minimum = max(1, int(total[p] * PART_BONE_SHARE))
         votes = lambda j: t.get(j, 0)
         root, top_n = -1, -1

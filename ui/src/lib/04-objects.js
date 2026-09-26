@@ -357,15 +357,15 @@
                 sceneObjects.forEach(obj => {
                     const isActive = obj.id === activeObjectId;
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px;' +
-                        (isActive ? 'background:rgba(71,85,105,0.28); border:1px solid var(--accent-primary, #475569);'
-                                  : 'background:rgba(255,255,255,0.04); border:1px solid transparent;');
+                    row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:2px; cursor:pointer; font-size:12px;' +
+                        (isActive ? 'background:var(--accent-soft); border:1px solid var(--accent-primary); color:var(--accent-primary);'
+                                  : 'background:transparent; border:1px solid transparent;');
 
                     const chk = document.createElement('input');
                     chk.type = 'checkbox';
                     chk.checked = selectedObjectIds.indexOf(obj.id) !== -1;
                     chk.title = t('objects.selectForMerge');
-                    chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary,#475569);';
+                    chk.style.cssText = 'cursor:pointer; accent-color:var(--accent-primary);';
                     chk.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         const i = selectedObjectIds.indexOf(obj.id);
@@ -415,8 +415,8 @@
                             const isPartSel = isActive && activePartName === partName;
                             const hiddenParts = obj._hiddenParts || {};
                             const partHidden = !!hiddenParts[partName];
-                            partRow.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 8px 4px 28px; cursor:pointer; font-size:11px; border-radius:6px;' +
-                                (isPartSel ? 'background:rgba(71,85,105,0.4); border:1px solid var(--accent-primary,#475569);'
+                            partRow.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px 8px 4px 28px; cursor:pointer; font-size:11px; border-radius:2px;' +
+                                (isPartSel ? 'background:var(--accent-soft); border:1px solid var(--accent-primary);'
                                            : 'background:transparent; border:1px solid transparent;');
 
                             const partEye = document.createElement('span');

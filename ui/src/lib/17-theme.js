@@ -11,7 +11,7 @@
             function applySceneBackground(t) {
                 try {
                     if (typeof scene === 'undefined' || !scene) return;
-                    const hex = (t === 'light') ? 0xe8ecf5 : 0x0b0913;
+                    const hex = (t === 'light') ? 0xEDE6D8 : 0x15140F;
                     if (scene.background && scene.background.isColor) {
                         scene.background.setHex(hex);
                     } else {
@@ -49,9 +49,9 @@
              * l'intera UI resta coerente. I derivati sono schiariti/scuriti dal base
              * e le versioni "soft/glow/focus" sono lo stesso colore con alpha.
              * Persistenza come il tema: localStorage (ripristino sincrono, no flash)
-             * + savePref (backend). Default = grafite #475569. */
+             * + savePref (backend). Default = ottone #E8A317. */
             const ACCENT_KEY = 'voxelai-accent';
-            const ACCENT_DEFAULT = '#475569';
+            const ACCENT_DEFAULT = '#E8A317';
 
             function _hexToRgb(hex) {
                 let h = String(hex).trim().replace('#', '');

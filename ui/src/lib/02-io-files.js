@@ -13,6 +13,28 @@
             const visibleCountEl = document.getElementById('visibleCount');
             const paletteEl = document.getElementById('palette');
 
+            function updateStatusBar() {
+                const modeEl = document.getElementById('statusMode');
+                const nameEl = document.getElementById('statusName');
+                const voxEl = document.getElementById('statusVoxelCount');
+                const visEl = document.getElementById('statusVisibleCount');
+                const gridEl = document.getElementById('statusGrid');
+                const toolEl = document.getElementById('statusTool');
+                const activeTab = document.querySelector('.tab-btn.active');
+                const tab = activeTab ? activeTab.dataset.tab : 'generate';
+                const tabKey = tab === 'draw' ? 'tabs.draw' : (tab === 'rig' ? 'tabs.rig' : 'tabs.generate');
+                if (modeEl) modeEl.textContent = t(tabKey);
+                const liveName = (currentModelData && currentModelData.metadata && currentModelData.metadata.name)
+                    || (modelNameEl && modelNameEl.textContent)
+                    || t('info.nameNone');
+                if (nameEl) nameEl.textContent = liveName;
+                if (voxEl) voxEl.textContent = (voxelCountEl && voxelCountEl.textContent) || '0';
+                if (visEl) visEl.textContent = (visibleCountEl && visibleCountEl.textContent) || '0';
+                if (gridEl && gridSizeEdit) gridEl.textContent = String(gridSizeEdit.value || '').replace(/,/g, 'x');
+                const toolKeys = { view: 'tabs.view', place: 'tools.place', draw: 'tools.draw', pick: 'tools.pick', remove: 'tools.remove' };
+                if (toolEl) toolEl.textContent = t(toolKeys[currentTool] || 'tabs.view');
+            }
+
             applyGridBtn.addEventListener('click', () => {
                 if (!currentModelData) return;
                 const parts = gridSizeEdit.value.split(',').map(n => parseInt(n.trim()));
@@ -303,7 +325,9 @@
 
             window.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
-                const newWidth = Math.max(280, Math.min(window.innerWidth - 50, e.clientX));
+                const rail = document.getElementById('toolRail');
+                const railW = rail ? rail.getBoundingClientRect().width : 0;
+                const newWidth = Math.max(280, Math.min(window.innerWidth - 50, e.clientX - railW));
                 document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
                 resizeCanvas();
             });

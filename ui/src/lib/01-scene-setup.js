@@ -10,7 +10,7 @@
             // durante rotazione/disegno questo lampeggia. Uno sfondo di scena opaco
             // elimina la ricomposizione per-frame. Il colore viene poi allineato al
             // tema chiaro/scuro da applySceneBackground() (vedi 17-theme.js).
-            scene.background = new THREE.Color(0x0b0913);
+            scene.background = new THREE.Color(0x15140F);
             const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
             camera.position.set(20, 20, 20);
 

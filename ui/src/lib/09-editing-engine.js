@@ -3,7 +3,7 @@
             // 'pick' (eyedropper). Left click performs the tool's action; a live preview
             // shows a green ghost cube for placement and a red outline for removal.
             let currentTool = 'view';
-            let activeColorHex = '#6366F1';
+            let activeColorHex = '#E8A317';
             let symmetryAxis = 'none';  // 'none' | 'x' | 'y' | 'z' — mirror edits across model center
             const raycaster = new THREE.Raycaster();
             const pointer = new THREE.Vector2();

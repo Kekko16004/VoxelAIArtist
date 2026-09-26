@@ -466,6 +466,45 @@ def _apply_grid_rule(prompt_text, grid_size):
     )
 
 
+def build_generate_prompt(subject, grid_size="auto", big_structure=False,
+                          modular=False, single_object=True, humanoid=False):
+    """Prompt di generazione: stesso ordine per HTTP e MCP.
+
+    Le regole extra (struttura grande, griglia, ...) vanno PRIMA del soggetto:
+    un promemoria messo *dopo* la richiesta la seppellisce (PixelAIEditor:
+    la riga dell'utente deve restare l'ultima).
+    """
+    subject = str(subject or "").strip()
+    template = _read_prompt_file(
+        "prompt.txt",
+        "Genera un modello voxel in JSON compatto.\n"
+        "Il soggetto richiesto: [INSERISCI QUI IL MODELLO DESIDERATO]")
+    if "[INSERISCI QUI IL MODELLO DESIDERATO]" in template:
+        body = template.replace("[INSERISCI QUI IL MODELLO DESIDERATO]", subject)
+    else:
+        body = template.strip() + "\n" + subject
+
+    extra = ""
+    if big_structure:
+        extra += BIG_STRUCTURE_RULE
+    if modular:
+        extra += MODULAR_ASSET_RULE
+    if humanoid or not single_object:
+        extra += MULTI_PART_RULE
+    if humanoid:
+        extra += HUMANOID_RULE
+    extra = _apply_grid_rule(extra, grid_size)
+
+    # Il soggetto resta l'ULTIMA riga: un promemoria messo *dopo* la seppellisce
+    # (PixelAIEditor: la richiesta dell'utente deve restare l'ultima riga).
+    return (
+        body.rstrip()
+        + extra
+        + "\nGenera SOLO il JSON.\nSOGGETTO DA GENERARE: "
+        + subject
+    )
+
+
 # --- Client AI, errori parlanti e retry -------------------------------------
 # Il corpo vive in `src/aiclient.py`, CONDIVISO con PixelAIEditor: e' la parte
 # che si sbaglia se duplicata (il client `gemini` non espone codici di errore,
@@ -484,6 +523,8 @@ from aiclient import (                                       # noqa: E402
     INTERACTIVE_RETRY_BUDGET_SECONDS,
     _interactive_backoff,
     ai_answer_text_retrying,
+    ai_json_text_retrying,
+    looks_like_refusal,
 )
 
 # Registro dei provider AI (Gemini a cookie + provider a chiave API). Le rotte
@@ -502,7 +543,7 @@ def run_ai_generation(final_prompt, model=None):
     (cancel-aware) attorno a questa funzione: aggiungerne un secondo qui
     significherebbe moltiplicare i tentativi e i tempi di attesa.
     """
-    answer = ai_answer_text(final_prompt, model)
+    answer = ai_json_text_retrying(final_prompt, model)
 
     sys.path.insert(0, os.path.join(BASE_DIR, "src"))
     from parser import extract_and_parse_json
@@ -2104,55 +2145,18 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
                     final_prompt = final_prompt.replace("[INSERISCI QUI LA RICHIESTA DI MODIFICA]", prompt)
 
                 else:
-                    prompt_template_path = os.path.join(prompts_dir, "prompt.txt")
-                    if os.path.exists(prompt_template_path):
-                        with open(prompt_template_path, 'r', encoding='utf-8') as pf:
-                            prompt_template = pf.read()
-                    else:
-                        prompt_template = "Generate voxel model: [INSERISCI QUI IL MODELLO DESIDERATO]"
-
-                    if "[INSERISCI QUI IL MODELLO DESIDERATO]" in prompt_template:
-                        final_prompt = prompt_template.replace("[INSERISCI QUI IL MODELLO DESIDERATO]", prompt)
-                    else:
-                        final_prompt = prompt_template.strip() + " " + prompt
-
-                    final_prompt = (
-                        f"SOGGETTO DA GENERARE: {prompt}\n\n"
-                        "IMPORTANTE: Progetta da zero le coordinate per rappresentare fedelmente questo soggetto. "
-                        "Non copiare le coordinate o la topologia della torre dell'esempio.\n\n"
-                        + final_prompt
-                    )
-
-                # Modalita' struttura grande: istruzioni esplicite, altrimenti l'AI
-                # genera un oggetto piccolo anche su una griglia enorme.
-                if payload.get("bigStructure"):
-                    final_prompt += BIG_STRUCTURE_RULE
-
-                if payload.get("modular"):
-                    final_prompt += MODULAR_ASSET_RULE
-
-                # La regola umanoide pretende il formato "parts" (una parte per
-                # arto): se l'utente l'ha attivata lasciando "oggetto unico",
-                # il multi-parte va aggiunto comunque, altrimenti i nomi degli
-                # arti non avrebbero dove stare.
-                humanoid = bool(payload.get("humanoid"))
-                if humanoid or not single_object:
-                    final_prompt += MULTI_PART_RULE
-                if humanoid:
-                    final_prompt += HUMANOID_RULE
-
-                if grid_size != "auto":
-                    dims = grid_size.split('x')
-                    if len(dims) == 3:
-                        final_prompt += (
-                            f"\n\n[REGOLA TASSATIVA: L'utente ha richiesto esplicitamente la griglia {grid_size}. "
-                            f"Nel metadata JSON imposta ASSOLUTAMENTE 'grid_size': [{dims[0]}, {dims[1]}, {dims[2]}]. "
-                            "Sfrutta tutta la griglia per aggiungere dettagli!]"
-                        )
+                    humanoid = bool(payload.get("humanoid"))
+                    final_prompt = build_generate_prompt(
+                        prompt,
+                        grid_size=grid_size,
+                        big_structure=bool(payload.get("bigStructure")),
+                        modular=bool(payload.get("modular")),
+                        single_object=single_object,
+                        humanoid=humanoid)
 
                 # Stessa creazione client / gestione cookie / classificazione
                 # errori di /api/animate e della coda pack: nessuna duplicazione.
-                answer = ai_answer_text_retrying(final_prompt, payload.get("model"))
+                answer = ai_json_text_retrying(final_prompt, payload.get("model"))
 
                 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
                 from parser import extract_and_parse_json

@@ -157,15 +157,72 @@
             }
 
             // --- Auto-skeleton ------------------------------------------------------
-            // Build a humanoid skeleton fitted to the voxel bounds, with a few measured
-            // refinements (leg split, arm reach). Falls back to a generic chain when the
-            // shape doesn't look humanoid enough.
+            const KNOWN_PART_BONES = {
+                testa: ['head', 'headTip', 'neck'], head: ['head', 'headTip', 'neck'], capo: ['head', 'headTip', 'neck'],
+                collo: ['neck', 'head', 'chest'], neck: ['neck', 'head', 'chest'],
+                torso: ['chest', 'spine', 'neck'], busto: ['chest', 'spine', 'neck'], chest: ['chest', 'spine', 'neck'], body: ['chest', 'spine', 'neck'],
+                bacino: ['hips', 'spine'], hips: ['hips', 'spine'], pelvis: ['hips', 'spine'], vita: ['hips', 'spine'],
+                braccio_r: ['upperArm_R', 'forearm_R', 'shoulder_R', 'hand_R', 'handTip_R'], arm_r: ['upperArm_R', 'forearm_R', 'shoulder_R', 'hand_R', 'handTip_R'], upperarm_r: ['upperArm_R', 'shoulder_R', 'forearm_R'], avambraccio_r: ['forearm_R', 'upperArm_R', 'hand_R'], forearm_r: ['forearm_R', 'upperArm_R', 'hand_R'], mano_r: ['hand_R', 'handTip_R', 'forearm_R'], hand_r: ['hand_R', 'handTip_R', 'forearm_R'], spalla_r: ['shoulder_R', 'chest', 'upperArm_R'], shoulder_r: ['shoulder_R', 'chest', 'upperArm_R'],
+                braccio_l: ['upperArm_L', 'forearm_L', 'shoulder_L', 'hand_L', 'handTip_L'], arm_l: ['upperArm_L', 'forearm_L', 'shoulder_L', 'hand_L', 'handTip_L'], upperarm_l: ['upperArm_L', 'shoulder_L', 'forearm_L'], avambraccio_l: ['forearm_L', 'upperArm_L', 'hand_L'], forearm_l: ['forearm_L', 'upperArm_L', 'hand_L'], mano_l: ['hand_L', 'handTip_L', 'forearm_L'], hand_l: ['hand_L', 'handTip_L', 'forearm_L'], spalla_l: ['shoulder_L', 'chest', 'upperArm_L'], shoulder_l: ['shoulder_L', 'chest', 'upperArm_L'],
+                gamba_r: ['upperLeg_R', 'lowerLeg_R', 'foot_R', 'toeTip_R'], leg_r: ['upperLeg_R', 'lowerLeg_R', 'foot_R', 'toeTip_R'], upperleg_r: ['upperLeg_R', 'lowerLeg_R'], coscia_r: ['upperLeg_R', 'lowerLeg_R'], lowerleg_r: ['lowerLeg_R', 'upperLeg_R', 'foot_R'], stinco_r: ['lowerLeg_R', 'upperLeg_R', 'foot_R'], piede_r: ['foot_R', 'toeTip_R', 'lowerLeg_R'], foot_r: ['foot_R', 'toeTip_R', 'lowerLeg_R'],
+                gamba_l: ['upperLeg_L', 'lowerLeg_L', 'foot_L', 'toeTip_L'], leg_l: ['upperLeg_L', 'lowerLeg_L', 'foot_L', 'toeTip_L'], upperleg_l: ['upperLeg_L', 'lowerLeg_L'], coscia_l: ['upperLeg_L', 'lowerLeg_L'], lowerleg_l: ['lowerLeg_L', 'upperLeg_L', 'foot_L'], stinco_l: ['lowerLeg_L', 'upperLeg_L', 'foot_L'], piede_l: ['foot_L', 'toeTip_L', 'lowerLeg_L'], foot_l: ['foot_L', 'toeTip_L', 'lowerLeg_L']
+            };
+
             function buildHumanoidSkeleton(voxels) {
                 const b = voxelBounds(voxels);
                 const H = b.h || 1, W = b.w || 1;
                 const cx = b.cx, cz = b.cz, minY = b.minY, maxY = b.maxY;
 
-                // Measure leg centers from the bottom 20% of layers (two X clusters).
+                let partMap = null;
+                for (let i = 0; i < voxels.length; i++) {
+                    const p = voxels[i].part;
+                    if (p) {
+                        if (!partMap) partMap = new Map();
+                        const key = p.toLowerCase();
+                        let pb = partMap.get(key);
+                        if (!pb) {
+                            pb = { minX: voxels[i].x, maxX: voxels[i].x, minY: voxels[i].y, maxY: voxels[i].y, minZ: voxels[i].z, maxZ: voxels[i].z, sumX: 0, sumY: 0, sumZ: 0, count: 0 };
+                            partMap.set(key, pb);
+                        }
+                        if (voxels[i].x < pb.minX) pb.minX = voxels[i].x;
+                        if (voxels[i].x > pb.maxX) pb.maxX = voxels[i].x;
+                        if (voxels[i].y < pb.minY) pb.minY = voxels[i].y;
+                        if (voxels[i].y > pb.maxY) pb.maxY = voxels[i].y;
+                        if (voxels[i].z < pb.minZ) pb.minZ = voxels[i].z;
+                        if (voxels[i].z > pb.maxZ) pb.maxZ = voxels[i].z;
+                        pb.sumX += voxels[i].x; pb.sumY += voxels[i].y; pb.sumZ += voxels[i].z;
+                        pb.count++;
+                    }
+                }
+                const getPb = (names) => {
+                    if (!partMap) return null;
+                    for (const n of names) {
+                        const pb = partMap.get(n.toLowerCase());
+                        if (pb && pb.count) {
+                            return {
+                                ...pb,
+                                cx: pb.sumX / pb.count,
+                                cy: pb.sumY / pb.count,
+                                cz: pb.sumZ / pb.count
+                            };
+                        }
+                    }
+                    return null;
+                };
+
+                const pHead = getPb(['testa', 'head', 'capo']);
+                const pNeck = getPb(['collo', 'neck']);
+                const pTorso = getPb(['torso', 'busto', 'chest', 'body']);
+                const pHips = getPb(['bacino', 'hips', 'pelvis', 'vita']);
+                const pLegR = getPb(['gamba_r', 'leg_r', 'upperleg_r', 'gamba_destra']);
+                const pLegL = getPb(['gamba_l', 'leg_l', 'upperleg_l', 'gamba_sinistra']);
+                const pFootR = getPb(['piede_r', 'foot_r', 'piede_destro']);
+                const pFootL = getPb(['piede_l', 'foot_l', 'piede_sinistro']);
+                const pArmR = getPb(['braccio_r', 'arm_r', 'upperarm_r', 'braccio_destro']);
+                const pArmL = getPb(['braccio_l', 'arm_l', 'upperarm_l', 'braccio_sinistro']);
+                const pHandR = getPb(['mano_r', 'hand_r', 'mano_destro', 'mano_destra']);
+                const pHandL = getPb(['mano_l', 'hand_l', 'mano_sinistro', 'mano_sinistra']);
+
                 const legBandTop = minY + 0.20 * H;
                 let lSum = 0, lN = 0, rSum = 0, rN = 0;
                 voxels.forEach(v => {
@@ -174,17 +231,13 @@
                         else if (v.x > cx) { rSum += v.x; rN++; }
                     }
                 });
-                const legXL = lN ? lSum / lN : cx - 0.20 * W;
-                const legXR = rN ? rSum / rN : cx + 0.20 * W;
+                let legXL = lN ? lSum / lN : cx - 0.20 * W;
+                let legXR = rN ? rSum / rN : cx + 0.20 * W;
+                if (pLegL) legXL = pLegL.cx;
+                if (pLegR) legXR = pLegR.cx;
 
-                // Arm column X: the CENTER of the arm voxel mass on each side (not the
-                // widest extent, which catches shoulders/jacket and pushes the bone off the
-                // arm). We take the arms' vertical band and average X of the voxels that sit
-                // clearly out to each side of the torso, so the arm bone runs dead-straight
-                // down through the middle of the arm. Both upper- and lower-arm share this X,
-                // so the whole arm is one perfectly vertical line.
                 const armBandLo = minY + 0.45 * H, armBandHi = minY + 0.82 * H;
-                const sideGap = 0.18 * W;   // how far from center a voxel must be to count as "arm"
+                const sideGap = 0.18 * W;
                 let lxSum = 0, lxN = 0, rxSum = 0, rxN = 0;
                 voxels.forEach(v => {
                     if (v.y >= armBandLo && v.y <= armBandHi) {
@@ -192,10 +245,7 @@
                         else if (v.x >= cx + sideGap) { rxSum += v.x; rxN++; }
                     }
                 });
-                const armXL = lxN ? Math.round(lxSum / lxN) : Math.round(cx - 0.32 * W);
-                const armXR = rxN ? Math.round(rxSum / rxN) : Math.round(cx + 0.32 * W);
 
-                // Feet point forward: measure whether feet stick out more towards minZ or maxZ relative to cz.
                 const footBandTop = minY + 0.12 * H;
                 let footZmin = cz, footZmax = cz;
                 voxels.forEach(v => {
@@ -204,18 +254,11 @@
                         if (v.z > footZmax) footZmax = v.z;
                     }
                 });
-                // Il confronto va fatto sul CENTRO DEL PIEDE, non sul cz di tutto il corpo:
-                // capelli lunghi, zaini e visori spostano cz indietro e falsano il verso.
                 const footZmid = (footZmin + footZmax) / 2;
                 const distMin = Math.abs(footZmid - footZmin);
                 const distMax = Math.abs(footZmax - footZmid);
                 let facesNegZ = (distMin > distMax + 0.5);
                 if (Math.abs(distMin - distMax) <= 0.5) {
-                    // Piede simmetrico (scarponi a scatola): il piede non dice nulla, allora
-                    // lo chiediamo alla TESTA. Il viso e' piatto e la nuca/i capelli sporgono,
-                    // quindi la massa della testa sta dietro: se il baricentro in Z della
-                    // testa e' oltre la sua meta', la faccia guarda verso Z BASSO.
-                    // Misurato sul Tecnico_del_Video: testa z 25..38, mid 31.5, com 32.0.
                     let hzMin = Infinity, hzMax = -Infinity, hzSum = 0, hzN = 0;
                     const headBandLo = minY + 0.85 * H;
                     voxels.forEach(v => {
@@ -229,24 +272,57 @@
                         if (hzSum / hzN > hzMid + 0.15) facesNegZ = true;
                     }
                 }
+                if (pFootR || pFootL) {
+                    const pf = pFootR || pFootL;
+                    if (Math.abs(pf.cz - cz) > 0.3) {
+                        facesNegZ = pf.cz < cz;
+                    }
+                }
                 const ankleZ = cz;
                 const toeZ = facesNegZ ? footZmin : ((footZmax > cz) ? footZmax : cz + 0.15 * (b.d || 1));
                 const toeTipZ = facesNegZ ? (toeZ - 0.4) : (toeZ + 0.4);
 
-                // Vertical stations (fractions of height). Arm/leg joints line up on a single
-                // vertical so every limb is dead straight in the rest pose (no bent elbows).
-                const hipsY = minY + 0.44 * H;
-                const spineY = minY + 0.53 * H;
-                const chestY = minY + 0.64 * H;
-                const shldY = minY + 0.74 * H;
-                const neckY = minY + 0.75 * H;
-                const headY = minY + 0.79 * H;
-                const headTopY = minY + 0.97 * H;
-                const elbowY = minY + 0.66 * H;
-                const wristY = minY + 0.52 * H;
-                const handY = minY + 0.45 * H;
-                const kneeY = minY + 0.26 * H;
-                const ankleY = minY + 0.11 * H;
+                let hipsY = minY + 0.44 * H;
+                let spineY = minY + 0.53 * H;
+                let chestY = minY + 0.64 * H;
+                let shldY = minY + 0.74 * H;
+                let neckY = minY + 0.75 * H;
+                let headY = minY + 0.79 * H;
+                let headTopY = minY + 0.97 * H;
+                let kneeY = minY + 0.26 * H;
+                let ankleY = minY + 0.11 * H;
+
+                if (pHead) {
+                    headTopY = Math.max(pHead.maxY - 0.5, pHead.minY + 1);
+                    headY = pHead.minY;
+                }
+                if (pNeck) {
+                    neckY = pNeck.minY;
+                    headY = Math.max(headY, pNeck.maxY);
+                }
+                if (pTorso) {
+                    shldY = pTorso.maxY;
+                    neckY = Math.min(neckY, pTorso.maxY);
+                    chestY = (pTorso.minY + pTorso.maxY) / 2;
+                    spineY = pTorso.minY;
+                }
+                if (pHips) {
+                    hipsY = (pHips.minY + pHips.maxY) / 2;
+                    if (pTorso) {
+                        spineY = (pHips.maxY + pTorso.minY) / 2;
+                    } else {
+                        spineY = Math.max(spineY, pHips.maxY);
+                    }
+                }
+                if (pFootR || pFootL) {
+                    const pf = pFootR || pFootL;
+                    ankleY = pf.maxY;
+                }
+                if (pLegR || pLegL) {
+                    const pl = pLegR || pLegL;
+                    kneeY = (pl.minY + pl.maxY) / 2;
+                    if (kneeY <= ankleY) kneeY = ankleY + (hipsY - ankleY) * 0.5;
+                }
 
                 const bones = [];
                 const add = (name, parent, head, tail, helper) => {
@@ -288,14 +364,46 @@
                         else if (v.x <= cx - sideGap) { if (v.x < armOuterL) armOuterL = v.x; armYsum += v.y; armYn++; }
                     }
                 });
-                const armY = armYn ? armYsum / armYn : (shldY - 0.08 * H);
 
-                const shRX = torsoMaxR, shLX = torsoMinL;
-                const reachR = Math.max(armOuterR - shRX, 0.18 * W);
-                const reachL = Math.max(shLX - armOuterL, 0.18 * W);
-                const fU = 0.375, fF = 0.375, fH = 0.19;
-                const rE = shRX + reachR * fU, rW = rE + reachR * fF, rH = rW + reachR * fH, rT = armOuterR;
-                const lE = shLX - reachL * fU, lW = lE - reachL * fF, lH = lW - reachL * fH, lT = armOuterL;
+                if (pTorso) {
+                    torsoMaxR = Math.max(torsoMaxR, pTorso.maxX);
+                    torsoMinL = Math.min(torsoMinL, pTorso.minX);
+                }
+                let armY = armYn ? armYsum / armYn : (shldY - 0.08 * H);
+                if (pArmR || pArmL) {
+                    const pa = pArmR || pArmL;
+                    armY = pa.cy;
+                }
+
+                let shRX = torsoMaxR, shLX = torsoMinL;
+                if (pArmR) shRX = Math.min(pArmR.minX, torsoMaxR);
+                if (pArmL) shLX = Math.max(pArmL.maxX, torsoMinL);
+
+                let rE, rW, rH, rT;
+                if (pArmR) {
+                    rT = pHandR ? pHandR.maxX : (pArmR.maxX);
+                    const reachR = Math.max(rT - shRX, 0.18 * W);
+                    rW = pHandR ? pHandR.minX : (shRX + reachR * 0.75);
+                    rE = (shRX + rW) / 2;
+                    rH = pHandR ? pHandR.cx : (shRX + reachR * 0.90);
+                } else {
+                    const reachR = Math.max(armOuterR - shRX, 0.18 * W);
+                    const fU = 0.375, fF = 0.375, fH = 0.19;
+                    rE = shRX + reachR * fU; rW = rE + reachR * fF; rH = rW + reachR * fH; rT = armOuterR;
+                }
+
+                let lE, lW, lH, lT;
+                if (pArmL) {
+                    lT = pHandL ? pHandL.minX : (pArmL.minX);
+                    const reachL = Math.max(shLX - lT, 0.18 * W);
+                    lW = pHandL ? pHandL.maxX : (shLX - reachL * 0.75);
+                    lE = (shLX + lW) / 2;
+                    lH = pHandL ? pHandL.cx : (shLX - reachL * 0.90);
+                } else {
+                    const reachL = Math.max(shLX - armOuterL, 0.18 * W);
+                    const fU = 0.375, fF = 0.375, fH = 0.19;
+                    lE = shLX - reachL * fU; lW = lE - reachL * fF; lH = lW - reachL * fH; lT = armOuterL;
+                }
 
                 const shoR = add('shoulder_R', chest, [cx, shldY, cz], [shRX, armY, cz]);
                 const uaR = add('upperArm_R', shoR, [shRX, armY, cz], [rE, armY, cz]);
@@ -773,8 +881,19 @@
                     total.set(p, (total.get(p) || 0) + 1);
                 }
 
-                const allowed = new Map();           // parte -> Set(ossa ammesse)
+                const allowed = new Map();
                 tally.forEach((t, p) => {
+                    const knownNames = KNOWN_PART_BONES[p.toLowerCase()];
+                    if (knownNames) {
+                        const set = new Set();
+                        for (let j = 0; j < bones.length; j++) {
+                            if (knownNames.includes(bones[j].name)) set.add(j);
+                        }
+                        if (set.size > 0) {
+                            allowed.set(p, set);
+                            return;
+                        }
+                    }
                     const min = Math.max(1, Math.floor(total.get(p) * PART_BONE_SHARE));
                     const votes = j => t.get(j) || 0;
                     // Osso speculare (upperLeg_R <-> upperLeg_L). Serve a riconoscere le
@@ -3222,15 +3341,24 @@
                 });
             });
 
-            autoRigBtn.addEventListener('click', () => {
+            function autoRigActiveModel(preferredType, pushHist) {
                 const voxels = currentModelData.voxels || [];
-                if (!voxels.length) { rigHint.textContent = t('rig.hintNoVoxels'); return; }
-                pushHistory();
-                rig = rigType === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
+                if (!voxels.length) {
+                    if (typeof rigHint !== 'undefined' && rigHint) rigHint.textContent = t('rig.hintNoVoxels');
+                    return false;
+                }
+                if (pushHist && typeof pushHistory === 'function') pushHistory();
+                const type = preferredType || rigType || 'humanoid';
+                rig = type === 'generic' ? buildGenericSkeleton(voxels) : buildHumanoidSkeleton(voxels);
                 selectedBoneIndex = -1;
                 stashRigToActiveObject();
                 applyRig();
-                if (rig.bones.length) selectBone(firstSelectableBone());
+                if (rig.bones.length && typeof selectBone === 'function') selectBone(firstSelectableBone());
+                return true;
+            }
+
+            autoRigBtn.addEventListener('click', () => {
+                autoRigActiveModel(rigType, true);
             });
 
             // "Mostra rig": ricostruisce l'anteprima dal rig gia' salvato sull'oggetto,

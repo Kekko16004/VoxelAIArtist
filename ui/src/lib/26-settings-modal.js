@@ -166,7 +166,7 @@
                 }
 
                 // Stato iniziale dal valore già applicato da initAccent() (17-theme.js).
-                let cur = '#475569';
+                let cur = '#E8A317';
                 try { cur = localStorage.getItem('voxelai-accent') || cur; } catch (e) { }
                 sync(cur);
 

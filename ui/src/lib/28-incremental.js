@@ -390,6 +390,7 @@
 
                     voxelCountEl.textContent = currentModelData.voxels.length;
                     visibleCountEl.textContent = visibleColorByKey.size;
+                    if (typeof updateStatusBar === 'function') updateStatusBar();
                     const sig = computePaletteSignature();
                     if (sig !== paletteSignature) {
                         paletteSignature = sig;

@@ -103,6 +103,17 @@ def ask_json(prompt, model=None, provider=None):
     client = compat.aiclient_module()
     try:
         text = answer_text(prompt, model=model, provider=provider)
+        looks_json = getattr(client, "_looks_like_json_payload", None)
+        looks_ref = getattr(client, "looks_like_refusal", None)
+        nudge = getattr(client, "_JSON_RETRY_NUDGE",
+                        "\n\nOUTPUT JSON ONLY. No prose, no refusal.")
+        bad = False
+        if callable(looks_ref) and looks_ref(text):
+            bad = True
+        elif callable(looks_json) and not looks_json(text):
+            bad = True
+        if bad:
+            text = answer_text(str(prompt) + nudge, model=model, provider=provider)
     except client.AIAuthError as e:
         raise SessionError(
             "L'AI integrata non e' autenticata: %s\nControlla il provider attivo "
@@ -167,30 +178,13 @@ def build_generate_prompt(subject, grid=0, big_structure=False, modular=False,
     if not subject:
         raise SessionError("serve una descrizione di cosa generare")
 
-    template = compat.read_prompt(
-        "prompt.txt", "Genera un modello voxel in JSON compatto: "
-                      "[INSERISCI QUI IL MODELLO DESIDERATO]")
-    if "[INSERISCI QUI IL MODELLO DESIDERATO]" in template:
-        final = template.replace("[INSERISCI QUI IL MODELLO DESIDERATO]", subject)
-    else:
-        final = template.strip() + " " + subject
-
-    final = (
-        "SOGGETTO DA GENERARE: %s\n\n"
-        "IMPORTANTE: Progetta da zero le coordinate per rappresentare fedelmente "
-        "questo soggetto. Non copiare le coordinate o la topologia della torre "
-        "dell'esempio.\n\n" % subject
-    ) + final
-
-    if big_structure:
-        final += app.BIG_STRUCTURE_RULE
-    if modular:
-        final += app.MODULAR_ASSET_RULE
-    if humanoid or not single_object:
-        final += app.MULTI_PART_RULE
-    if humanoid:
-        final += app.HUMANOID_RULE
-    return app._apply_grid_rule(final, _grid_token(grid))
+    return app.build_generate_prompt(
+        subject,
+        grid_size=_grid_token(grid),
+        big_structure=big_structure,
+        modular=modular,
+        single_object=single_object,
+        humanoid=humanoid)
 
 
 def build_modify_prompt(request, current_model):

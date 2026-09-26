@@ -64,11 +64,11 @@
                     const st = document.createElement('style');
                     st.id = 'screensStyles';
                     st.textContent = [
-                        '#launcherOverlay{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:var(--overlay-scrim);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}',
+                        '#launcherOverlay{position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:var(--overlay-scrim);}',
                         '#launcherOverlay.visible{display:flex;}',
-                        '.launcher-card{width:min(560px,92%);max-height:86%;display:flex;flex-direction:column;padding:26px;border-radius:var(--radius-lg);border:1px solid var(--glass-border);box-shadow:0 18px 60px rgba(0,0,0,0.5);}',
+                        '.launcher-card{width:min(560px,92%);max-height:86%;display:flex;flex-direction:column;padding:26px;border-radius:var(--radius-lg);border:1px solid var(--glass-border);box-shadow:inset 0 1px 0 var(--border-inner),var(--shadow-soft);}',
                         '.launcher-logo{display:flex;align-items:center;gap:12px;margin-bottom:6px;}',
-                        '.launcher-logo .lg-icon{width:40px;height:40px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:var(--text-on-accent);background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary));}',
+                        '.launcher-logo .lg-icon{width:40px;height:40px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:var(--text-on-accent);background:var(--accent-primary);border:1px solid var(--accent-deep);}',
                         '.launcher-recent-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--glass-border);border-radius:var(--radius-md);margin-bottom:8px;cursor:pointer;transition:background .15s,border-color .15s;background:var(--input-bg);}',
                         '.launcher-recent-item:hover{background:var(--hover-bg-strong);border-color:var(--glass-border-focus);}',
                         '.launcher-recent-del{flex-shrink:0;border:none;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:var(--radius-sm);}',
