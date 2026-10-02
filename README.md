@@ -28,8 +28,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot.png" alt="VoxelAIArtist editor with a house-and-tree voxel model" width="900">
+  <img src="docs/images/logo-in-app.png" alt="The VoxelAIArtist logo built as a voxel model inside the editor" width="720"><br>
+  <sub>The logo of this repo, built as a voxel model in the editor (<a href="assets/brand/logo-model.json">assets/brand/logo-model.json</a>).</sub>
 </p>
+
 
 ## Quick start
 
@@ -69,10 +71,6 @@ Build a standalone executable with `build.bat` (PyInstaller, output in `dist/Vox
 | **Rig & animate** | Auto humanoid rig, rig tools and weights, a keyframe timeline, and AI-generated animation clips. Exports as a rigged GLB. |
 | **Projects** | Save/open `.voxai` projects; light and dark themes; UI in English, Italian, German, French, Spanish and Portuguese. |
 
-<p align="center">
-  <img src="docs/images/logo-in-app.png" alt="The VoxelAIArtist logo built as a voxel model inside the editor" width="720"><br>
-  <sub>The logo of this repo, built as a voxel model in the editor (<a href="assets/brand/logo-model.json">assets/brand/logo-model.json</a>).</sub>
-</p>
 
 ## AI providers
 
