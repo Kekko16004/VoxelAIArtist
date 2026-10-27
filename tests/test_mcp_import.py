@@ -445,6 +445,37 @@ def test_gltf_external_buffer_speaks():
               "data.bin" in str(e) and "GLB" in str(e), str(e))
 
 
+def test_gltf_grafo_dei_nodi_ostile():
+    """Nodi che si condividono i figli (o si contengono) non bloccano l'import.
+
+    Riprodotto nell'audit del 2026-10-26: 30 nodi, ognuno con il successivo
+    come figlio DUE volte, sono 2^30 visite: il server MCP restava appeso per
+    sempre su un .gltf di 2 kB. Un ciclo (un nodo figlio di se stesso) era
+    una ricorsione infinita. Ora e' un errore in meno di un secondo.
+    """
+    import json as js
+    import time as tm
+    for nome, nodes in (
+            ("figli condivisi", [{"children": [i + 1, i + 1]} for i in range(30)]
+             + [{"mesh": 0}]),
+            ("ciclo", [{"children": [0], "mesh": 0}]),
+            ("figlio fuori range", [{"children": [99]}])):
+        doc = {"asset": {"version": "2.0"}, "scenes": [{"nodes": [0]}],
+               "nodes": nodes, "meshes": [{"primitives": []}]}
+        t0 = tm.time()
+        try:
+            importers.read_gltf(js.dumps(doc).encode("utf-8"))
+            esito = "nessun errore"
+        except ValueError as e:
+            esito = "ValueError: %s" % e
+        except RecursionError:
+            esito = "RecursionError"
+        dt = tm.time() - t0
+        check("gltf ostile (%s): errore pulito e veloce" % nome,
+              esito.startswith("ValueError") and dt < 2.0,
+              "%s in %.1f s" % (esito, dt))
+
+
 def test_gltf_rejects_empty():
     import json as js
     try:

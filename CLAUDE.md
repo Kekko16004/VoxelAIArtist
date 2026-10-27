@@ -1307,7 +1307,65 @@ processo e tiene il documento in memoria. La documentazione per l'utente e'
   il braccio: la spalla finisce sulla punta del dito e a `upperArm_*` non si lega
   nessun voxel. Le braccia si abbassano dopo, con `voxel_rig_pose` (Z −78 a
   destra, +78 a sinistra).
-- Guardie: `tests/test_mcp_server.py` (268 controlli, dal registro VERO di
+- **`JOINTS_0` indicizza `skin.joints`, NON i nodi.** Il `+1` vale solo dove si
+  parla di NODI (`skin.joints`, `children`, il `target.node` dei canali: il nodo 0
+  e' la mesh). Fino al 2026-10-26 `build_rigged_gltf` scriveva `indice_osso + 1`
+  anche in `JOINTS_0`: ogni voxel seguiva l'osso SUCCESSIVO (coscia -> stinco,
+  bacino -> spine) e l'ultimo osso usato andava fuori range. A riposo non si
+  vede (le inverse bind sono traslazioni), quindi nessun test strutturale lo
+  coglieva: lo coglie solo rifare la skinning sulla CPU con un osso RUOTATO
+  (`test_skinning_osso_ruotato`), confrontando l'osso di ogni vertice con quello
+  che il RIG assegna al suo voxel (`test_joints_0_indicizza_skin_joints`, mai
+  fidandosi del file per sapere chi e' chi). In BLIND-KOUR ci sono GLB corretti a
+  mano con `fix_joints.py` (-1 su ogni slot): dopo il riavvio dell'MCP quello
+  script NON va piu' usato (su un file giusto si rifiuta da solo, perche' trova
+  slot a 0; se non si rifiutasse sposterebbe tutto sull'osso PRECEDENTE).
+- **Tre scheletri, non due.** `humanoid`, `generic` (UNA catena lungo l'asse piu'
+  lungo) e `chains` (una catena per PARTE o componente connessa, figlie di una
+  radice `root` helper al baricentro, ognuna dall'estremo piu' SPESSO o dal lato
+  `root_end`). `chains` e' per cio' che non ha un corpo: le braccia in prima
+  persona del gate char-049 erano state riggate a mano nel `.voxai` perche'
+  l'umanoide non trova stazioni e la catena unica attraversa il vuoto fra le
+  braccia. Si salva come `type: "generic"` + `layout: "chains"`: la GUI conosce
+  solo i due tipi storici. `voxel_rig_export(origin=[x,y,z])` sposta lo zero del
+  file (in coordinate voxel) — per le braccia FP e' la camera.
+- **Una clip sostituita resta al suo posto** (`add_custom_clip`): l'ordine delle
+  clip e' l'ordine nel GLB, e l'Animator di chi lo importa ci si appoggia.
+- **`FastMCP.call_tool` ritorna la COPPIA `(contenuti, strutturato)`** (mcp 1.26),
+  non la lista. Chi la itera (il nostro `/mcp` in `streamable.py`, le prove) deve
+  accettare entrambe le forme: iterarla dava `TypeError: TextContent is not JSON
+  serializable` su OGNI tools/call via HTTP.
+- **Lo schema deve dichiarare cio' che il corpo accetta.** Un parametro `list`
+  rifiuta la stringa `"walk,run"` in pydantic PRIMA di entrare nella funzione:
+  il ramo che la gestiva in `voxel_rig_export` non girava mai. Dove si accetta
+  anche il testo si dichiara `Union[list, str]`. Gli interi si leggono con
+  `_as_int` (come `_as_float`/`_as_bool`): arrivano anche come `"5"`.
+- **`ai.ask_json` ritenta solo se la risposta NON SI LEGGE** (`_parse_or_none`),
+  non con l'euristica dei voxel di aiclient: quella cercava `ops`/`palette` e
+  ogni texture (`faces`) e ogni clip (`tracks`) valide si pagavano DUE chiamate.
+  Chi accetta un array al top level (le tracce) passa `allow_list=True`, che
+  arriva a `extract_and_parse_json(prefer_array=True)`: senza, l'estrattore
+  restituisce il PRIMO elemento e le altre tracce spariscono.
+- **Anteprime vere: `mcp_server/render.py`.** `voxel_preview(image=true)` e il
+  PNG di `voxel_export` sono isometriche (o ortografiche) ombreggiate col
+  contorno, z-buffer, ~0.1 s a 512 px; `view="sheet"` le affianca. Il PNG di
+  prima era la proiezione esatta scalata di `int(scale)`: con la `scale` in
+  metri del GLB (0.25) usciva 1 px per voxel. `size=0` la riporta (sprite).
+  I colori sono quelli dei voxel, non le texture dei materiali.
+- **I percorsi relativi sono relativi alla CARTELLA DI LAVORO del server**, non
+  a quella del client: `voxel_ai_status` la riporta (`cartella_di_lavoro`) e ogni
+  risposta di scrittura dice il percorso ASSOLUTO scritto.
+- **Il `.voxai` dell'MCP e' la busta dell'app**: `{format:"voxai", version:1,
+  savedAt, data}`. Con `"voxai-project"` la GUI non scartava la busta e il file
+  trascinato nella finestra si apriva vuoto.
+- **`/mcp`, `/cookies` e `/` controllano l'`Origin`** (`src/localorigin.py`,
+  la stessa regola di main.py e del `/sse` dell'SDK): assente o loopback passa,
+  `null` e qualunque sito vengono respinti con 403, e `Access-Control-Allow-Origin`
+  rimanda l'origine ammessa invece di `*`.
+- **Le modifiche all'MCP valgono dal RIAVVIO del processo.** Il server che gira
+  ha gia' importato i moduli; non va riavviato ne' ucciso mentre altri agenti lo
+  usano (e mai con kill globali di `python.exe`).
+- Guardie: `tests/test_mcp_server.py` (330 controlli, dal registro VERO di
   FastMCP: uno strumento puo' esistere e non essere esposto),
   `test_mcp_rig.py` / `test_mcp_export.py` / `test_mcp_import.py`. Il punto di
   sostituzione e' `ai.answer_text`, risolto dai globali a ogni chiamata: le prove
@@ -1363,5 +1421,36 @@ processo e tiene il documento in memoria. La documentazione per l'utente e'
 - The voxel cap lives in **both** `src/parser.py` (`voxel_budget_for`) and
   `ui/src/utils/expand-ops.js` — keep the two implementations identical. Without it a single
   malformed AI op (`fill 0 0 0 299 299 299` = 27M cells) froze the app with no error.
+- **Ogni file dell'utente si scrive con `src/atomicio.py`**, mai con
+  `open(path, "w")` + `json.dump`: `open("w")` tronca PRIMA di serializzare, e un
+  errore a meta' (un valore non serializzabile, disco pieno, processo chiuso)
+  lasciava `.voxai`, `settings.json` o `providers.json` distrutti. Temporaneo
+  nella stessa cartella + `fsync` + `os.replace` (ritentato su `PermissionError`
+  di Windows), serializzando PRIMA di toccare il disco. Lato MCP passa da
+  `compat.atomic_write_*`. I read-modify-write (preferenze, provider) stanno
+  sotto `atomicio.LOCK`: il server HTTP e' multi-thread e due `add_provider`
+  paralleli si cancellavano a vicenda (misurato: 9 provider su 122, chiavi API
+  comprese). Un `settings.json` illeggibile si mette da parte
+  (`settings.json.corrotto-<epoch>`), non si sovrascrive con `{}`. Fra PROCESSI
+  diversi (app + MCP) un aggiornamento puo' ancora perdersi: un file troncato no.
+  Guardia: `tests/test_storage.py`.
+- **I server locali controllano l'`Origin`** (`src/localorigin.py`, condiviso
+  da main.py e `mcp_server/streamable.py`). Prima entrambi rispondevano
+  `Access-Control-Allow-Origin: *` senza guardare niente: una pagina qualunque
+  aperta nel browser poteva POSTare su `/api/project/save` (scrivere un file
+  dove voleva), iniettare un provider AI, cancellare i cookie e leggere le
+  risposte. Ora `/api/*`, `/cookies` e ogni POST/DELETE rifiutano (403) un
+  `Origin` che non sia loopback (anche `null`) e un `Sec-Fetch-Site: cross-site`
+  (che il browser manda anche per un `<img>`: `GET /api/settings/open-folder`
+  apriva Esplora risorse). I file statici restano liberi; test e curl non
+  mandano nessuna delle due intestazioni e passano. Guardie: `test_api_e2e.py`
+  e `.superpowers/check_origin.py` (Chromium vero: la UI parla col suo backend,
+  una pagina `http://sito-malevolo.example` servita da `page.route` no — le sue
+  richieste ARRIVANO al server e vengono respinte). `PixelAIEditor/main.py` e
+  `SimpleAIModeller/main.py` hanno ancora `*`: stesso difetto, non corretto.
+- **La console di Windows e' cp1252**: un `print` di un'emoji (una risposta AI
+  in `_log_ai_answer`) sollevava `UnicodeEncodeError` DENTRO l'handler e il
+  client riceveva una connessione chiusa. `_safe_console()` in `__main__` mette
+  `errors="replace"` su stdout/stderr.
 - `.gitignore` now excludes credentials (`token.txt`, `cookies.json`), bytecode,
   `build/`, and `.claude/backups/`. Never re-add them to the index.

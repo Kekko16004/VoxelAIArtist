@@ -435,10 +435,20 @@ def read_gltf(blob, resolution=64, fill=False):
 
     tris = []                                    # (a, b, c, hex)
     seen = set()
+    # `seen` toglie i CICLI ma non le ripetizioni: un nodo elencato due volte
+    # come figlio (lecito come istanza, o malevolo) si visita due volte, e una
+    # catena di nodi cosi' raddoppia a ogni livello. Riprodotto: profondita' 18
+    # = 7 s, 30 = ore, col server MCP bloccato per tutti. Un tetto alle visite
+    # trasforma il blocco in un errore leggibile.
+    budget = [max(10000, 50 * len(nodes))]
 
     def visit(index, parent):
-        if index in seen or index >= len(nodes):
+        if not isinstance(index, int) or index in seen or not 0 <= index < len(nodes):
             return
+        budget[0] -= 1
+        if budget[0] < 0:
+            raise ValueError("gerarchia di nodi glTF troppo grande: troppi nodi "
+                             "ripetuti (file malformato?)")
         seen.add(index)
         node = nodes[index]
         world = _mat_mul(parent, _node_matrix(node))

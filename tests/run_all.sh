@@ -409,6 +409,11 @@ run "MCP: strumenti del server (via il registro FastMCP)" python3 tests/test_mcp
 # bucato o in T-pose, e la skinning si verifica rifacendone il conto a mano.
 run "MCP: rig e animazioni (i sei invarianti del GLB)" python3 tests/test_mcp_rig.py
 
+# Scritture su disco atomiche e sotto lock (audit 2026-10-26): un errore a
+# meta' salvataggio non distrugge il file vecchio, aggiornamenti paralleli di
+# preferenze e provider non si cancellano, il .voxai dell'MCP e' quello della GUI.
+run "Scritture atomiche: progetti, preferenze, provider" python3 tests/test_storage.py
+
 # 6. Ogni lingua ha esattamente le chiavi della lingua di riferimento (it).
 #    Prima qui c'era un numero fisso (65) che non ha mai corrisposto alla
 #    realta' (le lingue hanno sempre avuto 53 chiavi pack/genMode): il

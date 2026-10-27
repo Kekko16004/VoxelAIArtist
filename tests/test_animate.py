@@ -128,6 +128,18 @@ r = norm([{"bone": "hand_L", "keys": [{"t": 0, "rot": [0, 0, 0]},
                                       {"t": 1, "rot": [0, 90, 0]}]}])
 check(shape_ok(r) and bones_of(r) == ["hand_L"], "array top-level accettato")
 check(r["duration"] >= 1.0, "durata dedotta dai keyframe")
+# ...e come arriva DAVVERO, cioe' come testo da estrarre. Il normalizzatore
+# sopra lo accettava, ma l'estrattore restituiva il primo elemento dell'array e
+# le altre tracce sparivano prima di arrivarci (audit 2026-10-26).
+from parser import extract_and_parse_json
+testo = ('```json\n[{"bone": "hand_L", "keys": [{"t": 0, "rot": [0, 0, 0]}, '
+         '{"t": 1, "rot": [0, 90, 0]}]}, {"bone": "spine", "keys": [{"t": 0, '
+         '"rot": [0, 0, 0]}, {"t": 1, "rot": [20, 0, 0]}]}]\n```')
+r = norm(extract_and_parse_json(testo, prefer_array=True))
+check(shape_ok(r) and sorted(bones_of(r)) == ["hand_L", "spine"],
+      "array top-level estratto dal testo: arrivano TUTTE le tracce (%r)" % bones_of(r))
+check(isinstance(extract_and_parse_json(testo), dict),
+      "senza prefer_array resta il comportamento storico (primo oggetto)")
 
 print("=== 7. singolo track non incapsulato ===")
 r = norm({"bone": "foot_R", "keys": [{"t": 0, "rot": [0, 0, 0]},

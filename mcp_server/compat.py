@@ -60,6 +60,15 @@ expand_ops = _parser.expand_ops
 extract_and_parse_json = _parser.extract_and_parse_json
 voxel_budget_for = _parser.voxel_budget_for
 
+# Scritture atomiche (src/atomicio.py): lo stesso codice dell'app, cosi' un
+# `.voxai` salvato dall'MCP e uno salvato dalla GUI hanno la stessa garanzia.
+_atomicio = _load("atomicio")
+atomic_write_bytes = _atomicio.atomic_write_bytes
+atomic_write_text = _atomicio.atomic_write_text
+atomic_write_json = _atomicio.atomic_write_json
+IO_LOCK = _atomicio.LOCK
+origin_allowed = _load("localorigin").origin_allowed
+
 
 def settings_module():
     return _load("settings")

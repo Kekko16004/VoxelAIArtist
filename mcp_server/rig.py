@@ -549,6 +549,133 @@ def build_generic_skeleton(voxels, segments=5):
             "binding": default_binding_for(voxels), "type": "generic"}
 
 
+def _voxel_groups(voxels):
+    """I pezzi del modello: una PARTE dichiarata ciascuno; i voxel senza parte
+    si dividono nelle loro componenti connesse (6-vicinato). Ritorna una lista
+    di `(etichetta, [indici])` in ordine stabile (per etichetta)."""
+    by_part = {}
+    loose = []
+    for i, v in enumerate(voxels):
+        p = v.get("part")
+        if p:
+            by_part.setdefault(str(p), []).append(i)
+        else:
+            loose.append(i)
+    groups = [(p, by_part[p]) for p in sorted(by_part)]
+    if loose:
+        where = {(voxels[i]["x"], voxels[i]["y"], voxels[i]["z"]): i for i in loose}
+        seen = set()
+        comps = []
+        for i in loose:
+            if i in seen:
+                continue
+            seen.add(i)
+            stack, comp = [i], []
+            while stack:
+                k = stack.pop()
+                comp.append(k)
+                v = voxels[k]
+                for dx, dy, dz in _NEIGHBORS:
+                    j = where.get((v["x"] + dx, v["y"] + dy, v["z"] + dz))
+                    if j is not None and j not in seen:
+                        seen.add(j)
+                        stack.append(j)
+            comps.append(sorted(comp))
+        comps.sort(key=lambda c: (-len(c), c[0]))
+        for n, comp in enumerate(comps):
+            groups.append(("catena%d" % (n + 1), comp))
+    return groups
+
+
+def _bone_label(text, used):
+    out = "".join(ch if (ch.isalnum() or ch == "_") else "_" for ch in str(text))
+    out = out.strip("_") or "catena"
+    base, k = out, 2
+    while out.lower() in used:
+        out = "%s%d" % (base, k)
+        k += 1
+    used.add(out.lower())
+    return out
+
+
+_ROOT_ENDS = {"x-": (0, -1), "x+": (0, 1), "y-": (1, -1), "y+": (1, 1),
+              "z-": (2, -1), "z+": (2, 1)}
+
+
+def build_chains_skeleton(voxels, segments=3, root_end=None):
+    """Una catena di ossa PER PEZZO, tutte figlie di una radice comune.
+
+    E' il caso che umanoide e catena unica non coprono (gate char-049 di
+    BLIND-KOUR): le braccia in prima persona non hanno un corpo, quindi le
+    stazioni dell'umanoide non cadono su niente, e una catena sola lungo l'asse
+    piu' lungo attraversa il vuoto fra le due braccia. Lo stesso vale per un
+    lampadario coi bracci, un mostro coi tentacoli, una gru a piu' bracci.
+
+    Un pezzo e' una PARTE dichiarata, oppure (senza parti) una componente
+    connessa. Ogni catena corre lungo l'asse piu' lungo del suo pezzo, in
+    `segments` ossa (mai piu' di una per voxel di lunghezza), e PARTE
+    dall'estremo piu' spesso (la spalla e non la punta delle dita, la base del
+    tentacolo), salvo `root_end` ("x-", "x+", "y-", "y+", "z-", "z+") che
+    impone da che lato partono tutte. La radice `root` sta al baricentro, non
+    prende voxel e muove tutto insieme.
+    """
+    b = voxel_bounds(voxels)
+    total = len(voxels)
+    forced = _ROOT_ENDS.get(str(root_end or "").strip().lower().replace(" ", ""))
+    if root_end and not forced:
+        raise SessionError("root_end sconosciuto: '%s'. Usa x-, x+, y-, y+, z- "
+                           "o z+." % root_end)
+    sx = sy = sz = 0.0
+    for v in voxels:
+        sx += v["x"]; sy += v["y"]; sz += v["z"]
+    c = [sx / total, sy / total, sz / total]
+    bones = [{"name": "root", "parent": -1, "head": list(c),
+              "tail": [c[0], c[1] + 1.0, c[2]], "helper": True}]
+    groups = _voxel_groups(voxels)
+    # Le briciole (un voxel staccato) non meritano una catena: si legano
+    # all'osso piu' vicino come tutti gli altri.
+    crumbs = max(1, int(total * 0.005))
+    big = [(lab, idx) for lab, idx in groups if len(idx) > crumbs] or groups
+    if len(big) > 32:
+        raise SessionError(
+            "Il modello si divide in %d pezzi: troppi per una catena ciascuno. "
+            "Dichiara le PARTI (voxel_set/voxel_ops con part) per i pezzi che "
+            "devono muoversi, o usa kind='generic'." % len(big))
+    used = {"root"}
+    seg_req = max(1, int(segments))
+    for lab, idx in big:
+        pts = [(voxels[i]["x"], voxels[i]["y"], voxels[i]["z"]) for i in idx]
+        lo = [min(p[a] for p in pts) for a in range(3)]
+        hi = [max(p[a] for p in pts) for a in range(3)]
+        if forced:
+            ax, sign = forced
+        else:
+            ax = max(range(3), key=lambda a: (hi[a] - lo[a], -a))
+            span = hi[ax] - lo[ax]
+            q = span * 0.25
+            n_lo = sum(1 for p in pts if p[ax] <= lo[ax] + q)
+            n_hi = sum(1 for p in pts if p[ax] >= hi[ax] - q)
+            sign = -1 if n_lo >= n_hi else 1
+        mid = [sum(p[a] for p in pts) / float(len(pts)) for a in range(3)]
+        a0 = (lo[ax] - 0.5) if sign < 0 else (hi[ax] + 0.5)
+        a1 = (hi[ax] + 0.5) if sign < 0 else (lo[ax] - 0.5)
+        length = abs(a1 - a0)
+        seg = max(1, min(seg_req, int(length)))
+        name = _bone_label(lab, used)
+        parent = 0
+        for k in range(seg):
+            h = list(mid)
+            t = list(mid)
+            h[ax] = a0 + (a1 - a0) * k / float(seg)
+            t[ax] = a0 + (a1 - a0) * (k + 1) / float(seg)
+            bones.append({"name": "%s_%d" % (name, k + 1), "parent": parent,
+                          "head": h, "tail": t})
+            parent = len(bones) - 1
+    binding = "parts" if any(v.get("part") for v in voxels) else "rigid"
+    return {"bones": bones, "pose": {}, "posePos": {}, "binding": binding,
+            "type": "generic", "layout": "chains"}
+
+
 # --- pesi ---------------------------------------------------------------------
 
 def normalize_weight_entry(entry, max_bones=None):
@@ -1526,7 +1653,7 @@ def token_of_voxel(v):
 
 
 def build_rigged_gltf(doc, obj, scale=1.0, all_faces=False, skin=None,
-                      bone_list=None, clips=None):
+                      bone_list=None, clips=None, origin=None):
     """glTF 2.0 completo di ossa, skin e animazioni, come dizionario + blob.
 
     I sei invarianti di CLAUDE.md, tutti insieme:
@@ -1555,8 +1682,8 @@ def build_rigged_gltf(doc, obj, scale=1.0, all_faces=False, skin=None,
                 "scene": 0, "scenes": [{"nodes": []}], "nodes": []}, b""
     b = obj.bounds()
     # Stessa origine di `exportOrigin` in 16-export-glb.js: centro XZ, suolo a
-    # y = minY - 0.5.
-    origin = {"x": (b[0] + b[3]) / 2.0, "y": b[1] - 0.5, "z": (b[2] + b[5]) / 2.0}
+    # y = minY - 0.5. Un'origine esplicita (vedi `export_origin`) la sostituisce.
+    origin = export_origin(b, origin)
     k = float(scale) if float(scale) > 0 else 1.0
 
     tokens = [token_of_voxel(v) for v in voxels]
@@ -1581,8 +1708,15 @@ def build_rigged_gltf(doc, obj, scale=1.0, all_faces=False, skin=None,
         a_uv = gb.push_accessor(g["uv"], "f", 34962, 5126, count, "VEC2")
         attrs = {"POSITION": a_pos, "NORMAL": a_nrm, "TEXCOORD_0": a_uv}
         if skin is not None:
-            # JOINTS_0 indica NODI, non ossa: +1 perche' il nodo 0 e' la mesh.
-            ji = [j + 1 for j in g["joints"]]
+            # JOINTS_0 indicizza `skin.joints` (glTF 2.0, 3.7.3.3), NON i nodi:
+            # lo slot j e' l'osso j, cioe' il nodo j + 1. Il +1 vale SOLO dove
+            # si nomina un nodo (`skin.joints`, `children`, i canali delle
+            # animazioni). Fino al 2026-10-26 qui c'era `j + 1`: ogni voxel
+            # finiva legato all'osso SUCCESSIVO (coscia -> stinco, testa ->
+            # headTip) e l'ultimo osso andava fuori dall'elenco. Nessun test lo
+            # vedeva: a riposo IBM e matrice mondo si annullano per QUALUNQUE
+            # osso. La guardia ora e' `test_skinning_osso_ruotato`.
+            ji = list(g["joints"])
             a_j = gb.push_accessor(ji, "H", 34962, 5123, count, "VEC4")
             a_w = gb.push_accessor(g["weights"], "f", 34962, 5126, count,
                                    "VEC4")
@@ -1682,11 +1816,11 @@ def build_rigged_gltf(doc, obj, scale=1.0, all_faces=False, skin=None,
 
 
 def build_rigged_glb(doc, obj, scale=1.0, all_faces=False, skin=None,
-                     bone_list=None, clips=None):
+                     bone_list=None, clips=None, origin=None):
     """Il GLB del modello riggato: la stessa cornice del modello statico
     (`pack_glb`), il glTF costruito qui sopra."""
     gltf, blob = build_rigged_gltf(doc, obj, scale, all_faces, skin,
-                                   bone_list, clips)
+                                   bone_list, clips, origin)
     return pack_glb(gltf, blob)
 
 
@@ -1737,7 +1871,9 @@ def generate_clip(prompt, bones, name=None, model=None, provider=None):
     m = compat.main_module()
     names = bone_names(bones)
     text = m.build_anim_prompt(str(prompt or "").strip(), names)
-    data = ai.ask_json(text, model=model, provider=provider)
+    # Una lista di tracce al primo livello e' una forma che `normalize_anim_data`
+    # accetta: rifiutarla qui costerebbe una rigenerazione per niente.
+    data = ai.ask_json(text, model=model, provider=provider, allow_list=True)
     out = normalize_anim(data, bones)
     if name and str(name).strip():
         out["name"] = str(name).strip()[:60]
@@ -1780,7 +1916,8 @@ def require_rig(obj):
     return rig_of(obj)
 
 
-def auto_rig(obj, kind="auto", binding=None, segments=5, hardness=None):
+def auto_rig(obj, kind="auto", binding=None, segments=5, hardness=None,
+             root_end=None):
     """Crea (o rifa') lo scheletro e lo lega ai voxel.
 
     Nell'app il tipo lo SCEGLIE l'utente da una tendina (default umanoide); qui
@@ -1806,10 +1943,12 @@ def auto_rig(obj, kind="auto", binding=None, segments=5, hardness=None):
         built = build_humanoid_skeleton(voxels)
     elif k in ("generic", "generico"):
         built = build_generic_skeleton(voxels, segments)
+    elif k in ("chains", "catene", "multi"):
+        built = build_chains_skeleton(voxels, segments, root_end)
     else:
         raise SessionError(
-            "Tipo di scheletro sconosciuto: '%s'. Usa 'auto', 'humanoid' o "
-            "'generic'." % kind)
+            "Tipo di scheletro sconosciuto: '%s'. Usa 'auto', 'humanoid', "
+            "'generic' o 'chains'." % kind)
 
     bind = (binding or built.get("binding") or "rigid").lower()
     if bind not in ("rigid", "smooth", "parts"):
@@ -1817,6 +1956,9 @@ def auto_rig(obj, kind="auto", binding=None, segments=5, hardness=None):
                            "o 'parts'." % binding)
     old = rig_of(obj)
     obj.rig = {
+        # `chains` si salva come `generic` (+ `layout`): la GUI conosce solo
+        # humanoid/generic e con un tipo ignoto non saprebbe che bottone
+        # accendere. Le ossa sono comunque una lista libera per entrambe.
         "type": built.get("type") or k,
         "binding": bind,
         "bones": built["bones"],
@@ -1829,6 +1971,8 @@ def auto_rig(obj, kind="auto", binding=None, segments=5, hardness=None):
         "customAnims": old["customAnims"],
         "hardness": hardness if hardness is not None else old["hardness"],
     }
+    if built.get("layout"):
+        obj.rig["layout"] = built["layout"]
     return obj.rig
 
 
@@ -1971,8 +2115,19 @@ def add_custom_clip(obj, anim, replace=True):
     anims = [a for a in (obj.rig.get("customAnims") or [])
              if isinstance(a, dict)]
     if replace:
-        anims = [a for a in anims
-                 if str(a.get("name") or "").lower() != name.lower()]
+        # La sostituzione resta AL SUO POSTO. Prima si toglieva e si riaccodava,
+        # quindi ricaricare una clip corretta la spostava in fondo e l'ordine
+        # delle animazioni nel GLB cambiava a ogni ritocco (BLIND-KOUR, gate
+        # char-047: `slide` finita ultima). L'ordine e' cio' che un importatore
+        # mostra e, senza clip di posa, la PRIMA e' quella che Blender assegna.
+        same = [i for i, a in enumerate(anims)
+                if str(a.get("name") or "").lower() == name.lower()]
+        if same:
+            anims[same[0]] = anim
+            for i in reversed(same[1:]):       # doppioni storici: via
+                del anims[i]
+            obj.rig["customAnims"] = anims
+            return name
     anims.append(anim)
     obj.rig["customAnims"] = anims
     return name
@@ -1988,8 +2143,39 @@ def remove_custom_clip(obj, name):
     return len(anims) - len(kept)
 
 
+def export_origin(bounds, origin=None):
+    """Il punto del modello (in coordinate VOXEL) che diventa lo (0,0,0) del file.
+
+    Di base centro XZ e suolo (y = minY - 0.5): giusto per un personaggio che
+    sta in piedi. Non lo e' per tutto: le braccia in prima persona vanno appese
+    alla CAMERA (gate char-049 di BLIND-KOUR, che per spostarla ha dovuto
+    aggiungere un nodo radice a mano dopo l'export). `origin` accetta
+    `{"x","y","z"}` o `[x, y, z]`, anche frazionari.
+    """
+    if origin is None:
+        b = bounds
+        return {"x": (b[0] + b[3]) / 2.0, "y": b[1] - 0.5,
+                "z": (b[2] + b[5]) / 2.0}
+    if isinstance(origin, dict):
+        vals = [origin.get("x"), origin.get("y"), origin.get("z")]
+    elif isinstance(origin, str):
+        vals = [t for t in origin.replace(";", ",").replace(" ", ",").split(",") if t]
+    else:
+        vals = list(origin)
+    try:
+        if len(vals) != 3:
+            raise ValueError
+        x, y, z = (float(v) for v in vals)
+    except (TypeError, ValueError):
+        raise SessionError("origin deve essere tre numeri in coordinate voxel "
+                           "(x, y, z), ho ricevuto %r" % (origin,))
+    if not all(math.isfinite(v) for v in (x, y, z)):
+        raise SessionError("origin deve essere finita, ho ricevuto %r" % (origin,))
+    return {"x": x, "y": y, "z": z}
+
+
 def export_rigged_glb(doc, obj, scale=0.01, all_faces=False, presets=True,
-                      custom=True, only=None):
+                      custom=True, only=None, origin=None):
     """Il GLB riggato dell'oggetto: legatura, posa e clip, gia' cotti.
 
     `scale=0.01` e' il default dell'app ("scala in metri"): un voxel = 1 cm, cioe'
@@ -2001,10 +2187,10 @@ def export_rigged_glb(doc, obj, scale=0.01, all_faces=False, presets=True,
     b = obj.bounds()
     if not b:
         raise SessionError("L'oggetto '%s' e' vuoto." % obj.name)
-    origin = {"x": (b[0] + b[3]) / 2.0, "y": b[1] - 0.5,
-              "z": (b[2] + b[5]) / 2.0}
+    origin = export_origin(b, origin)
     k = float(scale) if float(scale) > 0 else 1.0
     skin = skin_for(obj, r)
     clips = build_all_clips(r, r["bones"], origin, k, presets, custom, only)
-    return build_rigged_glb(doc, obj, k, all_faces, skin, r["bones"], clips)
+    return build_rigged_glb(doc, obj, k, all_faces, skin, r["bones"], clips,
+                            origin)
 

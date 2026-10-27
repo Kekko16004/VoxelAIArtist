@@ -36,6 +36,8 @@ import threading
 import time
 import uuid
 
+from atomicio import atomic_write_json
+
 # ---------------------------------------------------------------------------
 # Costanti di tuning
 # ---------------------------------------------------------------------------
@@ -839,8 +841,8 @@ def save_pack_to_disk(run, base_dir=None):
 
         for j in done:
             fname = "%s.json" % j.label
-            with open(os.path.join(assets_dir, fname), "w", encoding="utf-8") as f:
-                json.dump(j.result, f, ensure_ascii=False, separators=(",", ":"))
+            atomic_write_json(os.path.join(assets_dir, fname), j.result,
+                              ensure_ascii=False, separators=(",", ":"))
             manifest["assets"].append({
                 "label": j.label,
                 "object": j.object_name,
@@ -848,8 +850,10 @@ def save_pack_to_disk(run, base_dir=None):
                 "file": "assets/" + fname,
             })
 
-        with open(os.path.join(folder, "manifest.json"), "w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        # Il manifest per ULTIMO e atomico: e' cio' che `list_saved_packs` legge,
+        # quindi un pack interrotto a meta' resta invisibile invece di rotto.
+        atomic_write_json(os.path.join(folder, "manifest.json"), manifest,
+                          ensure_ascii=False, indent=2)
         return folder
     except Exception as e:
         print("[pack] salvataggio su disco fallito: %s" % e)
@@ -1099,11 +1103,22 @@ class PackManager(object):
         # Ordine di accodamento: variante 1 di TUTTI gli oggetti, poi variante 2...
         # Cosi' l'utente vede subito un campione completo del pack invece di 5
         # vasi prima di vedere il primo televisore.
+        # Le etichette diventano NOMI DI FILE (`assets/<label>.json`), e su
+        # Windows/macOS il disco non distingue le maiuscole: "vaso fiori" e
+        # "Vaso/Fiori" davano entrambi `Vaso_Fiori_1.json` e il secondo
+        # cancellava il primo al salvataggio. Si deduplica senza maiuscole.
+        used_labels = set()
         for v in range(1, variants + 1):
             for name in names:
                 # "Armadio :grande" -> nome pulito + taglia relativa dichiarata.
                 clean, _size = parse_size_hint(name)
                 label = "%s_%d" % (slugify(clean), v)
+                if label.lower() in used_labels:
+                    n = 2
+                    while ("%s_%d" % (label, n)).lower() in used_labels:
+                        n += 1
+                    label = "%s_%d" % (label, n)
+                used_labels.add(label.lower())
                 jobs.append(PackJob("%s-%d-%s" % (slugify(clean).lower(), v, uuid.uuid4().hex[:4]),
                                     name, v, label))
 

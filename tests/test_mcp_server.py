@@ -722,10 +722,57 @@ def test_export_png(tmp):
     call("voxel_fill", shape="box",
          args={"x0": 0, "y0": 0, "z0": 0, "x1": 5, "y1": 3, "z1": 0},
          color="#FF0000")
-    out = call("voxel_export", path="vista.png")
-    check("export png: dichiara le dimensioni", "6x4" in out, out)
+    # size=0: la vecchia proiezione esatta, 1 pixel per voxel (sprite).
+    out = call("voxel_export", path="vista.png", size=0)
+    check("export png size=0: dichiara le dimensioni", "6x4" in out, out)
     buf, w, h = pngmod.decode_png(open(os.path.join(tmp, "vista.png"), "rb").read())
-    check_eq("export png: dimensioni giuste", (w, h), (6, 4))
+    check_eq("export png size=0: dimensioni esatte", (w, h), (6, 4))
+    out = call("voxel_export", path="sprite.png", size=0, scale=3)
+    check("export png size=0 scale=3: ingrandita", "18x12" in out, out)
+
+    # Il default: un'anteprima LEGGIBILE. Prima, con `scale=0.25` (la scala in
+    # metri del GLB) usciva 1 px per voxel (gate kit-walk di BLIND-KOUR).
+    out = call("voxel_export", path="anteprima.png", scale=0.25)
+    buf, w, h = pngmod.decode_png(open(os.path.join(tmp, "anteprima.png"), "rb").read())
+    check("export png: default leggibile anche con scale=0.25",
+          max(w, h) >= 256 and max(w, h) <= 512, "%dx%d %s" % (w, h, out))
+    check("export png: dichiara il percorso assoluto",
+          os.path.join(tmp, "anteprima.png") in out, out)
+    colored = sum(1 for i in range(0, len(buf), 4) if buf[i + 3])
+    check("export png: il modello occupa l'immagine", colored > w * h // 20,
+          "%d pixel opachi su %d" % (colored, w * h))
+    for v in ("front", "iso_back", "sheet", "top"):
+        out = call("voxel_export", path="v_%s.png" % v, view=v, size=128)
+        check("export png: vista %s" % v, "Esportato" in out, out)
+    err = call_fails("voxel_export", path="x.png", view="diagonale")
+    check("export png: vista sconosciuta spiegata", err and "iso" in err, err)
+
+
+def test_preview_immagine():
+    """`voxel_preview(image=true)` da' un PNG vero, senza scrivere file."""
+    reset()
+    call("voxel_new")
+    call("voxel_fill", shape="box",
+         args={"x0": 0, "y0": 0, "z0": 0, "x1": 3, "y1": 5, "z1": 2},
+         color="#3366CC")
+    res = asyncio.get_event_loop().run_until_complete(
+        server.mcp.call_tool("voxel_preview", {"image": True, "size": 200}))
+    items = res[0] if isinstance(res, tuple) else res
+    kinds = [getattr(c, "type", "") for c in items]
+    check("preview immagine: testo + immagine", kinds == ["text", "image"],
+          repr(kinds))
+    img = items[1]
+    import base64
+    data = base64.b64decode(img.data)
+    buf, w, h = pngmod.decode_png(data)
+    check("preview immagine: PNG entro la misura chiesta", 120 <= max(w, h) <= 200,
+          "%dx%d" % (w, h))
+    check("preview immagine: mime png", img.mimeType == "image/png",
+          img.mimeType)
+    art = call("voxel_preview")
+    check("preview: senza image resta ASCII",
+          len(art.splitlines()) >= 3 and len(art) < 5000,
+          repr(art[:60]))
 
 
 def test_export_refuses_outside_workdir(tmp):
@@ -1235,6 +1282,95 @@ def test_texture_generate_usa_il_prompt_dell_app():
     check("texture AI: conferma parlante", "Blocco" in out, out)
 
 
+def test_ask_json_ritenta_solo_se_serve():
+    """Una risposta valida costa UNA chiamata; solo la prosa ne paga due.
+
+    Prima il ritento usava un'euristica tarata sui VOXEL (cerca "ops",
+    "palette"): una texture (`faces`) o una clip (`tracks`) valide sembravano
+    "non JSON" e ogni chiamata AI di texture/animazione si pagava doppia.
+    """
+    with risponde({"faces": {"py": {"ops": ["fill 0 0 7 7 #33AA33"]}}}) as r:
+        ai.ask_json("dammi una texture")
+    check_eq("ask_json: risposta valida -> una sola chiamata", len(r.prompts), 1)
+    with risponde([{"bone": "head", "keys": []},
+                   {"bone": "neck", "keys": []}]) as r:
+        data = ai.ask_json("una clip", allow_list=True)
+    check("ask_json: una lista ammessa arriva INTERA, al primo colpo",
+          len(r.prompts) == 1 and isinstance(data, list) and len(data) == 2,
+          "%d chiamate, %r" % (len(r.prompts), data))
+    with risponde("Mi dispiace, non posso aiutarti {con questo}.") as r:
+        err = None
+        try:
+            ai.ask_json("dammi una texture")
+        except Exception as e:                    # noqa: BLE001
+            err = str(e)
+    check("ask_json: la prosa si ritenta una volta, poi errore parlante",
+          len(r.prompts) == 2 and err and "JSON" in err,
+          "%d chiamate, %r" % (len(r.prompts), err))
+
+
+def test_texture_da_png_proporzioni_e_cartelle(tmp):
+    """`voxel_texture_import` legge un PNG ovunque e ne tiene la proporzione.
+
+    Prima passava da `_resolve_out` (pensato per le SCRITTURE): un PNG fuori
+    dalla cartella di lavoro era rifiutato, e il tetto di 128 px tagliava
+    ogni lato per conto suo (400x100 -> 128x100).
+    """
+    reset()
+    server.WORKDIR = os.path.join(tmp, "lavoro_tex")
+    os.makedirs(server.WORKDIR, exist_ok=True)
+    altrove = tempfile.mkdtemp(prefix="voxtex_")
+    try:
+        w, h = 400, 100
+        buf = bytearray(b"\x20\x80\xe0\xff" * (w * h))
+        png = os.path.join(altrove, "largo.png")
+        with open(png, "wb") as f:
+            f.write(pngmod.encode_png(buf, w, h))
+        tex = server._texture_from_png(png)
+        check_eq("texture png: proporzione conservata sotto il tetto",
+                 (tex["w"], tex["h"]), (128, 32))
+        check("texture png: letto FUORI dalla cartella di lavoro",
+              not os.listdir(server.WORKDIR), os.listdir(server.WORKDIR))
+        rotto = os.path.join(altrove, "rotto.png")
+        with open(rotto, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\nniente")
+        err = None
+        try:
+            server._texture_from_png(rotto)
+        except Exception as e:                    # noqa: BLE001
+            err = "%s: %s" % (type(e).__name__, e)
+        check("texture png: un PNG rovinato e' un errore parlante",
+              err and err.startswith("SessionError") and "PNG" in err, err)
+        err = None
+        try:
+            pngmod.decode_png(b"\x89PNG\r\n\x1a\nniente")
+        except ValueError as e:
+            err = str(e)
+        except Exception as e:                    # noqa: BLE001
+            err = "NON ValueError: %r" % e
+        check("decode_png: dati rovinati -> ValueError (non l'eccezione di Pillow)",
+              err and not err.startswith("NON"), err)
+    finally:
+        shutil.rmtree(altrove, ignore_errors=True)
+
+
+def test_import_di_un_file_rovinato_lo_dice(tmp):
+    """Un file troncato non fa uscire l'eccezione grezza del parser."""
+    reset()
+    call("voxel_new")
+    for nome, dati in (
+            ("rotto.vox", b"VOX \x96\x00\x00\x00MAIN\x00\x00\x00\x00"
+                          b"\xff\xff\x00\x00SIZE\x0c"),
+            ("rotto.glb", b"glTF\x02\x00\x00\x00\x40\x00\x00\x00"
+                          b"\x30\x00\x00\x00JSON{\"asset\":1")):
+        p = os.path.join(tmp, nome)
+        with open(p, "wb") as f:
+            f.write(dati)
+        err = call_fails("voxel_import", path=p)
+        check("import %s: dice che il file e' rovinato" % nome,
+              err and "non si legge come" in err and nome in err, err)
+
+
 def test_texture_generate_manda_le_altre_facce_come_contesto():
     reset()
     call("voxel_new", name="Mat", grid=16)
@@ -1342,6 +1478,10 @@ def test_ai_status_non_mostra_credenziali():
         if isinstance(nodo, dict):
             for k, v in nodo.items():
                 kl = str(k).lower()
+                if k == "cartella_di_lavoro" and not dove:
+                    # Un percorso del disco, lungo quanto vuole: non e' una
+                    # credenziale (e serve: vedi il test sotto).
+                    continue
                 check("ai_status: nessun campo '%s'" % k,
                       not any(s in kl for s in
                               ("key", "secret", "password", "cookie", "token",
@@ -1359,6 +1499,9 @@ def test_ai_status_non_mostra_credenziali():
                       % (parola, dove or "/"), parola not in nodo.lower(), dove)
 
     frughe(d)
+    check("ai_status: mostra la cartella di lavoro (i relativi partono da li')",
+          d.get("cartella_di_lavoro") == os.path.realpath(server.WORKDIR),
+          repr(d.get("cartella_di_lavoro")))
 
 
 def test_ops_non_chiedono_nessuna_ai():
@@ -1707,6 +1850,59 @@ def test_http_espone_mcp_e_sse():
               called.json().get("result", {}).get("isError") is not True
               and texts.strip() != "",
               texts[:200])
+    finally:
+        asyncio.get_event_loop().run_until_complete(streamable.close_all())
+
+
+def test_http_rifiuta_le_origini_estranee():
+    """Una pagina web qualunque non deve poter parlare col server MCP.
+
+    Prima ogni risposta aveva `Access-Control-Allow-Origin: *`: riprodotto
+    nell'audit del 2026-10-26, un sito poteva chiamare `voxel_open`/`voxel_save`
+    e leggere le risposte, o cancellare i cookie. I client MCP veri non
+    mandano `Origin` e devono continuare a passare.
+    Solo richieste che vengono RIFIUTATE o GET innocui: nessun file toccato.
+    """
+    from starlette.testclient import TestClient
+    from mcp_server import streamable
+
+    check("origin: assente ammessa", streamable.origin_allowed(None))
+    check("origin: loopback ammessa",
+          streamable.origin_allowed("http://127.0.0.1:8765")
+          and streamable.origin_allowed("http://localhost:3000")
+          and streamable.origin_allowed("http://[::1]:9"))
+    check("origin: sito esterno rifiutato",
+          not streamable.origin_allowed("https://sito-malevolo.example")
+          and not streamable.origin_allowed("http://127.0.0.1.evil.example"))
+    check("origin: null rifiutata", not streamable.origin_allowed("null"))
+
+    streamable.mount(server.mcp)
+    client = TestClient(server.mcp.sse_app())
+    try:
+        evil = {"Origin": "https://sito-malevolo.example"}
+        r = client.post("/mcp", headers=evil, json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                       "clientInfo": {"name": "x", "version": "0"}}})
+        check("origin: POST /mcp da sito esterno e' 403", r.status_code == 403,
+              "%s %s" % (r.status_code, r.text[:120]))
+        r = client.delete("/cookies", headers=evil)
+        check("origin: DELETE /cookies da sito esterno e' 403",
+              r.status_code == 403, str(r.status_code))
+        r = client.get("/", headers=evil)
+        check("origin: GET / da sito esterno e' 403", r.status_code == 403,
+              str(r.status_code))
+
+        r = client.get("/", headers={"Origin": "http://127.0.0.1:8765"})
+        check("origin: loopback riceve la sua origine, non *",
+              r.status_code == 200 and r.headers.get(
+                  "access-control-allow-origin") == "http://127.0.0.1:8765",
+              "%s %r" % (r.status_code, dict(r.headers)))
+        r = client.get("/")
+        check("origin: senza Origin niente Allow-Origin *",
+              r.status_code == 200
+              and r.headers.get("access-control-allow-origin") != "*",
+              repr(dict(r.headers)))
     finally:
         asyncio.get_event_loop().run_until_complete(streamable.close_all())
 

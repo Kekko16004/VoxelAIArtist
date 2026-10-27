@@ -672,8 +672,8 @@ def write_project_file(path, payload, project_id=None):
         import base64
         blob = base64.b64encode(json.dumps(payload, separators=(",", ":"))
                                 .encode("utf-8"))
-        with open(path, "wb") as f:
-            f.write(blob)
+        from .compat import atomic_write_bytes
+        atomic_write_bytes(path, blob)
         return path
     body = payload
     if ext in (".voxai",) or path.lower().endswith(".voxai.json"):
@@ -685,6 +685,6 @@ def write_project_file(path, payload, project_id=None):
         }
         if project_id:
             body["projectId"] = project_id
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(body, f, ensure_ascii=False, indent=2)
+    from .compat import atomic_write_json
+    atomic_write_json(path, body, ensure_ascii=False, indent=2)
     return path
