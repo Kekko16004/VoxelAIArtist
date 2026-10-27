@@ -91,6 +91,11 @@ def decode_png(blob):
         return _decode_pillow(blob)
     except ImportError:
         pass
+    except Exception as e:                          # noqa: BLE001
+        # Pillow solleva `UnidentifiedImageError` (un OSError), non ValueError:
+        # chi catturava ValueError come promesso qui sopra se lo vedeva
+        # sfuggire. Il contratto e' uno solo, qualunque decoder ci sia.
+        raise ValueError("non e' un PNG leggibile: %s" % e)
     return _decode_pure(blob)
 
 

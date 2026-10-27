@@ -14,6 +14,7 @@ muore a fine richiesta HTTP e la sessione sparisce).
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import sys
@@ -35,8 +36,35 @@ def _log(line):
     sys.stderr.flush()
 
 
-def _cors(resp):
-    resp.headers["Access-Control-Allow-Origin"] = "*"
+# Origini ammesse: la regola sta in src/localorigin.py, condivisa con main.py.
+# Prima ogni risposta aveva `Access-Control-Allow-Origin: *` e una pagina web
+# qualunque poteva chiamare gli strumenti (`voxel_open` legge qualunque file,
+# `voxel_save` scrive) e leggere le risposte, o cancellare i cookie da /cookies.
+origin_allowed = compat.origin_allowed
+# L'origine della richiesta in corso, per `_cors` (chiamata in molti punti senza
+# la richiesta a portata di mano). Un ContextVar e' per-task: due richieste
+# concorrenti non si vedono.
+_ORIGIN = contextvars.ContextVar("voxelai_origin", default=None)
+
+
+def _forbidden_origin(request):
+    """Una risposta 403 se l'origine non e' ammessa, altrimenti None."""
+    origin = request.headers.get("origin")
+    _ORIGIN.set(origin)
+    if origin_allowed(origin):
+        return None
+    _log("[mcp] richiesta rifiutata dall'origine %s" % origin)
+    return Response("origine non ammessa: %s" % origin, status_code=403)
+
+
+def _cors(resp, request=None):
+    # Si rimanda l'origine SOLO se e' ammessa (e solo se c'e'): `*` permetteva
+    # a qualunque pagina di leggere le risposte.
+    origin = (request.headers.get("origin") if request is not None
+              else _ORIGIN.get())
+    if origin and origin_allowed(origin):
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Vary"] = "Origin"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = (
         "Authorization, Content-Type, Accept, Mcp-Session-Id, "
@@ -117,11 +145,25 @@ async def _dispatch(mcp, method, params):
         if not isinstance(args, dict):
             raise ValueError("arguments deve essere un oggetto")
         try:
-            content = await mcp.call_tool(name, args)
-            return {
-                "content": [_dump_model(c) for c in content],
+            res = await mcp.call_tool(name, args)
+            # Dalle versioni recenti dell'SDK (misurato su mcp 1.26)
+            # `FastMCP.call_tool` ritorna la COPPIA (contenuti, strutturato) e
+            # non piu' la sola lista: iterarla dava una lista e un dizionario,
+            # e `json.dumps` cadeva su `TextContent` — ogni tools/call su /mcp
+            # finiva in un 500. Si accettano tutte e due le forme.
+            structured = None
+            if isinstance(res, tuple):
+                content = res[0] if res else []
+                structured = res[1] if len(res) > 1 else None
+            else:
+                content = res
+            out = {
+                "content": [_dump_model(c) for c in (content or [])],
                 "isError": False,
             }
+            if isinstance(structured, dict) and structured:
+                out["structuredContent"] = structured
+            return out
         except Exception as e:
             return {
                 "content": [{"type": "text", "text": str(e)}],
@@ -164,8 +206,11 @@ async def _dispatch(mcp, method, params):
 
 
 async def handle(request: Request, mcp) -> Response:
+    denied = _forbidden_origin(request)
+    if denied is not None:
+        return denied
     if request.method == "OPTIONS":
-        return _cors(Response(status_code=204))
+        return _cors(Response(status_code=204), request)
 
     if request.method == "GET":
         accept = (request.headers.get("accept") or "").lower()
@@ -293,6 +338,9 @@ def mount(mcp):
         return await handle(request, mcp)
 
     async def on_root(request: Request) -> Response:
+        denied = _forbidden_origin(request)
+        if denied is not None:
+            return denied
         return _cors(JSONResponse({
             "name": "voxelai",
             "transports": {
@@ -302,6 +350,9 @@ def mount(mcp):
         }))
 
     async def on_cookies(request: Request) -> Response:
+        denied = _forbidden_origin(request)
+        if denied is not None:
+            return denied
         if request.method == "OPTIONS":
             return _cors(Response())
         if request.method == "DELETE":

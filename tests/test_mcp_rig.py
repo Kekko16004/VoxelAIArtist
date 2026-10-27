@@ -324,6 +324,29 @@ def test_clip_a_mano():
           repr(rig.clip_names(obj)))
 
 
+def test_clip_sostituita_resta_al_suo_posto(tmp):
+    """Ricaricare una clip corretta non deve cambiare l'ordine del GLB.
+
+    Difetto visto in BLIND-KOUR (gate char-047): rifatta la `slide`, nel file
+    era diventata l'ultima delle 13. L'ordine e' quello che l'importatore
+    mostra, e senza clip di posa la PRIMA e' quella che Blender assegna.
+    """
+    doc, obj = nuovo_omino()
+    k = [{"t": 0, "rot": [0, 0, 0]}, {"t": 1, "rot": [10, 0, 0]}]
+    for nome in ("uno", "due", "tre"):
+        call("voxel_rig_clip", name=nome, tracks=[{"bone": "head", "keys": k}])
+    call("voxel_rig_clip", name="DUE", duration=2.0,
+         tracks=[{"bone": "chest", "keys": k}])
+    nomi = [a.get("name") for a in rig.rig_of(obj)["customAnims"]]
+    check_eq("ordine: la clip sostituita resta al suo posto", nomi,
+             ["uno", "DUE", "tre"])
+    server.WORKDIR = tmp
+    call("voxel_rig_export", path="ordine.glb", presets=False)
+    g, _ = parse_glb(open(os.path.join(tmp, "ordine.glb"), "rb").read())
+    check_eq("ordine: e nel GLB", [a["name"] for a in g["animations"]],
+             ["uno", "DUE", "tre"])
+
+
 def test_clip_ai_senza_rete():
     """`voxel_rig_animate` con `answer_text` sostituita: nessuna rete."""
     doc, obj = nuovo_omino()
@@ -600,6 +623,415 @@ def test_skinning_numerico(tmp):
         peggio = max(peggio, max(abs(out[c] - p[c]) for c in range(3)))
     check("skinning: a riposo i vertici non si muovono", peggio < 1e-6,
           "scarto peggiore %r" % peggio)
+
+
+# --- JOINTS_0: lo slot e' un indice in skin.joints, non un nodo ----------------
+#
+# Fino al 2026-10-26 `build_rigged_gltf` scriveva JOINTS_0 = osso + 1 ("indica
+# NODI"), ma glTF 2.0 dice che JOINTS_0 indicizza `skin.joints`. Ogni voxel
+# seguiva l'osso SUCCESSIVO (testa -> headTip, coscia -> stinco, bacino ->
+# spine) e con l'ultimo osso usato l'indice usciva dall'elenco (le braccia FP del
+# Macchinista in BLIND-KOUR facevano cadere un renderer). Le prove di sopra non
+# se ne accorgevano per due ragioni: il controllo sul range passava perche'
+# nell'umanoide l'ultimo osso e' una punta senza voxel, e la skinning A RIPOSO
+# torna esatta con QUALUNQUE osso (IBM e matrice mondo si annullano sempre).
+# Qui si guarda l'identita' dell'osso voxel per voxel e si ruota un osso vero.
+
+def _quat_rotate(q, v):
+    x, y, z, w = q
+    # v' = v + 2w(q x v) + 2 q x (q x v)
+    cx = y * v[2] - z * v[1]
+    cy = z * v[0] - x * v[2]
+    cz = x * v[1] - y * v[0]
+    cx2 = y * cz - z * cy
+    cy2 = z * cx - x * cz
+    cz2 = x * cy - y * cx
+    return (v[0] + 2 * (w * cx + cx2), v[1] + 2 * (w * cy + cy2),
+            v[2] + 2 * (w * cz + cz2))
+
+
+def _mat(q=(0, 0, 0, 1), t=(0, 0, 0)):
+    """Matrice 4x4 a righe da rotazione (quaternione) + traslazione."""
+    x, y, z, w = q
+    return [[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w), t[0]],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w), t[1]],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y), t[2]],
+            [0.0, 0.0, 0.0, 1.0]]
+
+
+def _mmul(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)]
+            for i in range(4)]
+
+
+def _apply(m, p):
+    return tuple(m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3]
+                 for i in range(3))
+
+
+def _mondo_dei_nodi(gltf, blob, clip_name="pose"):
+    """Matrice mondo di ogni nodo, con la clip `clip_name` letta a t=0 come
+    farebbe un importatore (la clip della posa e' la prima, invariante 4)."""
+    loc_t, loc_r = {}, {}
+    for a in gltf.get("animations", []):
+        if a["name"] != clip_name:
+            continue
+        for c in a["channels"]:
+            out = leggi(gltf, blob, a["samplers"][c["sampler"]]["output"])[0]
+            if c["target"]["path"] == "translation":
+                loc_t[c["target"]["node"]] = out
+            elif c["target"]["path"] == "rotation":
+                loc_r[c["target"]["node"]] = out
+    padre = {}
+    for ni, node in enumerate(gltf["nodes"]):
+        for k in node.get("children", []):
+            padre[k] = ni
+    cache = {}
+
+    def mondo(ni):
+        if ni in cache:
+            return cache[ni]
+        node = gltf["nodes"][ni]
+        t = loc_t.get(ni, node.get("translation") or (0, 0, 0))
+        q = loc_r.get(ni, node.get("rotation") or (0, 0, 0, 1))
+        m = _mat(q, t)
+        if ni in padre:
+            m = _mmul(mondo(padre[ni]), m)
+        cache[ni] = m
+        return m
+    return mondo
+
+
+def _voxel_dei_vertici(gltf, blob, prim, obj, k):
+    """Indice (in `obj.voxel_list()`) del voxel di ogni vertice, o None.
+
+    Il voxel di un quad si ritrova dal centro del quad meno mezza normale: e'
+    cosi' che lo costruisce `build_rigged_shell`, 4 vertici per faccia. Serve a
+    confrontare il FILE col RIG senza fidarsi del file per sapere chi e' chi.
+    """
+    voxels = obj.voxel_list()
+    at = {(v["x"], v["y"], v["z"]): i for i, v in enumerate(voxels)}
+    b = obj.bounds()
+    o = ((b[0] + b[3]) / 2.0, b[1] - 0.5, (b[2] + b[5]) / 2.0)
+    pos = leggi(gltf, blob, prim["attributes"]["POSITION"])
+    nrm = leggi(gltf, blob, prim["attributes"]["NORMAL"])
+    out = []
+    for q0 in range(0, len(pos), 4):
+        c = [sum(pos[q0 + j][a] for j in range(4)) / 4.0 for a in range(3)]
+        n = nrm[q0]
+        key = tuple(int(round((c[a] - n[a] * 0.5 * k) / k + o[a]))
+                    for a in range(3))
+        out += [at.get(key)] * 4
+    return out
+
+
+def _confronta_ossa(gltf, blob, obj, k):
+    """Per ogni vertice: le ossa che il FILE dice contro quelle del RIG.
+
+    Ritorna (discordanze, nomi delle ossa usate, joint max, numero di giunti).
+    """
+    r = rig.rig_of(obj)
+    names = [bd["name"] for bd in r["bones"]]
+    skin = rig.skin_for(obj, r)
+    voxels = obj.voxel_list()
+    joints = gltf["skins"][0]["joints"]
+    node_name = [n.get("name") for n in gltf["nodes"]]
+    discordi, usate, jmax = [], set(), -1
+    for prim in gltf["meshes"][0]["primitives"]:
+        js = leggi(gltf, blob, prim["attributes"]["JOINTS_0"])
+        ws = leggi(gltf, blob, prim["attributes"]["WEIGHTS_0"])
+        for vi, i in enumerate(_voxel_dei_vertici(gltf, blob, prim, obj, k)):
+            if i is None:
+                discordi.append(("vertice senza voxel", vi))
+                continue
+            atteso = {}
+            for s in range(rig.MAX_BONE_INFLUENCES):
+                w = skin["weights"][i * 4 + s]
+                if w > 1e-6:
+                    nm = names[skin["indices"][i * 4 + s]]
+                    atteso[nm] = atteso.get(nm, 0.0) + w
+            visto = {}
+            for s in range(4):
+                jmax = max(jmax, js[vi][s])
+                if ws[vi][s] > 1e-6:
+                    if js[vi][s] >= len(joints):
+                        visto["<fuori: %d>" % js[vi][s]] = ws[vi][s]
+                        continue
+                    nm = node_name[joints[js[vi][s]]]
+                    visto[nm] = visto.get(nm, 0.0) + ws[vi][s]
+                    usate.add(nm)
+            if set(visto) != set(atteso) or any(
+                    abs(visto[nm] - atteso[nm]) > 1e-4 for nm in atteso):
+                v = voxels[i]
+                discordi.append(((v["x"], v["y"], v["z"]), sorted(atteso),
+                                 sorted(visto)))
+    return discordi, usate, jmax, len(joints)
+
+
+def test_joints_0_indicizza_skin_joints(tmp):
+    """Il voxel della parte X e' legato all'osso X, nel FILE come nel rig."""
+    server.WORKDIR = tmp
+    for binding in ("rigid", "smooth"):
+        doc, obj = nuovo_omino(binding=binding)
+        call("voxel_rig_export", path="j_%s.glb" % binding, scale=0.01,
+             presets=False, custom=False)
+        gltf, blob = parse_glb(
+            open(os.path.join(tmp, "j_%s.glb" % binding), "rb").read())
+        discordi, usate, jmax, n = _confronta_ossa(gltf, blob, obj, 0.01)
+        check("joints[%s]: ogni vertice segue le ossa del rig" % binding,
+              not discordi, "%d discordanze, es. %r" % (len(discordi),
+                                                         discordi[:3]))
+        check("joints[%s]: joint_max < n_joints" % binding, jmax < n,
+              "max %d su %d" % (jmax, n))
+        punte = sorted(nm for nm in usate if nm.endswith("Tip")
+                       or "Tip_" in nm)
+        check("joints[%s]: nessun vertice sulle ossa-punta (*Tip)" % binding,
+              not punte, repr(punte))
+        check("joints[%s]: le ossa vere sono usate (la prova ha denti)"
+              % binding, {"hips", "head", "upperLeg_R"} <= usate,
+              repr(sorted(usate)))
+
+    # La catena generica lega voxel anche all'ULTIMO osso: col vecchio +1 il suo
+    # indice era n, cioe' fuori da skin.joints.
+    reset()
+    call("voxel_new", name="Barra")
+    call("voxel_ops", ops=[["fill", 0, 0, 0, 29, 1, 1, "#888888"]])
+    call("voxel_rig_auto", kind="generic", segments=5, binding="rigid")
+    obj = SESSION.get(None).object_by_ref(None)
+    call("voxel_rig_export", path="barra.glb", scale=0.1, presets=False)
+    gltf, blob = parse_glb(open(os.path.join(tmp, "barra.glb"), "rb").read())
+    discordi, usate, jmax, n = _confronta_ossa(gltf, blob, obj, 0.1)
+    check("joints[catena]: l'ultimo osso ha voxel ed e' n-1, non n",
+          jmax == n - 1, "max %d su %d giunti" % (jmax, n))
+    check("joints[catena]: ogni vertice segue le ossa del rig", not discordi,
+          "%d discordanze, es. %r" % (len(discordi), discordi[:3]))
+
+
+def _braccia_fp(parts=False):
+    """Due braccia senza corpo, lungo Z, piu' spesse alla spalla (z basso):
+    la forma delle braccia in prima persona del gate char-049."""
+    reset()
+    call("voxel_new", name="BracciaFP")
+    pezzi = {}
+    for x0, nome in ((0, "braccio_r"), (12, "braccio_l")):
+        pezzi[nome] = [["fill", x0, 0, 0, x0 + 3, 3, 5, "#AA6633"],
+                       ["fill", x0 + 1, 1, 6, x0 + 2, 2, 19, "#E0B090"]]
+    if parts:
+        call("voxel_ops", parts=pezzi)
+    else:
+        call("voxel_ops", ops=pezzi["braccio_r"] + pezzi["braccio_l"])
+    doc = SESSION.get(None)
+    return doc, doc.object_by_ref(None)
+
+
+def test_rig_a_catene_per_pezzi_senza_corpo(tmp):
+    """`kind=chains`: una catena per pezzo, figlie di `root`.
+
+    Gate char-049 (BLIND-KOUR): voxel_rig_auto sapeva fare solo l'umanoide
+    (le braccia FP non hanno un corpo su cui misurare le stazioni) o UNA catena
+    lungo l'asse piu' lungo, che attraversa il vuoto fra le due braccia. Lo
+    scheletro FP era stato scritto a mano nel .voxai.
+    """
+    doc, obj = _braccia_fp()
+    out = call("voxel_rig_auto", kind="chains", segments=3)
+    r = rig.rig_of(obj)
+    names = [bd["name"] for bd in r["bones"]]
+    check_eq("catene: radice + 3 ossa per braccio", len(names), 7)
+    check("catene: la radice non prende voxel",
+          r["bones"][0]["name"] == "root" and r["bones"][0].get("helper"),
+          repr(r["bones"][0]))
+    check("catene: tutte le catene nascono dalla radice",
+          sorted(bd["name"] for bd in r["bones"] if bd["parent"] == 0)
+          == ["catena1_1", "catena2_1"], repr(names))
+    check("catene: nessun osso senza voxel", "Attenzione" not in out, out)
+    check("catene: legatura rigida senza parti", r["binding"] == "rigid",
+          r["binding"])
+    check("catene: tipo compatibile con la GUI",
+          r["type"] == "generic" and obj.rig.get("layout") == "chains",
+          repr((r["type"], obj.rig.get("layout"))))
+    first = [bd for bd in r["bones"] if bd["name"].endswith("_1")]
+    check("catene: partono dalla spalla (estremo spesso, z basso)",
+          all(bd["head"][2] < bd["tail"][2] and bd["head"][2] < 0
+              for bd in first), repr([(bd["head"], bd["tail"]) for bd in first]))
+    # Nessun voxel di un braccio sulle ossa dell'altro.
+    skin = rig.skin_for(obj, r)
+    voxels = obj.voxel_list()
+    sbagliati = 0
+    for i, v in enumerate(voxels):
+        bone = r["bones"][skin["primary"][i]]
+        lato_osso = bone["head"][0] < 8
+        if lato_osso != (v["x"] < 8):
+            sbagliati += 1
+    check_eq("catene: ogni braccio segue la sua catena", sbagliati, 0)
+
+    call("voxel_rig_auto", kind="chains", segments=3, root_end="z+")
+    r2 = rig.rig_of(obj)
+    first2 = [bd for bd in r2["bones"] if bd["name"].endswith("_1")]
+    check("catene: root_end=z+ le fa partire dall'altro capo",
+          all(bd["head"][2] > bd["tail"][2] for bd in first2),
+          repr([(bd["head"], bd["tail"]) for bd in first2]))
+    err = call_fails("voxel_rig_auto", kind="chains", root_end="avanti")
+    check("catene: root_end sconosciuto spiegato", err and "z-" in err, err)
+
+    # Con le PARTI dichiarate: una catena per parte, nominata come la parte.
+    doc, obj = _braccia_fp(parts=True)
+    call("voxel_rig_auto", kind="chains", segments=2)
+    r = rig.rig_of(obj)
+    names = sorted(bd["name"] for bd in r["bones"])
+    check("catene: con le parti le ossa portano il nome della parte",
+          names == ["braccio_l_1", "braccio_l_2", "braccio_r_1", "braccio_r_2",
+                    "root"], repr(names))
+    check("catene: con le parti la legatura e' parts", r["binding"] == "parts",
+          r["binding"])
+
+    # E il file e' giusto: ogni vertice sull'osso del rig, indici in range.
+    server.WORKDIR = tmp
+    call("voxel_rig_export", path="fp.glb", scale=0.05, presets=False)
+    gltf, blob = parse_glb(open(os.path.join(tmp, "fp.glb"), "rb").read())
+    discordi, usate, jmax, n = _confronta_ossa(gltf, blob, obj, 0.05)
+    check("catene: il GLB segue il rig", not discordi,
+          "%d discordanze, es. %r" % (len(discordi), discordi[:3]))
+    check("catene: joint_max < n_joints e la radice senza vertici",
+          jmax < n and "root" not in usate, "max %d su %d, %r" % (jmax, n, usate))
+
+
+def test_origine_esplicita_del_glb_riggato(tmp):
+    """`origin` porta lo zero del file dove serve (la camera delle braccia FP).
+
+    Gate char-049: l'origine era cotta al centro/base dell'ingombro e per
+    appendere le braccia alla camera serviva uno script (wrap_origin.py) che
+    aggiungeva un nodo radice al GLB.
+    """
+    doc, obj = _braccia_fp()
+    call("voxel_rig_auto", kind="chains", segments=2)
+    server.WORKDIR = tmp
+    k = 0.1
+    cam = [7.5, 6.0, -4.0]
+    call("voxel_rig_export", path="o_def.glb", scale=k, presets=False)
+    call("voxel_rig_export", path="o_cam.glb", scale=k, presets=False,
+         origin=cam)
+    g0, b0 = parse_glb(open(os.path.join(tmp, "o_def.glb"), "rb").read())
+    g1, b1 = parse_glb(open(os.path.join(tmp, "o_cam.glb"), "rb").read())
+    p0 = leggi(g0, b0, g0["meshes"][0]["primitives"][0]["attributes"]["POSITION"])
+    p1 = leggi(g1, b1, g1["meshes"][0]["primitives"][0]["attributes"]["POSITION"])
+    b = obj.bounds()
+    d_def = ((b[0] + b[3]) / 2.0, b[1] - 0.5, (b[2] + b[5]) / 2.0)
+    atteso = [(d_def[a] - cam[a]) * k for a in range(3)]
+    delta = [p1[0][a] - p0[0][a] for a in range(3)]
+    check("origin: i vertici si spostano di (default - origin) * scala",
+          all(abs(delta[a] - atteso[a]) < 1e-5 for a in range(3)),
+          "%r contro %r" % (delta, atteso))
+    # Le ossa si spostano con i vertici: lo zero del file e' la camera.
+    ib0 = leggi(g0, b0, g0["skins"][0]["inverseBindMatrices"])
+    ib1 = leggi(g1, b1, g1["skins"][0]["inverseBindMatrices"])
+    check("origin: anche le inverse bind seguono l'origine",
+          abs((ib0[0][12] - ib1[0][12]) + atteso[0]) < 1e-5,
+          "%r %r" % (ib0[0][12:15], ib1[0][12:15]))
+    discordi, usate, jmax, n = _confronta_ossa(g0, b0, obj, k)
+    check("origin: il file di default resta coerente", not discordi,
+          repr(discordi[:3]))
+    call("voxel_rig_export", path="o_txt.glb", scale=k, presets=False,
+         origin="7.5, 6, -4")
+    check("origin: accettata anche come testo",
+          open(os.path.join(tmp, "o_txt.glb"), "rb").read()
+          == open(os.path.join(tmp, "o_cam.glb"), "rb").read())
+    err = call_fails("voxel_rig_export", path="x.glb", origin=[1, 2])
+    check("origin: due numeri spiegati", err and "tre numeri" in err, err)
+    # `clips` come testo: il codice lo gestiva, ma lo schema `list` lo faceva
+    # rifiutare da pydantic prima di arrivarci.
+    out = call("voxel_rig_export", path="c_txt.glb", scale=k, clips="walk,run")
+    check("clips: accettate anche come testo 'walk,run'",
+          "walk" in out and "run" in out and "idle" not in out, out)
+
+
+def test_skinning_osso_ruotato(tmp):
+    """Si ruota `spine` e si rifa' la skinning sulla CPU, dal file.
+
+    Cio' che segue `spine` (lei, torace, collo, testa, braccia) deve girare
+    attorno alla sua testa; cio' che non ne discende (bacino, gambe) deve
+    restare FERMO. Col vecchio +1 i voxel di `hips` erano legati a `spine` e
+    giravano con lei: e' esattamente la differenza che a riposo non si vede.
+    """
+    doc, obj = nuovo_omino(binding="rigid")
+    k = 0.01
+    gradi = 35.0
+    call("voxel_rig_pose", poses={"spine": {"rot": [0, 0, gradi]}},
+         additive=False)
+    server.WORKDIR = tmp
+    call("voxel_rig_export", path="ruotato.glb", scale=k, presets=False,
+         custom=False)
+    gltf, blob = parse_glb(open(os.path.join(tmp, "ruotato.glb"), "rb").read())
+
+    r = rig.rig_of(obj)
+    bones = r["bones"]
+    names = [bd["name"] for bd in bones]
+    sp = names.index("spine")
+    discende = set()
+    for i in range(len(bones)):
+        j = i
+        while j >= 0:
+            if j == sp:
+                discende.add(names[i])
+                break
+            j = bones[j].get("parent", -1)
+    b = obj.bounds()
+    o = ((b[0] + b[3]) / 2.0, b[1] - 0.5, (b[2] + b[5]) / 2.0)
+    perno = tuple((bones[sp]["head"][a] - o[a]) * k for a in range(3))
+    q = rig.quat_from_euler_xyz(0.0, 0.0, math.radians(gradi))
+
+    mondo = _mondo_dei_nodi(gltf, blob)
+    joints = gltf["skins"][0]["joints"]
+    ibm_cm = leggi(gltf, blob, gltf["skins"][0]["inverseBindMatrices"])
+    ibm = [[[m[c * 4 + rr] for c in range(4)] for rr in range(4)]
+           for m in ibm_cm]                      # colonne -> righe
+    sk = rig.skin_for(obj, r)
+    peggio, fermi, mossi, spostamento = 0.0, 0, 0, 0.0
+    for prim in gltf["meshes"][0]["primitives"]:
+        di_chi = _voxel_dei_vertici(gltf, blob, prim, obj, k)
+        pos = leggi(gltf, blob, prim["attributes"]["POSITION"])
+        js = leggi(gltf, blob, prim["attributes"]["JOINTS_0"])
+        ws = leggi(gltf, blob, prim["attributes"]["WEIGHTS_0"])
+        for vi, p in enumerate(pos):
+            out = [0.0, 0.0, 0.0]
+            for s in range(4):
+                w = ws[vi][s]
+                if w <= 0:
+                    continue
+                slot = js[vi][s]
+                if slot >= len(joints):
+                    out = [float("nan")] * 3
+                    break
+                pp = _apply(_mmul(mondo(joints[slot]), ibm[slot]), p)
+                for a in range(3):
+                    out[a] += w * pp[a]
+            # Atteso, calcolato SENZA il file: l'osso viene dal RIG (legatura
+            # rigida, un osso per voxel), il moto e' un giro attorno alla testa
+            # di spine per chi ne discende, fermo per gli altri.
+            i = di_chi[vi]
+            osso = names[sk["primary"][i]] if i is not None else None
+            if osso in discende:
+                rel = tuple(p[a] - perno[a] for a in range(3))
+                rr = _quat_rotate(q, rel)
+                atteso = tuple(rr[a] + perno[a] for a in range(3))
+                mossi += 1
+                spostamento = max(spostamento, max(abs(atteso[a] - p[a])
+                                                   for a in range(3)))
+            else:
+                atteso = p
+                fermi += 1
+            d = max(abs(out[a] - atteso[a]) for a in range(3))
+            if d != d:                              # NaN: indice fuori range
+                d = float("inf")
+            peggio = max(peggio, d)
+    check("ruotato: ci sono vertici che seguono spine e vertici fermi",
+          mossi > 0 and fermi > 0, "%d mossi, %d fermi" % (mossi, fermi))
+    check("ruotato: la rotazione sposta davvero (la prova ha denti)",
+          spostamento > 0.01, "%r m" % spostamento)
+    check("ruotato: ogni vertice e' dove lo porta il SUO osso", peggio < 1e-5,
+          "scarto peggiore %r m" % peggio)
+    # E il bacino in particolare: e' l'osso che il vecchio +1 legava a spine.
+    check("ruotato: il bacino ha voxel suoi (altrimenti la prova e' cieca)",
+          names.index("hips") in sk["primary"])
 
 
 def test_posa_deforma_davvero(tmp):

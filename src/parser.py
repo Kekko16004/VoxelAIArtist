@@ -649,7 +649,16 @@ def extract_json_candidate(text):
                 spans.append((idx, len(b) - 1))
     return candidates
 
-def extract_and_parse_json(text):
+def extract_and_parse_json(text, prefer_array=False):
+    """Il JSON della risposta del modello (vedi `extract_json_candidate`).
+
+    `prefer_array=True` e' per chi ACCETTA un array al top level (le tracce di
+    un'animazione): lo restituisce intero invece del suo primo elemento.
+    Senza, una risposta `[{head...}, {neck...}]` produceva due candidati, il
+    primo elemento vinceva e le altre tracce sparivano in silenzio (riprodotto
+    nell'audit del 2026-10-26). Di default resta il comportamento storico: chi
+    vuole un oggetto (modello, texture) da `[{...}]` riceve il primo.
+    """
     candidates = extract_json_candidate(text)
     if not candidates:
         start_idx = text.find('{')
@@ -673,6 +682,12 @@ def extract_and_parse_json(text):
             # lista di track). expand_ops lascia passare i non-dict, quindi la
             # restituiamo solo se non c'e' nessun oggetto utilizzabile.
             parsed_arrays.append(parsed)
+    if prefer_array and parsed_objects and parsed_arrays:
+        # L'oggetto trovato e' il primo elemento di un array: la risposta era
+        # l'array.
+        for arr in parsed_arrays:
+            if arr and arr[0] == parsed_objects[0]:
+                return arr
     if parsed_objects:
         return expand_ops(parsed_objects[0])
     if parsed_arrays:
@@ -743,4 +758,4 @@ if __name__ == "__main__":
         export_voxels_to_obj(data, f"{name}.obj", f"{name}.mtl")
         print(f"Modello esportato correttamente: {name}.obj e {name}.mtl")
     else:
-        print("Uso: python parser.py <file.json>")
+        print("Uso: python parser.py <file.json>")

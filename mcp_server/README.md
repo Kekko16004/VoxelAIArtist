@@ -298,7 +298,13 @@ e non escono mai da un payload: quello che si vede e' `hasKey` e un `****WXYZ`.
 Piu' progetti aperti insieme; ognuno ha piu' oggetti. Ogni strumento accetta
 `document` e `obj` per dire su cosa lavorare, e senza usa quello corrente.
 `voxel_preview` disegna il modello in ASCII da tre viste: serve a **guardare cosa
-si sta facendo** senza esportare e aprire un altro programma.
+si sta facendo** senza esportare e aprire un altro programma. Con `image=true`
+restituisce invece un'**immagine** vera (isometrica ombreggiata col contorno dei
+cubi, `size` px; viste `iso`, `iso_left`, `iso_back`, `iso_back_left`, le sei
+ortografiche, `sheet` = le quattro iso affiancate) per i client che vedono.
+
+I percorsi relativi di salvataggio ed export partono dalla **cartella di lavoro
+del server** (`voxel_ai_status` la mostra), non da quella del client.
 
 ### Costruire
 `voxel_ops` · `voxel_fill` · `voxel_erase` · `voxel_set` · `voxel_recolor` ·
@@ -343,9 +349,13 @@ con gli altri editor.
 `voxel_rig_clip` · `voxel_rig_animate` · `voxel_rig_export`
 
 `voxel_rig_auto` costruisce lo scheletro sull'ingombro del modello: `humanoid`
-(24 ossa) o `generic` (una catena lungo l'asse piu' lungo). Le pose e le clip si
+(24 ossa), `generic` (una catena lungo l'asse piu' lungo) o `chains` (una catena
+per ogni parte o pezzo staccato, tutte figlie di una radice: braccia in prima
+persona, tentacoli, bracci di un lampadario). Le pose e le clip si
 scrivono in **gradi**; `voxel_rig_animate` fa scrivere una clip all'AI a parole.
-`voxel_rig_export` scrive il GLB con ossa, pesi, posa e animazioni.
+`voxel_rig_export` scrive il GLB con ossa, pesi, posa e animazioni; `origin`
+(`[x, y, z]` in voxel) sceglie lo zero del file, per esempio la camera delle
+braccia FP.
 
 **Il modello umanoide va costruito in T-pose**, braccia orizzontali. Le stazioni
 delle braccia si misurano dal bordo del torso, e con le braccia lungo i fianchi
@@ -363,7 +373,7 @@ si abbassano dopo, con `voxel_rig_pose` (Z −78 a destra, +78 a sinistra).
 | `.vox` (MagicaVoxel) | si', esatto | si', max 256 per lato |
 | `.obj` + `.mtl` | si', voxelizzato | si', col `.mtl` e i PNG accanto |
 | `.gltf` / `.glb` | si', voxelizzato | si', texture incorporate |
-| `.png` | si' (piatto o sprite stack) | si', rendering ortografico |
+| `.png` | si' (piatto o sprite stack) | si', anteprima iso/ortografica (`view`, `size`; `size=0` = 1 px per voxel) |
 | GLB riggato | — | `voxel_rig_export` |
 
 Le mesh di triangoli (`.obj`, `.gltf`, `.glb`) si **voxelizzano**: `resolution`

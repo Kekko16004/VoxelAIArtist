@@ -15,6 +15,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, "src"))
 import settings as app_settings
 import pack as pack_engine
+from atomicio import atomic_write_json
+from localorigin import origin_allowed
 
 # ===== MODALITA' DI AVVIO =====================================================
 # "web" -> DEFAULT: nessuna finestra Qt. Si avvia SOLO il server locale e la UI
@@ -218,8 +220,9 @@ def _write_voxai(path, data):
         "savedAt": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
         "data": data,
     }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    # Atomico: un salvataggio fallito a meta' non deve distruggere il progetto
+    # che c'era (vedi src/atomicio.py).
+    atomic_write_json(path, payload, ensure_ascii=False, indent=2)
     return path
 
 
@@ -1158,12 +1161,48 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
     def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        # Si rimanda l'origine SOLO se e' una pagina locale (src/localorigin.py).
+        # Prima era `*`: qualunque sito aperto nel browser poteva leggere le
+        # risposte di /api (impostazioni, provider, progetti).
+        origin = self.headers.get('Origin') if self.headers else None
+        if origin and origin_allowed(origin):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, DELETE')
         self.send_header('Access-Control-Allow-Headers', '*')
         super().end_headers()
 
+    def _blocked_cross_site(self):
+        """Rifiuta (403) una richiesta che arriva da una pagina web estranea.
+
+        Riprodotto nell'audit del 2026-10-26: senza controlli una pagina
+        qualunque poteva POSTare su /api/project/save (scrivere un file dove
+        voleva), /api/providers (iniettare un provider con il suo URL),
+        cancellare i cookie, o con un semplice <img> aprire Esplora risorse
+        (GET /api/settings/open-folder). Si guardano due intestazioni che una
+        pagina non puo' falsificare: `Origin` (fetch, form POST) e
+        `Sec-Fetch-Site` (mandata da Chromium/Firefox anche per <img>/<script>).
+        I file statici restano liberi; i client senza browser (test, curl) non
+        mandano nessuna delle due e passano. Ritorna True se ha gia' risposto."""
+        path = urlparse(self.path).path
+        if not (path.startswith('/api/') or path.rstrip('/') == '/cookies'
+                or self.command in ('POST', 'DELETE', 'PUT')):
+            return False
+        origin = self.headers.get('Origin')
+        site = (self.headers.get('Sec-Fetch-Site') or '').strip().lower()
+        if origin_allowed(origin) and site != 'cross-site':
+            return False
+        body = json.dumps({"error": "origine non ammessa: %s" % (origin or site)}).encode('utf-8')
+        self.send_response(403)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return True
+
     def do_OPTIONS(self):
+        if self._blocked_cross_site():
+            return
         self.send_response(200)
         self.end_headers()
 
@@ -1245,6 +1284,8 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self._blocked_cross_site():
+            return
         # Le pagine principali passano da un handler dedicato che inietta le
         # variabili desktop (?desktop=1). Cosi' la MainWindow puo' caricarle con
         # setUrl(http://...) — vedi _serve_html_injected per il perche'.
@@ -1510,6 +1551,8 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_DELETE(self):
+        if self._blocked_cross_site():
+            return
         if self.path.split('?')[0].rstrip('/') in ('/api/settings/cookies', '/cookies'):
             p = app_settings.get_cookies_path()
             if os.path.exists(p):
@@ -1683,6 +1726,8 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
         })
 
     def do_POST(self):
+        if self._blocked_cross_site():
+            return
         # --- Preferenze generiche: merge senza perdere le altre chiavi ---
         if self.path == '/api/prefs':
             try:
@@ -2027,7 +2072,7 @@ class VoxelAIRequestHandler(http.server.SimpleHTTPRequestHandler):
             sys.path.insert(0, os.path.join(BASE_DIR, "src"))
             from parser import extract_and_parse_json
             try:
-                raw = extract_and_parse_json(answer)
+                raw = extract_and_parse_json(answer, prefer_array=True)
             except Exception as e:                              # noqa: BLE001
                 self._log_ai_answer("ANIMAZIONE AI", answer, e)
                 self._send_json(400, {
@@ -2460,7 +2505,21 @@ def run_py_mode():
         return 0
 
 
+def _safe_console():
+    """Una console Windows in cp1252 non sa scrivere un'emoji o un ideogramma:
+    `print` sollevava UnicodeEncodeError DENTRO l'handler HTTP (riprodotto
+    nell'audit del 2026-10-26 con una risposta AI contenente un'emoji in
+    `_log_ai_answer`), e l'utente riceveva una connessione chiusa invece del
+    messaggio d'errore. Un carattere non rappresentabile diventa `?`."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 if __name__ == '__main__':
+    _safe_console()
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 

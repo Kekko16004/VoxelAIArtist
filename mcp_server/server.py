@@ -28,7 +28,9 @@ TRE SCELTE DI FONDO.
 
 import json
 import os
+import struct
 import sys
+from typing import Union
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,7 +39,7 @@ from mcp.server.fastmcp import FastMCP                       # noqa: E402
 
 from mcp_server import ai, compat, edits, exporters, importers  # noqa: E402
 from mcp_server import materials, patch, pixelops, rig, textures  # noqa: E402
-from mcp_server import png as pngmod, streamable             # noqa: E402
+from mcp_server import png as pngmod, render, streamable     # noqa: E402
 from mcp_server.document import Cell, Document, VoxelObject  # noqa: E402
 from mcp_server.session import SESSION, SessionError         # noqa: E402
 
@@ -79,11 +81,18 @@ def _resolve_out(path):
 
 
 def _write(path, data):
+    """Scrive DENTRO la cartella di lavoro, in modo atomico.
+
+    Atomico perche' un export si rifa' spesso sopra quello di prima (lo stesso
+    `personaggio.glb` riesportato dopo un ritocco) e un motore di gioco puo'
+    stare leggendo quel file in quel momento: con `open("wb")` lo trovava
+    troncato. Ora vede il vecchio o il nuovo, mai una meta'.
+    """
     full = _resolve_out(path)
-    mode = "wb" if isinstance(data, (bytes, bytearray)) else "w"
-    kwargs = {} if "b" in mode else {"encoding": "utf-8"}
-    with open(full, mode, **kwargs) as f:
-        f.write(data)
+    if isinstance(data, (bytes, bytearray)):
+        compat.atomic_write_bytes(full, bytes(data))
+    else:
+        compat.atomic_write_text(full, data)
     return full
 
 
@@ -113,6 +122,14 @@ def _as_bool(v, default=False):
     if isinstance(v, (int, float)):
         return bool(v)
     return str(v).strip().lower() in ("true", "1", "yes", "y", "t", "si", "sì", "on")
+
+
+def _as_int(v, default=0):
+    f = _as_float(v, default)
+    try:
+        return int(round(f))
+    except (OverflowError, ValueError):
+        raise SessionError("mi aspettavo un numero intero, ho ricevuto %r" % (v,))
 
 
 def _describe(doc, obj):
@@ -232,19 +249,38 @@ def voxel_info(document: str = "", obj: str = "") -> str:
 
 
 @mcp.tool()
-def voxel_preview(document: str = "", obj: str = "", view: str = "front",
-                  width: int = 48) -> str:
-    """Anteprima ASCII di un oggetto, per capire com'e' fatto senza esportare.
+def voxel_preview(document: str = "", obj: str = "", view: str = "",
+                  width: int = 48, image: bool = False, size: int = 384):
+    """Anteprima di un oggetto, per capire com'e' fatto senza esportare.
 
-    Viste: front, back, left, right, top, bottom. E' volutamente testuale: un
-    PNG costerebbe molti token e per giudicare una silhouette bastano i
-    caratteri.
+    Di base e' TESTO (ASCII, viste front/back/left/right/top/bottom): costa
+    pochi token e per giudicare una silhouette bastano i caratteri.
+
+    `image=true` restituisce invece un'IMMAGINE vera (PNG di al piu' `size`
+    px, ombreggiata, con il contorno dei cubi) che un client con la vista legge
+    direttamente,
+    senza esportare un file: e' quella per giudicare proporzioni e volumi.
+    Viste immagine: `iso` (3/4 dal davanti-destra), `iso_left`, `iso_back`,
+    `iso_back_left`, le sei ortografiche, oppure `sheet` (le quattro iso
+    affiancate). Vista vuota = `front` per il testo, `iso` per l'immagine.
+    I colori sono quelli dei voxel: le texture dei materiali non si vedono.
     """
     doc = SESSION.get(document or None)
     o = doc.object_by_ref(obj or None)
     if not len(o):
         return "L'oggetto '%s' e' vuoto." % o.name
-    return exporters.ascii_preview(o, view=view, width=max(8, int(width)))
+    if not _as_bool(image, False):
+        return exporters.ascii_preview(o, view=view or "front",
+                                       width=max(8, _as_int(width, 48)))
+    v = str(view or "iso").strip().lower()
+    px = max(64, min(2048, _as_int(size, 384)))
+    try:
+        buf, w, h = render.render_view(render.cells_of(o), v, px)
+    except ValueError as e:
+        raise SessionError(str(e))
+    from mcp.server.fastmcp import Image
+    return ["%s, vista %s, %dx%d px, %d voxel." % (o.name, v, w, h, len(o)),
+            Image(data=pngmod.encode_png(buf, w, h), format="png")]
 
 
 @mcp.tool()
@@ -465,8 +501,18 @@ def voxel_ai_status() -> str:
     ops le scrivi tu.
 
     Non mostra mai una chiave ne' un cookie, solo se ci sono.
+
+    Riporta anche la CARTELLA DI LAVORO del server: ogni percorso relativo di
+    `voxel_save`/`voxel_export`/`voxel_rig_export` e' relativo a quella, non
+    alla cartella del client (gate kit-walk di BLIND-KOUR: un export "sparito"
+    era finito li').
     """
-    return json.dumps(ai.provider_status(), ensure_ascii=False, indent=1)
+    status = ai.provider_status()
+    if isinstance(status, dict):
+        status["cartella_di_lavoro"] = os.path.realpath(WORKDIR)
+        status["scrittura"] = ("ovunque (--unrestricted)" if UNRESTRICTED
+                               else "solo nella cartella di lavoro")
+    return json.dumps(status, ensure_ascii=False, indent=1)
 
 
 @mcp.tool()
@@ -808,17 +854,27 @@ def _texture_from_png(path, side=None):
     Il tetto (`materials.TEXTURE_MAX`) si applica qui e non a valle: una foto da
     4000 pixel diventerebbe un data URL da megabyte dentro il progetto, e la
     pixel art non ci guadagna niente.
+
+    E' una LETTURA: non passa da `_resolve_out` (che vale per le scritture,
+    rifiutava un PNG fuori dalla cartella di lavoro e creava cartelle per un
+    file inesistente). E il tetto conserva la PROPORZIONE: prima ogni lato era
+    tagliato per conto suo, e un 400x100 diventava 128x100.
     """
-    full = _resolve_out(path)
-    with open(full, "rb") as f:
-        buf, w, h = pngmod.decode_png(f.read())
+    full = os.path.expanduser(str(path or "").strip())
+    if not full or not os.path.isfile(full):
+        raise SessionError("file non trovato: %s" % path)
+    try:
+        with open(full, "rb") as f:
+            buf, w, h = pngmod.decode_png(f.read())
+    except (OSError, ValueError) as e:
+        raise SessionError("non riesco a leggere il PNG %s: %s" % (path, e))
     top = materials.TEXTURE_MAX
-    tw = min(top, int(side) if side else w)
     if side:
-        th = tw
+        tw = th = max(1, min(top, int(side)))
     else:
-        th = min(top, h)
-        tw = min(top, w)
+        f = min(1.0, float(top) / max(w, h))
+        tw = max(1, int(round(w * f)))
+        th = max(1, int(round(h * f)))
     if (tw, th) != (w, h):
         buf = pngmod.scale_nearest(buf, w, h, tw, th)
     return materials.texture_from_buffer(buf, tw, th)
@@ -1161,37 +1217,48 @@ def voxel_import(path: str, as_object: bool = True, resolution: int = 64,
     with open(p, "rb") as f:
         blob = f.read()
     base = os.path.splitext(os.path.basename(p))[0]
-    groups = []
-    if ext == ".vox":
-        models = importers.read_vox(blob)
-        # Un solo modello prende il nome del FILE; se ce ne sono piu' d'uno
-        # tengono il loro, o si otterrebbero tre oggetti con lo stesso nome.
-        if len(models) == 1:
-            groups.append((base, models[0]["cells"]))
+    try:
+        groups = []
+        if ext == ".vox":
+            models = importers.read_vox(blob)
+            # Un solo modello prende il nome del FILE; se ce ne sono piu' d'uno
+            # tengono il loro, o si otterrebbero tre oggetti con lo stesso nome.
+            if len(models) == 1:
+                groups.append((base, models[0]["cells"]))
+            else:
+                groups = [(m["name"], m["cells"]) for m in models]
+        elif ext == ".obj":
+            mtl = None
+            guess = os.path.splitext(p)[0] + ".mtl"
+            if os.path.isfile(guess):
+                with open(guess, "r", encoding="utf-8", errors="replace") as f:
+                    mtl = f.read()
+            groups.append((base, importers.read_obj(
+                blob.decode("utf-8", "replace"), mtl,
+                resolution=int(resolution), fill=bool(fill))))
+        elif ext in (".gltf", ".glb"):
+            groups.append((base, importers.read_gltf(
+                blob, resolution=int(resolution), fill=bool(fill))))
+        elif ext == ".png":
+            if int(frames) > 0:
+                cells = importers.read_png_stack(blob, frames=int(frames))
+            else:
+                cells = importers.read_png_flat(blob)
+            groups.append((base, cells))
         else:
-            groups = [(m["name"], m["cells"]) for m in models]
-    elif ext == ".obj":
-        mtl = None
-        guess = os.path.splitext(p)[0] + ".mtl"
-        if os.path.isfile(guess):
-            with open(guess, "r", encoding="utf-8", errors="replace") as f:
-                mtl = f.read()
-        groups.append((base, importers.read_obj(
-            blob.decode("utf-8", "replace"), mtl,
-            resolution=int(resolution), fill=bool(fill))))
-    elif ext in (".gltf", ".glb"):
-        groups.append((base, importers.read_gltf(
-            blob, resolution=int(resolution), fill=bool(fill))))
-    elif ext == ".png":
-        if int(frames) > 0:
-            cells = importers.read_png_stack(blob, frames=int(frames))
-        else:
-            cells = importers.read_png_flat(blob)
-        groups.append((base, cells))
-    else:
-        raise SessionError(
-            "formato non riconosciuto: '%s'. Leggo .vox, .obj, .gltf, .glb, .png"
-            % ext)
+            raise SessionError(
+                "formato non riconosciuto: '%s'. Leggo .vox, .obj, .gltf, .glb, .png"
+                % ext)
+    except SessionError:
+        raise
+    except (ValueError, struct.error, KeyError, IndexError, TypeError,
+            UnicodeDecodeError, OverflowError, MemoryError) as e:
+        # Un file troncato o rovinato faceva uscire l'eccezione grezza del
+        # parser ("unpack requires a buffer of 8 bytes", "Expecting ','
+        # delimiter"): vera, ma non dice che il problema e' il FILE.
+        raise SessionError("'%s' non si legge come %s (file troncato, rovinato "
+                           "o di un'altra versione): %s"
+                           % (os.path.basename(p), ext or "file", e))
 
     added = []
     for name, cells in groups:
@@ -1209,7 +1276,8 @@ def voxel_import(path: str, as_object: bool = True, resolution: int = 64,
 
 @mcp.tool()
 def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
-                 scale: float = 1.0, center: bool = True) -> str:
+                 scale: float = 1.0, center: bool = True, view: str = "",
+                 size: int = 512) -> str:
     """Esporta per un altro programma. Il formato si deduce dall'estensione.
 
     - `.glb` / `.gltf`: per Blender, Unity, Godot, three.js. Le texture sono
@@ -1220,8 +1288,16 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
       suo fianco Blender mostra il modello bianco. Le parti diventano
       oggetti `o` distinti.
     - `.vox`: per MagicaVoxel (massimo 256 per lato).
-    - `.png`: un rendering ortografico.
+    - `.png`: un'immagine di anteprima di al piu' `size` px per lato,
+      ombreggiata e con i contorni. `view`: `iso` (default), `iso_left`, `iso_back`,
+      `iso_back_left`, front/back/left/right/top/bottom, `sheet` (quattro iso
+      affiancate). `size=0` = la vecchia proiezione esatta a 1 pixel per voxel
+      (per sprite), ingrandita di `scale` volte.
     - `.json`: i voxel piatti.
+
+    Un percorso RELATIVO e' relativo alla cartella di lavoro del server MCP
+    (`voxel_ai_status` la mostra), NON a quella del client: la risposta riporta
+    sempre il percorso assoluto scritto.
     """
     doc = SESSION.get(document or None)
     SESSION.auto_save(doc)
@@ -1265,7 +1341,20 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
     if ext == "vox":
         return _done("Esportato in %s." % _write(path, exporters.build_vox(doc, o)))
     if ext == "png":
-        buf, w, h = exporters.render_ortho(o, view="front", scale=max(1, int(scale)))
+        # Prima era SOLO la proiezione esatta, scalata di `int(scale)`: con la
+        # `scale` in metri pensata per il GLB (0.25) usciva un PNG da 1 pixel
+        # per voxel, illeggibile (gate kit-walk di BLIND-KOUR).
+        px = _as_int(size, 512)
+        v = str(view or "").strip().lower()
+        try:
+            if px <= 0:
+                buf, w, h = exporters.render_ortho(
+                    o, view=v or "front", scale=max(1, int(round(scale))))
+            else:
+                buf, w, h = render.render_view(
+                    render.cells_of(o), v or "iso", max(16, min(4096, px)))
+        except ValueError as e:
+            raise SessionError(str(e))
         return _done("Esportato in %s (%dx%d)." % (
             _write(path, pngmod.encode_png(buf, w, h)), w, h))
     if ext == "json":
@@ -1279,13 +1368,21 @@ def voxel_export(path: str, fmt: str = "", obj: str = "", document: str = "",
 @mcp.tool()
 def voxel_rig_auto(kind: str = "auto", binding: str = "", segments: int = 5,
                    hardness: float = 0.0, obj: str = "",
-                   document: str = "") -> str:
+                   document: str = "", root_end: str = "") -> str:
     """Costruisce lo scheletro adattato all'ingombro del modello e lo lega ai voxel.
 
     `kind`: `humanoid` (24 ossa: bacino, colonna, torace, collo, testa, due
     braccia, due gambe), `generic` (una catena di `segments` ossa lungo l'asse
     piu' lungo — un ponte, un albero, un braccio meccanico), oppure `auto`, che
     sceglie umanoide solo se il modello e' piu' alto che largo e che profondo.
+
+    `chains`: UNA catena di `segments` ossa per ogni pezzo, tutte figlie di una
+    radice `root` al baricentro. Il pezzo e' una PARTE dichiarata o, senza
+    parti, una componente connessa. E' quello per cio' che non ha un corpo:
+    braccia in prima persona, tentacoli, i bracci di un lampadario. Le ossa si
+    chiamano `<parte>_1..N` (1 = attaccata alla radice). Ogni catena parte
+    dall'estremo piu' SPESSO del suo pezzo (la spalla, non le dita); `root_end`
+    ("z-", "z+", "x-", "x+", "y-", "y+") impone invece il lato.
 
     `binding` decide come i voxel seguono le ossa:
     - `rigid` — un osso per voxel, peso pieno. Netto, senza deformazione ai
@@ -1314,8 +1411,8 @@ def voxel_rig_auto(kind: str = "auto", binding: str = "", segments: int = 5,
     doc = SESSION.get(document or None)
     o = doc.object_by_ref(obj or None)
     doc.snapshot("Scheletro automatico")
-    r = rig.auto_rig(o, kind, binding or None, int(segments),
-                     float(hardness) or None)
+    r = rig.auto_rig(o, kind, binding or None, _as_int(segments, 5),
+                     _as_float(hardness, 0.0) or None, root_end or None)
     doc.dirty = True
     msg = ("Scheletro %s su '%s': %d ossa, legatura '%s'. Le ossa si elencano "
            "con voxel_rig_info."
@@ -1327,7 +1424,8 @@ def voxel_rig_auto(kind: str = "auto", binding: str = "", segments: int = 5,
     if orfane:
         msg += (" Attenzione: %d ossa non hanno nessun voxel (%s): posarle non "
                 "muovera' niente. Per un umanoide costruisci il modello in "
-                "T-pose, con le braccia aperte ai lati."
+                "T-pose, con le braccia aperte ai lati; per pezzi senza corpo "
+                "(braccia in prima persona) usa kind='chains'."
                 % (len(orfane), ", ".join(orfane[:6])))
     return msg
 
@@ -1535,9 +1633,10 @@ def voxel_rig_animate(prompt: str, name: str = "", model: str = "",
 
 @mcp.tool()
 def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
-                     custom: bool = True, clips: list = None,
+                     custom: bool = True, clips: Union[list, str] = None,
                      all_faces: bool = False, obj: str = "",
-                     document: str = "") -> str:
+                     document: str = "",
+                     origin: Union[list, str] = None) -> str:
     """Esporta il modello RIGGATO in GLB: ossa, pesi, posa e animazioni.
 
     Si apre in Blender, Unity, Godot e three.js. `scale=0.01` significa un voxel
@@ -1554,6 +1653,15 @@ def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
     a chi deve tagliare o simulare il modello, e raddoppia abbondantemente il
     file.
 
+    `origin` = il punto, in coordinate VOXEL `[x, y, z]`, che diventa lo zero
+    del file. Vuoto = centro della pianta e suolo sotto i piedi (giusto per un
+    personaggio). Per delle braccia in prima persona e' la posizione della
+    camera: il GLB si appende allora alla camera con trasformazione zero.
+
+    Il file NON ruota il modello: guarda dove guardava nell'editor (`facing` di
+    `voxel_rig_info`); se il motore vuole un altro davanti si ruota il nodo
+    padre, non le clip.
+
     Per un modello STATICO (senza ossa) usa `voxel_export`: e' piu' leggero,
     perche' unisce le facce complanari in quad grandi.
     """
@@ -1563,7 +1671,10 @@ def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
 
     rig.require_rig(o)
     # `clips` arriva come lista dai client che rispettano lo schema e come
-    # stringa "walk,run" da quelli che appiattiscono tutto a testo.
+    # stringa "walk,run" da quelli che appiattiscono tutto a testo. Lo schema
+    # deve DICHIARARE anche la stringa (`Union[list, str]`): con `list` sola
+    # pydantic la rifiutava prima di arrivare qui, e questo ramo non girava
+    # mai (riprodotto nell'audit del 2026-10-26).
     if isinstance(clips, str):
         only = [c.strip() for c in clips.split(",") if c.strip()] or None
     elif clips:
@@ -1574,7 +1685,8 @@ def voxel_rig_export(path: str, scale: float = 0.01, presets: bool = True,
     _all = _as_bool(all_faces, False)
     _pre = _as_bool(presets, True)
     _cust = _as_bool(custom, True)
-    data = rig.export_rigged_glb(doc, o, _scale, _all, _pre, _cust, only)
+    data = rig.export_rigged_glb(doc, o, _scale, _all, _pre, _cust, only,
+                                 origin if origin not in ("", []) else None)
     full = _write(path, data)
     SESSION.export_history(doc, o.name)
     # I nomi vanno letti col filtro applicato, non dai valori di partenza: con

@@ -145,4 +145,32 @@ check(r2.counts()['done'] == 1, "job completato")
 bb = pack.model_bounds(r2.jobs[0].result)
 check(bb[1] == 0, "asset ancorato a y=0 dal worker (miny=%d)" % bb[1])
 
+print("=== 10. etichette che collidono sul disco (audit 2026-10-26) ===")
+# "vaso fiori" e "Vaso/Fiori" davano entrambi Vaso_Fiori_1.json: su Windows il
+# secondo sovrascriveva il primo e il manifest elencava due asset per un file.
+tmp3 = tempfile.mkdtemp(prefix="voxelpack_t3_")
+try:
+    mgr3 = pack.PackManager(storage_dir=tmp3, generate_fn=lambda p, m, g: {
+        "metadata": {"grid_size": [32, 32, 32]}, "palette": {"a": "#112233"},
+        "ops": [["fill", 0, 0, 0, 2, 2, 2, "a"]]})
+    r3 = mgr3.create_run(["vaso fiori", "Vaso/Fiori", "VASO FIORI"], 1,
+                         options={"grid_size": "32x32x32"})
+    labels = [j.label.lower() for j in r3.jobs]
+    check(len(set(labels)) == 3, "etichette distinte anche senza maiuscole: %r" % labels)
+    for _ in range(300):
+        if r3.status == 'done':
+            break
+        time.sleep(0.05)
+    folder3 = pack.save_pack_to_disk(r3, base_dir=tmp3)
+    with open(os.path.join(folder3, "manifest.json"), encoding="utf-8") as f:
+        man3 = json.load(f)
+    files = [a["file"].lower() for a in man3["assets"]]
+    check(len(files) == 3 and len(set(files)) == 3, "tre file distinti nel manifest: %r" % files)
+    check(all(os.path.exists(os.path.join(folder3, a["file"])) for a in man3["assets"]),
+          "ogni file del manifest esiste")
+    check(not [n for n in os.listdir(folder3) if n.endswith(".tmp")],
+          "nessun file temporaneo lasciato (scrittura atomica)")
+finally:
+    shutil.rmtree(tmp3, ignore_errors=True)
+
 print("\nTUTTI I TEST EXTRA PASSATI")

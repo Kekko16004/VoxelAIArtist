@@ -3,6 +3,10 @@ import re
 import json
 import time
 
+# Scritture atomiche + lock dei read-modify-write: vedi atomicio.py. Import
+# piatto come il resto di src/ (main.py e compat.py mettono src/ su sys.path).
+from atomicio import LOCK as _IO_LOCK, atomic_write_json, backup_corrupt
+
 APP_NAME = "VoxelAIArtist"
 
 # I COOKIE sono una sessione Google, non una preferenza: restano CONDIVISI fra le
@@ -85,8 +89,8 @@ def load_cookies():
     return {}
 
 def save_cookies(cookies_data):
-    with open(get_cookies_path(), "w", encoding="utf-8") as f:
-        json.dump(cookies_data, f, indent=2)
+    with _IO_LOCK:
+        atomic_write_json(get_cookies_path(), cookies_data, indent=2)
 
 def load_settings():
     p = get_settings_path()
@@ -99,8 +103,25 @@ def load_settings():
         return {}
 
 def save_settings(data):
-    with open(get_settings_path(), "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    with _IO_LOCK:
+        atomic_write_json(get_settings_path(), data, indent=2)
+
+
+def _load_settings_for_update():
+    """Le preferenze da AGGIORNARE: come `load_settings`, ma un file che esiste
+    e non si legge viene messo da parte (`settings.json.corrotto-<epoch>`)
+    invece di essere sovrascritto con `{}` + una chiave — che cancellava in
+    silenzio tutte le altre preferenze."""
+    p = get_settings_path()
+    if not os.path.exists(p):
+        return {}
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:                                       # noqa: BLE001
+        backup_corrupt(p)
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 # ---------------------------------------------------------------------------
@@ -118,12 +139,11 @@ def get_setting(key, default=None):
 def set_setting(key, value):
     """Imposta una singola preferenza facendo merge sul settings.json esistente
     (non sovrascrive le altre chiavi). Ritorna il dict aggiornato."""
-    data = load_settings()
-    if not isinstance(data, dict):
-        data = {}
-    data[key] = value
-    save_settings(data)
-    return data
+    with _IO_LOCK:
+        data = _load_settings_for_update()
+        data[key] = value
+        save_settings(data)
+        return data
 
 
 def merge_settings(patch):
@@ -132,15 +152,14 @@ def merge_settings(patch):
     cookies.json). Ritorna il dict aggiornato."""
     if not isinstance(patch, dict):
         raise ValueError("il body delle preferenze deve essere un oggetto JSON")
-    data = load_settings()
-    if not isinstance(data, dict):
-        data = {}
-    for k, v in patch.items():
-        if str(k).lower() in _SENSITIVE_KEYS:
-            continue
-        data[k] = v
-    save_settings(data)
-    return data
+    with _IO_LOCK:
+        data = _load_settings_for_update()
+        for k, v in patch.items():
+            if str(k).lower() in _SENSITIVE_KEYS:
+                continue
+            data[k] = v
+        save_settings(data)
+        return data
 
 
 def get_public_settings():
@@ -211,8 +230,7 @@ def write_export_history(data, name=None):
     epoch = int(time.time() * 1000)
     fname = "%s_%s.json" % (token, epoch)
     path = os.path.join(folder, fname)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    atomic_write_json(path, data, ensure_ascii=False, indent=2)
     return path
 
 
@@ -265,8 +283,7 @@ def write_autosave(data, project_id=None, display_name=None):
         "savedAt": _now_iso(),
         "data": data,
     }
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False)
+    atomic_write_json(path, payload, ensure_ascii=False)
     _rotate_autosaves(autosave_dir, pid)
     return path
 

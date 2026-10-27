@@ -18,6 +18,9 @@ togliere la possibilita' di essere espliciti quando i modelli sono due.
 
 import json
 import os
+import time
+
+from . import compat
 
 from .document import Document
 
@@ -168,12 +171,20 @@ class Session(object):
         folder = os.path.dirname(os.path.abspath(target))
         if folder and not os.path.isdir(folder):
             raise SessionError("la cartella non esiste: %s" % folder)
-        payload = {"format": "voxai-project", "version": 1,
+        # La busta e' QUELLA DELL'APP ({format:"voxai", version, savedAt,
+        # data}), non una variante: la GUI scarta la busta solo se
+        # `format === 'voxai'` (02-io-files.js), quindi un `.voxai` scritto
+        # qui con "voxai-project" non si riapriva trascinandolo nella finestra.
+        payload = {"format": "voxai", "version": 1,
+                   "savedAt": time.strftime("%Y-%m-%dT%H:%M:%S",
+                                            time.localtime()),
                    "data": doc.to_payload()}
+        # Atomico, e la serializzazione avviene PRIMA di toccare il disco: un
+        # errore a meta' (un valore non serializzabile, disco pieno) lasciava
+        # il progetto precedente troncato e illeggibile.
         try:
-            with open(target, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False)
-        except OSError as e:
+            compat.atomic_write_json(target, payload, ensure_ascii=False)
+        except (OSError, TypeError, ValueError) as e:
             raise SessionError("non riesco a scrivere %s: %s" % (target, e))
         doc.path = target
         self.auto_save(doc)

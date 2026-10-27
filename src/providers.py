@@ -51,6 +51,19 @@ import time
 import uuid
 
 import settings as app_settings
+from atomicio import LOCK as _IO_LOCK, atomic_write_json
+
+
+def _locked(fn):
+    """Lettura-modifica-scrittura sotto il lock del processo: il server HTTP
+    e' multi-thread, e due `add_provider` paralleli si cancellavano a vicenda
+    (riprodotto: 9 provider sopravvissuti su 122, chiavi API comprese)."""
+    def wrapper(*args, **kwargs):
+        with _IO_LOCK:
+            return fn(*args, **kwargs)
+    wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
+    return wrapper
 
 
 # --- Errori AI "parlanti" ---------------------------------------------------
@@ -202,8 +215,9 @@ def _read_json(path, fallback):
 
 
 def _write_json(path, data, private=False):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    # Atomico (vedi atomicio.py): un registro o un file chiavi troncati a meta'
+    # venivano letti come `{}` e la scrittura successiva li azzerava davvero.
+    atomic_write_json(path, data, indent=2, ensure_ascii=False)
     if private:
         # Best-effort: su Windows e' un no-op (gli ACL non passano da qui), su
         # POSIX toglie la lettura a gruppo/altri. Fallire qui non deve impedire
@@ -245,6 +259,7 @@ def get_api_key(provider_id):
     return val if isinstance(val, str) else ""
 
 
+@_locked
 def set_api_key(provider_id, key):
     keys = _load_keys()
     pid = str(provider_id)
@@ -371,6 +386,7 @@ def _validate(entry):
     return entry
 
 
+@_locked
 def add_provider(data):
     """Aggiunge un provider. `data['api_key']` finisce nel file chiavi, MAI nel
     registro. Ritorna l'entry pubblica (mascherata)."""
@@ -412,6 +428,7 @@ def add_provider(data):
     return _public_entry(entry)
 
 
+@_locked
 def update_provider(provider_id, data):
     """Modifica IN PLACE i campi passati. Una `api_key` vuota/assente NON
     cancella quella salvata: il form non la rimanda mai (vede solo la maschera),
@@ -451,6 +468,7 @@ def update_provider(provider_id, data):
     raise ValueError("provider non trovato: %s" % pid)
 
 
+@_locked
 def delete_provider(provider_id):
     """Elimina provider e chiave. Se era l'attivo si torna a Gemini: lasciare
     attivo un id inesistente renderebbe l'app inutilizzabile fino al prossimo
@@ -470,6 +488,7 @@ def delete_provider(provider_id):
     return list_providers()
 
 
+@_locked
 def set_active_provider(provider_id):
     pid = str(provider_id or "")
     if pid != GEMINI_ID and get_provider(pid) is None:

@@ -623,11 +623,14 @@ function loadSaveApi(model, scene) {
   const srcMat = fs.readFileSync(path.join(ROOT, 'ui/src/lib/36-materials.js'), 'latin1');
   const srcSave = fs.readFileSync(path.join(ROOT, 'ui/src/lib/07-save-payload.js'), 'latin1');
   const doc = { getElementById: () => ({ addEventListener() {} }) };
-  return new Function('currentModelData', 'sceneObjects', 'document',
+  // `window` finto: 07-save-payload.js pubblica `window.archiveExportJson` a
+  // livello di modulo (lo chiamano gli export degli altri moduli). Senza lo stub
+  // il modulo solleva ReferenceError e TUTTA questa parte del test non gira.
+  return new Function('currentModelData', 'sceneObjects', 'document', 'window',
     srcExp + srcMat + srcSave + `
    ;return { buildMaterialMap, applyMaterialMap, buildObjectPayload,
              getSceneSavePayload, expandOps, materialsOfProject };`
-  )(model, scene || [], doc);
+  )(model, scene || [], doc, {});
 }
 
 const LEGNO = { id: 'm1', name: 'Legno', color: '#8B5A2B', texture: null,

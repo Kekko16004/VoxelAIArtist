@@ -401,8 +401,10 @@ def library_load():
 
 
 def library_save(items):
-    with open(library_path(), "w", encoding="utf-8") as f:
-        json.dump(items[:materials.LIBRARY_MAX], f, ensure_ascii=False)
+    # Atomico: la libreria e' l'unico posto dove vivono i materiali riusati fra
+    # progetti, e un file troncato si rileggeva come lista VUOTA.
+    compat.atomic_write_json(library_path(), items[:materials.LIBRARY_MAX],
+                             ensure_ascii=False)
 
 
 def library_add(mat):

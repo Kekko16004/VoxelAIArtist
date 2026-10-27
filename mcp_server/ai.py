@@ -92,7 +92,27 @@ def answer_text(prompt, model=None, provider=None):
         return client.ai_answer_text_retrying(prompt, model=model, provider=provider)
 
 
-def ask_json(prompt, model=None, provider=None):
+def _parse_or_none(text, allow_list=False):
+    """Il JSON della risposta, o None se non c'e' niente di utilizzabile.
+
+    Un rifiuto in prosa non contiene un oggetto, quindi cade qui da solo senza
+    euristiche testuali (che leggerebbero "sorry" anche dentro il nome di una
+    clip valida)."""
+    if not str(text or "").strip():
+        return None
+    try:
+        data = compat.extract_and_parse_json(text, prefer_array=allow_list)
+    except Exception:                               # noqa: BLE001
+        return None
+    # `{}` non e' una risposta: e' cio' che il recupero delle graffe ricava da
+    # una frase come "mi dispiace {non posso}".
+    if (isinstance(data, dict) and data) or (
+            allow_list and isinstance(data, list) and data):
+        return data
+    return None
+
+
+def ask_json(prompt, model=None, provider=None, allow_list=False):
     """Chiama l'AI e ne ricava il JSON, con gli errori tradotti in consigli.
 
     Le tre classi di errore di `src/aiclient.py` non sono decorative: dicono
@@ -103,16 +123,15 @@ def ask_json(prompt, model=None, provider=None):
     client = compat.aiclient_module()
     try:
         text = answer_text(prompt, model=model, provider=provider)
-        looks_json = getattr(client, "_looks_like_json_payload", None)
-        looks_ref = getattr(client, "looks_like_refusal", None)
         nudge = getattr(client, "_JSON_RETRY_NUDGE",
                         "\n\nOUTPUT JSON ONLY. No prose, no refusal.")
-        bad = False
-        if callable(looks_ref) and looks_ref(text):
-            bad = True
-        elif callable(looks_json) and not looks_json(text):
-            bad = True
-        if bad:
+        # Si ritenta SOLO se la risposta non si lascia leggere. Prima qui si
+        # usava `_looks_like_json_payload` di aiclient, che e' tarato sui VOXEL
+        # (cerca "ops"/"voxels"/"palette"): una clip (`tracks`) o una texture
+        # (`faces`) perfettamente valide venivano giudicate "non JSON" e si
+        # pagava una SECONDA chiamata, la cui risposta sostituiva la prima.
+        # Misurato da `test_mcp_rig.py` (2 chiamate per un'animazione).
+        if _parse_or_none(text, allow_list) is None:
             text = answer_text(str(prompt) + nudge, model=model, provider=provider)
     except client.AIAuthError as e:
         raise SessionError(
@@ -127,7 +146,12 @@ def ask_json(prompt, model=None, provider=None):
         raise SessionError("Risposta dell'AI non utilizzabile: %s" % e)
     if not str(text or "").strip():
         raise SessionError("L'AI ha risposto con un testo vuoto.")
-    data = compat.extract_and_parse_json(text)
+    try:
+        data = compat.extract_and_parse_json(text, prefer_array=allow_list)
+    except Exception as e:                          # noqa: BLE001
+        raise SessionError("La risposta dell'AI non e' un JSON leggibile: %s" % e)
+    if allow_list and isinstance(data, list) and data:
+        return data
     if not isinstance(data, dict):
         raise SessionError(
             "L'AI non ha prodotto un oggetto JSON (ha risposto con %s). "

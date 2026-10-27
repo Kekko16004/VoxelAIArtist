@@ -115,4 +115,49 @@ s,r=req('POST','/api/generate',{"prompt":"un albero","gridSize":"32x32x32","mode
 check(s==200, "generate -> 200")
 check(bool(r.get('voxels') or r.get('ops')), "generate ritorna un modello")
 
+print("=== origini: una pagina web estranea non parla con l'app ===")
+def raw(method, path, headers, body=None):
+    url='http://127.0.0.1:%d%s'%(main.PORT,path)
+    data=json.dumps(body).encode() if body is not None else None
+    h=dict(headers)
+    if data: h['Content-Type']='application/json'
+    r=urllib.request.Request(url, data=data, method=method, headers=h)
+    try:
+        with urllib.request.urlopen(r, timeout=20) as resp:
+            return resp.status, dict(resp.headers)
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers)
+evil={'Origin':'https://sito-malevolo.example'}
+s,h=raw('POST','/api/prefs',evil,{"settings":{"x":1}})
+check(s==403, "POST /api/prefs da sito esterno -> 403 (ricevuto %s)"%s)
+s,h=raw('POST','/api/project/save',{'Origin':'null'},{"path":"x.voxai","data":{}})
+check(s==403, "POST con Origin null -> 403 (ricevuto %s)"%s)
+s,h=raw('DELETE','/api/settings/cookies',evil)
+check(s==403, "DELETE cookie da sito esterno -> 403 (ricevuto %s)"%s)
+# Un <img src=...> non manda Origin ma Sec-Fetch-Site si': niente Esplora risorse.
+s,h=raw('GET','/api/settings/open-folder',{'Sec-Fetch-Site':'cross-site'})
+check(s==403, "GET con effetti da <img> cross-site -> 403 (ricevuto %s)"%s)
+s,h=raw('GET','/api/pack/status',{'Origin':'http://127.0.0.1:%d'%main.PORT})
+check(s==200 and h.get('Access-Control-Allow-Origin')=='http://127.0.0.1:%d'%main.PORT,
+      "pagina locale servita con la SUA origine, non * (%s %r)"%(s,h.get('Access-Control-Allow-Origin')))
+s,h=raw('GET','/api/pack/status',{})
+check(s==200 and h.get('Access-Control-Allow-Origin')!='*', "senza Origin: servita, niente *")
+s,h=raw('GET','/ui/index.html',evil)
+check(s==200, "i file statici restano liberi")
+
+print("=== console cp1252: un'emoji non fa saltare la risposta ===")
+import io
+buf=io.BytesIO(); fake=io.TextIOWrapper(buf, encoding='cp1252')
+keep_out=sys.stdout; sys.stdout=fake
+boom=None
+try:
+    main._safe_console()
+    try:
+        print("risposta con emoji \U0001F600"); fake.flush()
+    except UnicodeEncodeError as e:
+        boom=e
+finally:
+    sys.stdout=keep_out
+check(boom is None and b'?' in buf.getvalue(), "print di un'emoji su cp1252 -> '?' e niente eccezione")
+
 print("\nTUTTI I TEST E2E PASSATI")
